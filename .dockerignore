@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Environment (never bake secrets into images)
+.env
+.env.*
+!.env.example
+
+# Dependencies (installed inside the container)
+vendor
+node_modules
+
+# Build artifacts
+/public/build
+/public/hot
+/storage/*.key
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (not needed inside the image)
+README.md
+LICENSE
+docs/
+
+# CI
+.github
+
+# Docker files (not needed inside the build context)
+Dockerfile
+docker-compose*.yml
+docker/

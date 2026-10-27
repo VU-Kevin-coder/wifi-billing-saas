@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────
+# Laravel + Node
+# ─────────────────────────────────────────────────────────────
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# ─────────────────────────────────────────────────────────────
+# Environment files (NEVER commit secrets)
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.testing
+
+# ─────────────────────────────────────────────────────────────
+# Logs & compiled views
+# ─────────────────────────────────────────────────────────────
+*.log
+/storage/logs/*
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+!/storage/logs/.gitignore
+!/storage/framework/cache/data/.gitignore
+!/storage/framework/sessions/.gitignore
+!/storage/framework/testing/.gitignore
+!/storage/framework/views/.gitignore
+
+# ─────────────────────────────────────────────────────────────
+# Testing
+# ─────────────────────────────────────────────────────────────
+.phpunit.result.cache
+.phpunit.cache
+/coverage
+*.lcov
+/phpstan-baseline.neon
+
+# ─────────────────────────────────────────────────────────────
+# IDE / Editor
+# ─────────────────────────────────────────────────────────────
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─────────────────────────────────────────────────────────────
+# OS
+# ─────────────────────────────────────────────────────────────
+Desktop.ini
+
+# ─────────────────────────────────────────────────────────────
+# Docker / local data
+# ─────────────────────────────────────────────────────────────
+docker-compose.override.yml
+/data/*
+!/data/.gitkeep
+
+# ─────────────────────────────────────────────────────────────
+# Composer (local lock changes by non-team tools)
+# ─────────────────────────────────────────────────────────────
+auth.json
