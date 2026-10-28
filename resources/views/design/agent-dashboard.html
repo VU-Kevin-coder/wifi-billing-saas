@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Dashboard</title>
+<!-- BLADE: search "BLADE:" comments. No external assets. Demo data is placeholder. -->
+<style>
+  :root { --brand:#0b6e4f; --brand-dark:#08523b; --accent:#f4b400; --bg:#f3f6f5; --card:#fff; --text:#17211d;
+          --muted:#5b6b64; --line:#dbe3df; --danger:#c62828; --ok:#1b8a3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); line-height:1.45; padding-bottom:70px; }
+  .wrap { max-width: 720px; margin:0 auto; padding:0 16px; }
+
+  header { background:var(--brand); color:#fff; padding:14px 16px; }
+  header .row { max-width:720px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; }
+  header h1 { margin:0; font-size:1.05rem; }
+  header small { opacity:.85; }
+  header a { color:#fff; font-size:.85rem; }
+
+  .wallet { background:var(--brand); color:#fff; padding:6px 16px 26px; }
+  .wallet .inner { max-width:720px; margin:0 auto; }
+  .wallet .label { font-size:.85rem; opacity:.85; }
+  .wallet .amount { font-size:2rem; font-weight:800; margin:2px 0 12px; }
+  .wallet .btns { display:flex; gap:10px; }
+  .wallet button { flex:1; padding:11px; font-weight:700; font-size:.95rem; border:0; border-radius:10px; cursor:pointer; }
+  .b-light { background:#fff; color:var(--brand-dark); }
+  .b-accent { background:var(--accent); color:#3b2c00; }
+
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:-16px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 10px; text-align:center; }
+  .stat b { display:block; font-size:1.1rem; }
+  .stat span { font-size:.72rem; color:var(--muted); }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-top:16px; }
+  .card h2 { margin:0 0 12px; font-size:1.02rem; }
+
+  label { display:block; font-size:.85rem; font-weight:600; margin:12px 0 6px; }
+  select, input { width:100%; padding:12px; font-size:1rem; border:2px solid var(--line); border-radius:10px; background:#fff; }
+  select:focus, input:focus { outline:none; border-color:var(--brand); }
+  .summary { background:#e8f4ef; border-radius:10px; padding:12px; margin-top:14px; font-size:.9rem; }
+  .summary div { display:flex; justify-content:space-between; padding:2px 0; }
+  .summary .total { font-weight:800; border-top:1px solid #bcd9cd; margin-top:6px; padding-top:8px; }
+  .primary { width:100%; margin-top:14px; padding:14px; font-size:1rem; font-weight:700; color:#fff; background:var(--brand); border:0; border-radius:10px; cursor:pointer; }
+  .hint { font-size:.78rem; color:var(--muted); margin:6px 0 0; }
+
+  /* Tables as cards on mobile */
+  table { width:100%; border-collapse:collapse; font-size:.88rem; }
+  th { text-align:left; font-size:.72rem; text-transform:uppercase; color:var(--muted); padding:6px 4px; border-bottom:1px solid var(--line); }
+  td { padding:10px 4px; border-bottom:1px solid var(--line); }
+  td.r, th.r { text-align:right; }
+  .code { font-family: ui-monospace,Menlo,Consolas,monospace; font-weight:700; letter-spacing:.5px; }
+  .tag { font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:99px; }
+  .tag.unused { background:#e8f4ef; color:var(--brand-dark); }
+  .tag.sold { background:#fff3cd; color:#6b5200; }
+  .tag.used { background:#eceff1; color:#546e7a; }
+  .copy { background:none; border:1px solid var(--line); border-radius:8px; padding:4px 8px; font-size:.75rem; cursor:pointer; }
+
+  nav.bottom { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); display:flex; }
+  nav.bottom a { flex:1; text-align:center; padding:10px 4px; font-size:.72rem; color:var(--muted); text-decoration:none; }
+  nav.bottom a.on { color:var(--brand-dark); font-weight:700; }
+  nav.bottom a span { display:block; font-size:1.2rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="row">
+    <div>
+      <!-- BLADE: {{ auth()->user()->name }} -->
+      <h1>Hello, Agent Sarah</h1>
+      <small>Agent code: AG-0012</small>
+    </div>
+    <!-- BLADE: logout form (POST) -->
+    <a href="agent-login.html">Log out</a>
+  </div>
+</header>
+
+<section class="wallet">
+  <div class="inner">
+    <div class="label">Wallet balance</div>
+    <!-- BLADE: {{ number_format($agent->wallet_balance) }} -->
+    <div class="amount">UGX 84,500</div>
+    <div class="btns">
+      <button class="b-light" onclick="location.hash='#topup'">Top up</button>
+      <button class="b-accent" onclick="location.hash='#buy'">Buy vouchers</button>
+    </div>
+  </div>
+</section>
+
+<main class="wrap">
+
+  <div class="stats">
+    <div class="stat"><b>18</b><span>Sold today</span></div>
+    <div class="stat"><b>UGX 2,700</b><span>Commission today</span></div>
+    <div class="stat"><b>42</b><span>Unsold in stock</span></div>
+  </div>
+
+  <!-- ============ BUY VOUCHERS ============ -->
+  <!-- BLADE: <form method="POST" action="{{ route('agent.vouchers.buy') }}"> @csrf -->
+  <form class="card" id="buy" onsubmit="return false;">
+    <h2>Buy vouchers</h2>
+
+    <label for="pkg">Package</label>
+    <select id="pkg">
+      <!-- BLADE: @foreach ($packages as $p) -->
+      <option value="500">1 Hour (retail UGX 500)</option>
+      <option value="1500" selected>1 Day (retail UGX 1,500)</option>
+      <option value="7000">1 Week (retail UGX 7,000)</option>
+      <!-- BLADE: @endforeach -->
+    </select>
+
+    <label for="qty">Quantity</label>
+    <input id="qty" type="number" min="1" max="500" value="20" inputmode="numeric">
+
+    <div class="summary">
+      <div><span>Retail value</span><span id="retail">UGX 30,000</span></div>
+      <div><span>Your discount (10%)</span><span id="disc">- UGX 3,000</span></div>
+      <div class="total"><span>You pay</span><span id="pay">UGX 27,000</span></div>
+    </div>
+    <p class="hint">Paid from your wallet balance. Codes appear in your stock right after.</p>
+    <button class="primary" type="submit">Buy from wallet</button>
+  </form>
+
+  <!-- ============ TOP UP ============ -->
+  <form class="card" id="topup" onsubmit="return false;">
+    <h2>Top up wallet</h2>
+    <label for="amt">Amount (UGX)</label>
+    <input id="amt" type="number" inputmode="numeric" placeholder="e.g. 50000">
+    <label for="mm">Mobile Money number</label>
+    <input id="mm" type="tel" inputmode="numeric" placeholder="07XXXXXXXX">
+    <button class="primary" type="submit">Request payment</button>
+    <p class="hint">You will get a PIN prompt on your phone.</p>
+  </form>
+
+  <!-- ============ MY STOCK ============ -->
+  <section class="card" id="stock">
+    <h2>My vouchers</h2>
+    <table>
+      <thead><tr><th>Code</th><th>Package</th><th class="r">Status</th></tr></thead>
+      <tbody>
+        <!-- BLADE: @foreach ($vouchers as $v) -->
+        <tr><td class="code">K7P2-9QXM</td><td>1 Day</td><td class="r"><span class="tag unused">Unsold</span></td></tr>
+        <tr><td class="code">A4RT-55LD</td><td>1 Day</td><td class="r"><span class="tag unused">Unsold</span></td></tr>
+        <tr><td class="code">Z9WE-12HB</td><td>1 Hour</td><td class="r"><span class="tag sold">Sold</span></td></tr>
+        <tr><td class="code">M3NC-77YU</td><td>1 Week</td><td class="r"><span class="tag used">Used</span></td></tr>
+        <!-- BLADE: @endforeach -->
+      </tbody>
+    </table>
+    <p class="hint">Tap "Sold" when you hand a code to a customer, so your sales report stays accurate.</p>
+  </section>
+
+  <!-- ============ SALES HISTORY ============ -->
+  <section class="card" id="history">
+    <h2>Sales history</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Item</th><th class="r">Amount</th></tr></thead>
+      <tbody>
+        <!-- BLADE: @foreach ($transactions as $t) -->
+        <tr><td>28 Oct, 10:42</td><td>20 × 1 Day bought</td><td class="r">- 27,000</td></tr>
+        <tr><td>28 Oct, 09:15</td><td>Wallet top up (MTN)</td><td class="r" style="color:var(--ok)">+ 50,000</td></tr>
+        <tr><td>27 Oct, 17:30</td><td>10 × 1 Hour sold</td><td class="r" style="color:var(--ok)">+ 500 comm.</td></tr>
+        <!-- BLADE: @endforeach -->
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<nav class="bottom">
+  <a href="#" class="on"><span>&#8962;</span>Home</a>
+  <a href="#buy"><span>&#43;</span>Buy</a>
+  <a href="#stock"><span>&#9776;</span>Stock</a>
+  <a href="#history"><span>&#8635;</span>History</a>
+</nav>
+
+<!-- Preview-only script. BLADE: remove (compute totals server-side). -->
+<script>
+  function fmt(n){ return 'UGX ' + Math.round(n).toLocaleString('en-US'); }
+  function calc(){
+    var price = +document.getElementById('pkg').value;
+    var qty = Math.max(1, +document.getElementById('qty').value || 0);
+    var retail = price * qty, disc = retail * 0.10;
+    document.getElementById('retail').textContent = fmt(retail);
+    document.getElementById('disc').textContent = '- ' + fmt(disc);
+    document.getElementById('pay').textContent = fmt(retail - disc);
+  }
+  document.getElementById('pkg').addEventListener('change', calc);
+  document.getElementById('qty').addEventListener('input', calc);
+</script>
+</body>
+</html>
