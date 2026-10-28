@@ -1,1 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiFi Portal</title>
+<!--
+  Captive portal design (mobile-first, no external fonts/images/CDNs so it loads fast
+  before the user has internet).
+  BLADE NOTES: search for "BLADE:" comments. Prices and names are placeholders.
+-->
+<style>
+  :root {
+    --brand: #0b6e4f;
+    --brand-dark: #08523b;
+    --accent: #f4b400;
+    --bg: #f3f6f5;
+    --card: #ffffff;
+    --text: #17211d;
+    --muted: #5b6b64;
+    --line: #dbe3df;
+    --danger: #c62828;
+    --ok: #1b8a3a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .wrap { max-width: 460px; margin: 0 auto; padding: 0 16px 32px; }
+
+  header {
+    background: var(--brand);
+    color: #fff;
+    padding: 20px 16px 28px;
+    text-align: center;
+  }
+  header h1 { margin: 0; font-size: 1.35rem; }
+  header p { margin: 4px 0 0; font-size: .9rem; opacity: .9; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-top: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+
+  /* Packages */
+  .packages { display: grid; gap: 10px; }
+  .package { position: relative; }
+  .package input { position: absolute; opacity: 0; }
+  .package label {
+    display: flex; justify-content: space-between; align-items: center;
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    cursor: pointer;
+  }
+  .package .name { font-weight: 600; }
+  .package .meta { font-size: .8rem; color: var(--muted); }
+  .package .price { font-weight: 700; color: var(--brand-dark); }
+  .package input:checked + label {
+    border-color: var(--brand);
+    background: #e8f4ef;
+  }
+  .package input:focus-visible + label { outline: 3px solid var(--accent); }
+  .badge {
+    display: inline-block; font-size: .68rem; font-weight: 700;
+    background: var(--accent); color: #3b2c00;
+    padding: 2px 7px; border-radius: 99px; margin-left: 6px;
+  }
+
+  /* Form */
+  label.field { display: block; font-size: .85rem; font-weight: 600; margin: 12px 0 6px; }
+  input[type=tel], input[type=text] {
+    width: 100%; padding: 13px 12px; font-size: 1rem;
+    border: 2px solid var(--line); border-radius: 10px; background: #fff;
+  }
+  input[type=tel]:focus, input[type=text]:focus { outline: none; border-color: var(--brand); }
+  .networks { display: flex; gap: 10px; }
+  .network { flex: 1; position: relative; }
+  .network input { position: absolute; opacity: 0; }
+  .network label {
+    display: block; text-align: center; padding: 11px 6px; font-weight: 600;
+    border: 2px solid var(--line); border-radius: 10px; cursor: pointer; font-size: .9rem;
+  }
+  .network input:checked + label { border-color: var(--brand); background: #e8f4ef; }
+  .network input:focus-visible + label { outline: 3px solid var(--accent); }
+
+  button {
+    width: 100%; margin-top: 16px; padding: 14px;
+    font-size: 1rem; font-weight: 700; color: #fff; background: var(--brand);
+    border: 0; border-radius: 10px; cursor: pointer;
+  }
+  button:active { background: var(--brand-dark); }
+  button.secondary { background: #fff; color: var(--brand-dark); border: 2px solid var(--brand); }
+
+  .divider { text-align: center; color: var(--muted); font-size: .8rem; margin: 18px 0 0; }
+  .hint { font-size: .78rem; color: var(--muted); margin: 6px 0 0; }
+
+  /* Status panels */
+  .status { display: none; text-align: center; padding: 8px 4px; }
+  .status.show { display: block; }
+  .status .icon { font-size: 2.2rem; }
+  .status h3 { margin: 6px 0 4px; }
+  .status p { margin: 0; color: var(--muted); font-size: .9rem; }
+  .status.ok h3 { color: var(--ok); }
+  .status.err h3 { color: var(--danger); }
+  .spinner {
+    width: 34px; height: 34px; margin: 0 auto;
+    border: 4px solid var(--line); border-top-color: var(--brand);
+    border-radius: 50%; animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer { text-align: center; font-size: .78rem; color: var(--muted); margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <!-- BLADE: {{ config('app.name') }} -->
+  <h1>Your WiFi Business Name</h1>
+  <p>Pick a package and get online in seconds</p>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ PAYMENT CARD ============ -->
+  <!-- BLADE: <form method="POST" action="{{ route('portal.pay') }}"> @csrf -->
+  <form class="card" id="payForm" onsubmit="return false;">
+    <h2>1. Choose a package</h2>
+
+    <div class="packages">
+      <!-- BLADE: @foreach ($packages as $package) -->
+      <div class="package">
+        <input type="radio" name="package" id="p1" value="1" checked>
+        <label for="p1">
+          <span><span class="name">1 Hour</span><br><span class="meta">Unlimited data</span></span>
+          <span class="price">UGX 500</span>
+        </label>
+      </div>
+      <div class="package">
+        <input type="radio" name="package" id="p2" value="2">
+        <label for="p2">
+          <span><span class="name">1 Day</span><span class="badge">POPULAR</span><br><span class="meta">Unlimited data</span></span>
+          <span class="price">UGX 1,500</span>
+        </label>
+      </div>
+      <div class="package">
+        <input type="radio" name="package" id="p3" value="3">
+        <label for="p3">
+          <span><span class="name">1 Week</span><br><span class="meta">Unlimited data</span></span>
+          <span class="price">UGX 7,000</span>
+        </label>
+      </div>
+      <!-- BLADE: @endforeach -->
+    </div>
+
+    <h2 style="margin-top:20px">2. Pay with Mobile Money</h2>
+
+    <div class="networks">
+      <div class="network">
+        <input type="radio" name="network" id="n1" value="mtn" checked>
+        <label for="n1">MTN MoMo</label>
+      </div>
+      <div class="network">
+        <input type="radio" name="network" id="n2" value="airtel">
+        <label for="n2">Airtel Money</label>
+      </div>
+    </div>
+
+    <label class="field" for="phone">Mobile Money number</label>
+    <input type="tel" id="phone" name="phone" inputmode="numeric" placeholder="07XXXXXXXX" autocomplete="tel">
+    <p class="hint">You will get a prompt on your phone to enter your PIN.</p>
+
+    <button type="submit" id="payBtn">Pay &amp; Connect</button>
+
+    <!-- Status panels (BLADE: show based on session/payment status) -->
+    <div class="status" id="st-pending">
+      <div class="spinner"></div>
+      <h3>Waiting for payment</h3>
+      <p>Approve the prompt on your phone. Do not close this page.</p>
+    </div>
+    <div class="status ok" id="st-ok">
+      <div class="icon">&#10003;</div>
+      <h3>You're connected!</h3>
+      <p>Your package is active. Enjoy browsing.</p>
+    </div>
+    <div class="status err" id="st-err">
+      <div class="icon">&#10007;</div>
+      <h3>Payment failed</h3>
+      <p>The payment was cancelled or timed out. Please try again.</p>
+    </div>
+  </form>
+
+  <div class="divider">&mdash; or &mdash;</div>
+
+  <!-- ============ VOUCHER CARD ============ -->
+  <!-- BLADE: <form method="POST" action="{{ route('portal.voucher') }}"> @csrf -->
+  <form class="card" id="voucherForm" onsubmit="return false;">
+    <h2>Have a voucher?</h2>
+    <label class="field" for="code" style="margin-top:0">Voucher code</label>
+    <input type="text" id="code" name="code" placeholder="e.g. AB12-CD34" autocapitalize="characters" autocomplete="off">
+    <!-- BLADE: @error('code') <p class="hint" style="color:var(--danger)">{{ $message }}</p> @enderror -->
+    <p class="hint" id="voucherErr" style="color:var(--danger);display:none">Invalid or already used code.</p>
+    <button type="submit" class="secondary" id="voucherBtn">Redeem voucher</button>
+    <p class="hint">Buy vouchers from our agents near you.</p>
+  </form>
+
+  <footer>
+    Need help? Call <!-- BLADE: {{ config('app.support_phone') }} --> 07XX XXX XXX
+  </footer>
+</main>
+
+<!-- Preview-only script so you can see the states. BLADE: remove this block. -->
+<script>
+  var states = ['st-pending', 'st-ok', 'st-err'];
+  function show(id) {
+    states.forEach(function (s) { document.getElementById(s).classList.remove('show'); });
+    if (id) document.getElementById(id).classList.add('show');
+  }
+  document.getElementById('payBtn').addEventListener('click', function () {
+    show('st-pending');
+    setTimeout(function () { show('st-ok'); }, 2500);
+  });
+  document.getElementById('voucherBtn').addEventListener('click', function () {
+    var bad = document.getElementById('code').value.trim().toLowerCase() !== 'demo';
+    document.getElementById('voucherErr').style.display = bad ? 'block' : 'none';
+    if (!bad) show('st-ok');
+  });
+</script>
+</body>
+</html>
 
