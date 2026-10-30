@@ -34,7 +34,7 @@ docs/
 # CI
 .github
 
-# Docker files (not needed inside the build context)
+# Docker files not needed inside the build context
 Dockerfile
 docker-compose*.yml
-docker/
+docker-compose.override.yml
