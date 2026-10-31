@@ -15,21 +15,33 @@ class StaffController extends Controller
     {
         $tenant = $context->getTenant();
 
-        // Retrieve users for the current tenant
-        $staff = $tenant
-            ? $tenant->users()->with('roles')->orderBy('name')->get()
-            : User::where('tenant_id', $context->getTenantId())->with('roles')->orderBy('name')->get();
+        if (! $tenant) {
+            abort(403, 'Tenant context not set.');
+        }
+
+        // Retrieve only users belonging to the active tenant
+        $staff = $tenant->users()->with('roles')->orderBy('name')->get();
         
         return view('operator.staff.index', compact('staff'));
     }
 
     public function create()
     {
+        if (! auth()->user()->hasRole('operator_admin') && ! (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant'))) {
+            abort(403, 'Only an Administrator can add staff.');
+        }
+
         return view('operator.staff.create');
     }
 
     public function store(Request $request, TenantContext $context)
     {
+        $tenant = $context->getTenant();
+
+        if (! $tenant) {
+            abort(403, 'Tenant context not set.');
+        }
+
         // Only operator_admin (or impersonating platform_admin) can create staff
         if (! auth()->user()->hasRole('operator_admin') && ! (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant'))) {
             abort(403, 'Only an Administrator can add staff.');
@@ -42,7 +54,7 @@ class StaffController extends Controller
         ]);
 
         $user = User::create([
-            'tenant_id' => $context->getTenantId(),
+            'tenant_id' => $tenant->id,
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make('password'), // Default password for demo

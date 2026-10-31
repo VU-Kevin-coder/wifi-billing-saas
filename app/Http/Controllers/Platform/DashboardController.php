@@ -26,8 +26,18 @@ class DashboardController extends Controller
         // Set the context immediately for this request
         $context->setTenant($tenant);
 
-        return redirect()->route('operator.dashboard')
-            ->with('status', "Now viewing as {$tenant->name}");
+        // Generate signed URL to switch into the tenant subdomain as platform admin
+        $ssoUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'operator.sso.verify',
+            now()->addMinutes(2),
+            [
+                'tenant' => $tenant->slug,
+                'user' => $request->user()->id,
+                'impersonate' => 1,
+            ]
+        );
+
+        return redirect()->to($ssoUrl);
     }
 
     public function stopImpersonating(TenantContext $context)

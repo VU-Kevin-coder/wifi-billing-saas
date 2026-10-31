@@ -12,7 +12,7 @@ class EnsureRole
      * Usage in routes: ->middleware('role:operator_admin')
      * Or: ->middleware('role:platform_admin')
      */
-    public function handle(Request $request, Closure $next, string $role): Response
+    public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         $user = $request->user();
 
@@ -21,7 +21,19 @@ class EnsureRole
             return $next($request);
         }
 
-        if (! $user || ! $user->hasRole($role)) {
+        if (! $user) {
+            abort(403, 'You do not have access to this area.');
+        }
+
+        // Support both pipe-delimited ('operator_admin|operator_finance') and variadic arguments
+        $allowedRoles = [];
+        foreach ($roles as $role) {
+            foreach (explode('|', $role) as $r) {
+                $allowedRoles[] = trim($r);
+            }
+        }
+
+        if (! $user->hasAnyRole($allowedRoles)) {
             abort(403, 'You do not have access to this area.');
         }
 

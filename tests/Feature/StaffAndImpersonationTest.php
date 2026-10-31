@@ -39,6 +39,8 @@ class StaffAndImpersonationTest extends TestCase
 
         $this->acmeFinance = User::factory()->create(['tenant_id' => $this->acme->id]);
         $this->acmeFinance->assignRole('operator_finance');
+
+        \Illuminate\Support\Facades\URL::defaults(['tenant' => $this->acme->slug]);
     }
 
     public function test_operator_admin_can_view_staff_list(): void
@@ -79,6 +81,22 @@ class StaffAndImpersonationTest extends TestCase
         $this->assertTrue($created->hasRole('operator_support'));
     }
 
+    public function test_finance_user_cannot_view_staff_list(): void
+    {
+        $response = $this->actingAs($this->acmeFinance)
+            ->get(route('operator.staff.index'));
+
+        $response->assertForbidden();
+    }
+
+    public function test_finance_user_cannot_view_create_staff_form(): void
+    {
+        $response = $this->actingAs($this->acmeFinance)
+            ->get(route('operator.staff.create'));
+
+        $response->assertForbidden();
+    }
+
     public function test_finance_user_cannot_create_staff(): void
     {
         $response = $this->actingAs($this->acmeFinance)
@@ -91,16 +109,44 @@ class StaffAndImpersonationTest extends TestCase
         $response->assertForbidden();
     }
 
+    public function test_finance_user_does_not_see_staff_link_in_navigation(): void
+    {
+        $response = $this->actingAs($this->acmeFinance)
+            ->get(route('operator.dashboard'));
+
+        $response->assertOk();
+        $response->assertDontSee(route('operator.staff.index'));
+    }
+
+    public function test_support_and_network_roles_cannot_access_staff(): void
+    {
+        $support = User::factory()->create(['tenant_id' => $this->acme->id]);
+        $support->assignRole('operator_support');
+
+        $network = User::factory()->create(['tenant_id' => $this->acme->id]);
+        $network->assignRole('operator_network');
+
+        $this->actingAs($support)->get(route('operator.staff.index'))->assertForbidden();
+        $this->actingAs($network)->get(route('operator.staff.index'))->assertForbidden();
+    }
+
     public function test_platform_admin_can_impersonate_and_stop_impersonating(): void
     {
         // 1. Platform admin switches into Acme
         $response = $this->actingAs($this->platformAdmin)
             ->get(route('platform.impersonate', $this->acme));
 
-        $response->assertRedirect(route('operator.dashboard'));
-        $response->assertSessionHas('impersonate_tenant', $this->acme->id);
+        $response->assertRedirect();
+        $targetUrl = $response->headers->get('Location');
+        $this->assertStringContainsString('http://acme.localhost:8000/sso/verify', $targetUrl);
+        $this->assertStringContainsString('impersonate=1', $targetUrl);
 
-        // 2. Visiting operator dashboard with impersonation session
+        // 2. Following the SSO transfer establishes impersonation session on the tenant subdomain
+        $ssoResponse = $this->get($targetUrl);
+        $ssoResponse->assertRedirect('http://acme.localhost:8000/operator/dashboard');
+        $ssoResponse->assertSessionHas('impersonate_tenant', $this->acme->id);
+
+        // 3. Visiting operator dashboard with impersonation session
         $dashResponse = $this->actingAs($this->platformAdmin)
             ->withSession(['impersonate_tenant' => $this->acme->id])
             ->get(route('operator.dashboard'));

@@ -15,7 +15,24 @@ class SetTenantContext
 
     public function handle(Request $request, Closure $next): Response
     {
-        // 1. Check if a Platform Admin is impersonating a tenant
+        // 1. Check if the domain itself is a tenant subdomain (e.g., acme.localhost)
+        $host = $request->getHost();
+        $tenantFromHost = $this->context->resolveFromHost($host);
+
+        if ($tenantFromHost) {
+            $this->context->setTenant($tenantFromHost);
+            
+            // Ensure the logged-in user actually belongs to this tenant!
+            // (Unless they are a platform admin impersonating)
+            if ($request->user() && $request->user()->tenant_id !== $tenantFromHost->id && ! $request->user()->hasRole('platform_admin')) {
+                auth()->logout();
+                return redirect()->route('login')->withErrors(['email' => 'You do not belong to this workspace.']);
+            }
+
+            return $next($request);
+        }
+
+        // 2. Check if a Platform Admin is impersonating a tenant via session
         if ($request->user() && $request->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')) {
             $tenant = \App\Models\Tenant::find(session('impersonate_tenant'));
             if ($tenant) {
@@ -24,7 +41,7 @@ class SetTenantContext
             }
         }
 
-        // 2. Otherwise, if authenticated and user has a tenant, set it
+        // 3. Fallback: Set tenant based on the logged-in user's tenant_id
         if ($request->user() && $request->user()->tenant_id) {
             $this->context->setTenant($request->user()->tenant);
         }

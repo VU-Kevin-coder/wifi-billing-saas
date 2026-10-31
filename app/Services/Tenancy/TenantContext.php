@@ -18,6 +18,10 @@ class TenantContext
     public function setTenant(?Tenant $tenant): void
     {
         $this->tenant = $tenant;
+
+        if ($tenant) {
+            \Illuminate\Support\Facades\URL::defaults(['tenant' => $tenant->slug]);
+        }
     }
 
     /**
@@ -69,5 +73,27 @@ class TenantContext
     public function forget(): void
     {
         $this->tenant = null;
+    }
+
+    /**
+     * Resolve the tenant from the current request's host (subdomain).
+     * Example: "acme.localhost" -> Tenant::where('slug', 'acme')
+     */
+    public function resolveFromHost(string $host): ?Tenant
+    {
+        // Strip the port if present (e.g., "acme.localhost:8000" -> "acme.localhost")
+        $hostWithoutPort = explode(':', $host)[0];
+        
+        // Split by dots
+        $parts = explode('.', $hostWithoutPort);
+
+        // If it's just "localhost" or "127.0.0.1", there is no subdomain
+        if (count($parts) < 2 || $parts[0] === 'localhost' || $parts[0] === '127') {
+            return null;
+        }
+
+        $slug = $parts[0]; // "acme" from "acme.localhost"
+
+        return Tenant::where('slug', $slug)->first();
     }
 }

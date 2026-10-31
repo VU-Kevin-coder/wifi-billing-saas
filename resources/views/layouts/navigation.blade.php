@@ -16,7 +16,7 @@
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
-                    @if(auth()->user()->tenant_id || session()->has('impersonate_tenant'))
+                    @if(auth()->user()->hasRole('operator_admin') || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
                         <x-nav-link :href="route('operator.staff.index')" :active="request()->routeIs('operator.staff.*')">
                             {{ __('Staff') }}
                         </x-nav-link>
@@ -77,7 +77,7 @@
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
 
-            @if(auth()->user()->tenant_id || session()->has('impersonate_tenant'))
+            @if(auth()->user()->hasRole('operator_admin') || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
                 <x-responsive-nav-link :href="route('operator.staff.index')" :active="request()->routeIs('operator.staff.*')">
                     {{ __('Staff') }}
                 </x-responsive-nav-link>
