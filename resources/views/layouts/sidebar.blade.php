@@ -121,9 +121,9 @@
                     </a>
 
                     <!-- Live sessions -->
-                    <a href="#" 
-                       class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
-                        <svg class="w-4 h-4 shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <a href="{{ route('operator.sessions.index') }}" 
+                       class="{{ request()->routeIs('operator.sessions.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.sessions.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                         </svg>
                         <span x-show="!sidebarCollapsed">Live sessions</span>
