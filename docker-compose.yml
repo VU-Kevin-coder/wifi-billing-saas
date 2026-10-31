@@ -26,7 +26,7 @@ services:
       REDIS_CLIENT: phpredis
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
-      SESSION_DRIVER: database
+      SESSION_DRIVER: redis
     depends_on:
       db:
         condition: service_healthy

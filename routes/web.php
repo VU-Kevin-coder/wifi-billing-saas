@@ -35,6 +35,9 @@ Route::domain('{tenant}.localhost')
             ->group(function () {
                 Route::get('/dashboard', OperatorDashboard::class)->name('dashboard');
 
+                Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
+                Route::resource('vouchers', \App\Http\Controllers\Operator\VoucherController::class)->only(['index', 'store']);
+
                 // Staff Management is strictly for operator_admin
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::resource('staff', StaffController::class)->only(['index', 'create', 'store']);

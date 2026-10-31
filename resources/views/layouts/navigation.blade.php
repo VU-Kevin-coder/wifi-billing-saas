@@ -16,6 +16,15 @@
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
+                    @if(auth()->user()->hasAnyRole(['operator_admin', 'operator_finance', 'operator_support', 'operator_network']) || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
+                        <x-nav-link :href="route('operator.packages.index')" :active="request()->routeIs('operator.packages.*')">
+                            {{ __('Packages') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('operator.vouchers.index')" :active="request()->routeIs('operator.vouchers.*')">
+                            {{ __('Vouchers') }}
+                        </x-nav-link>
+                    @endif
+
                     @if(auth()->user()->hasRole('operator_admin') || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
                         <x-nav-link :href="route('operator.staff.index')" :active="request()->routeIs('operator.staff.*')">
                             {{ __('Staff') }}
@@ -76,6 +85,15 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard', 'operator.dashboard', 'platform.dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+
+            @if(auth()->user()->hasAnyRole(['operator_admin', 'operator_finance', 'operator_support', 'operator_network']) || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
+                <x-responsive-nav-link :href="route('operator.packages.index')" :active="request()->routeIs('operator.packages.*')">
+                    {{ __('Packages') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('operator.vouchers.index')" :active="request()->routeIs('operator.vouchers.*')">
+                    {{ __('Vouchers') }}
+                </x-responsive-nav-link>
+            @endif
 
             @if(auth()->user()->hasRole('operator_admin') || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
                 <x-responsive-nav-link :href="route('operator.staff.index')" :active="request()->routeIs('operator.staff.*')">

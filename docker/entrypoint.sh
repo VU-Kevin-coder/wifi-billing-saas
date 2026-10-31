@@ -47,6 +47,17 @@ chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────
+# Warm Laravel caches (config, routes, views, events)
+# This makes every request faster by pre-compiling everything.
+# ─────────────────────────────────────────────────────────────
+echo "Warming Laravel caches..."
+php artisan config:cache  --quiet || true
+php artisan route:cache   --quiet || true
+php artisan view:cache    --quiet || true
+php artisan event:cache   --quiet || true
+echo "Cache warming complete."
+
+# ─────────────────────────────────────────────────────────────
 # Run the CMD (default: php-fpm)
 # ─────────────────────────────────────────────────────────────
 exec "$@"
