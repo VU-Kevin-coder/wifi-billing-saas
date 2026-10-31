@@ -57,6 +57,7 @@ Route::domain('{tenant}.localhost')
 
                 // Live Sessions
                 Route::get('/sessions', [\App\Http\Controllers\Operator\LiveSessionController::class, 'index'])->name('sessions.index');
+                Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
 
                 // Captive Portal Settings
                 Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');

@@ -78,6 +78,30 @@ class LiveSessionController extends Controller
     }
 
     /**
+     * Disconnect (terminate) a specific session.
+     * Strictly scoped to the current tenant — no cross-tenant access possible.
+     */
+    public function disconnect(Request $request, Session $session, TenantContext $context)
+    {
+        $tenantId = $context->getTenantId();
+
+        // Tenant isolation check
+        if ($session->tenant_id !== $tenantId) {
+            return response()->json(['success' => false, 'message' => 'Session not found in this workspace.'], 403);
+        }
+
+        $session->update([
+            'status'     => 'disconnected',
+            'expires_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Session for {$session->customer?->name} has been terminated.",
+        ]);
+    }
+
+    /**
      * Seed realistic demo sessions for a fresh tenant.
      */
     protected function seedDemoSessions(int $tenantId): void
