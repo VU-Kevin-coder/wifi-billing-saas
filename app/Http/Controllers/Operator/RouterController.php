@@ -18,10 +18,7 @@ class RouterController extends Controller
         $tenant = $context->getTenant();
         $tenantId = $context->getTenantId();
 
-        // Auto-seed realistic demo routers matching the UI screenshot if tenant has none yet
-        if ($tenantId && Router::where('tenant_id', $tenantId)->count() === 0) {
-            $this->seedInitialRouters($tenantId);
-        }
+
 
         $query = Router::where('tenant_id', $tenantId);
 
@@ -58,9 +55,9 @@ class RouterController extends Controller
         $totalRouters = $allRouters->count();
         $onlineRouters = $allRouters->where('status', 'online')->count();
         $offlineRouters = $allRouters->where('status', 'offline')->count();
-        $avgCpu = $allRouters->where('status', 'online')->avg('cpu_usage') ?? 24;
+        $avgCpu = $allRouters->where('status', 'online')->avg('cpu_usage') ?? 0;
 
-        // Find unreachable router for warning banner (e.g. Jinja-MKT-02 or first offline)
+        // Find unreachable router for warning banner if any is offline
         $unreachableRouter = $allRouters->firstWhere('status', 'offline');
 
         // Distinct sites for dropdown filter (strictly for this tenant)
@@ -191,6 +188,12 @@ class RouterController extends Controller
         $router = $this->resolveTenantRouter($args, $context);
 
         $name = $router->name;
+        \App\Models\Session::where('router_id', $router->id)
+            ->where('status', 'active')
+            ->update([
+                'status' => 'disconnected',
+                'expires_at' => now(),
+            ]);
         $router->delete();
 
         return redirect()->route('operator.routers.index')
@@ -352,6 +355,12 @@ class RouterController extends Controller
 
             case 'delete':
                 foreach ($routers as $r) {
+                    \App\Models\Session::where('router_id', $r->id)
+                        ->where('status', 'active')
+                        ->update([
+                            'status' => 'disconnected',
+                            'expires_at' => now(),
+                        ]);
                     $r->delete();
                 }
                 $message = "Successfully removed {$count} router(s) from your workspace.";
@@ -380,109 +389,5 @@ class RouterController extends Controller
         }
 
         return $router;
-    }
-
-    /**
-     * Seed initial routers matching the screenshot if table is empty.
-     */
-    protected function seedInitialRouters(int $tenantId): void
-    {
-        $samples = [
-            [
-                'name' => 'NTD-CORE-01',
-                'hardware_model' => 'CCR2004 · ROS 7.16.2',
-                'management_ip' => '10.20.1.1',
-                'site' => 'Ntinda Hub',
-                'cpu_usage' => 32,
-                'memory_usage' => 41,
-                'active_users' => 148,
-                'status' => 'online',
-                'last_seen_at' => now(),
-            ],
-            [
-                'name' => 'NTD-AP-02',
-                'hardware_model' => 'hAP ax³ · ROS 7.16.2',
-                'management_ip' => '10.20.1.2',
-                'site' => 'Ntinda Hub',
-                'cpu_usage' => 18,
-                'memory_usage' => 36,
-                'active_users' => 42,
-                'status' => 'online',
-                'last_seen_at' => now(),
-            ],
-            [
-                'name' => 'WDG-CORE-01',
-                'hardware_model' => 'RB4011 · ROS 7.16.2',
-                'management_ip' => '10.20.2.1',
-                'site' => 'Wandegeya',
-                'cpu_usage' => 27,
-                'memory_usage' => 38,
-                'active_users' => 95,
-                'status' => 'online',
-                'last_seen_at' => now(),
-            ],
-            [
-                'name' => 'EBB-GW-01',
-                'hardware_model' => 'CCR2004 · ROS 7.16.2',
-                'management_ip' => '10.20.3.1',
-                'site' => 'Entebbe Gateway',
-                'cpu_usage' => 21,
-                'memory_usage' => 33,
-                'active_users' => 64,
-                'status' => 'online',
-                'last_seen_at' => now(),
-            ],
-            [
-                'name' => 'JJA-MKT-01',
-                'hardware_model' => 'RB5009 · ROS 7.16.2',
-                'management_ip' => '10.20.4.1',
-                'site' => 'Jinja Central',
-                'cpu_usage' => 29,
-                'memory_usage' => 45,
-                'active_users' => 112,
-                'status' => 'online',
-                'last_seen_at' => now(),
-            ],
-            [
-                'name' => 'Jinja-MKT-02',
-                'hardware_model' => 'hAP ac³ · ROS 7.15.3',
-                'management_ip' => '10.20.4.2',
-                'site' => 'Jinja Central',
-                'cpu_usage' => 0,
-                'memory_usage' => 0,
-                'active_users' => 0,
-                'status' => 'offline',
-                'last_seen_at' => now()->subMinutes(18),
-            ],
-            [
-                'name' => 'BGL-CORE-01',
-                'hardware_model' => 'RB5009 · ROS 7.16.2',
-                'management_ip' => '10.20.5.1',
-                'site' => 'Bugolobi',
-                'cpu_usage' => 17,
-                'memory_usage' => 31,
-                'active_users' => 76,
-                'status' => 'online',
-                'last_seen_at' => now(),
-            ],
-        ];
-
-        foreach ($samples as $data) {
-            Router::create(array_merge($data, [
-                'tenant_id' => $tenantId,
-                'api_username' => 'sopraent_user',
-                'api_password' => 'RouterSecurePass123!',
-                'api_port' => 8728,
-                'has_wireless' => str_contains($data['hardware_model'], 'hAP'),
-                'enable_hotspot' => true,
-                'hotspot_config' => [
-                    'network' => '10.10.0.0/16',
-                    'gateway' => '10.10.0.1',
-                    'dns' => '8.8.8.8,8.8.4.4',
-                    'domain' => 'hotspot.local',
-                ],
-                'ethernet_ports' => ['ether2', 'ether3'],
-            ]));
-        }
     }
 }

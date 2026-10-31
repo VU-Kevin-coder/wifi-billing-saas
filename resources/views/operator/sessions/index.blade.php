@@ -292,17 +292,20 @@
                                 $sessionType = $session->voucher_id ? 'Hotspot' : 'PPPoE';
                                 $typeColor   = $session->voucher_id ? 'text-blue-600' : 'text-purple-600';
 
+                                $customerName = $session->customer?->name 
+                                    ?? ($session->voucher ? 'Voucher ' . $session->voucher->code : 'Wi-Fi Guest');
+
                                 // Build the JS-safe session object for the side panel
                                 $sessionJs = json_encode([
                                     'id'          => $session->id,
-                                    'customer'    => $session->customer->name ?? 'Guest User',
-                                    'email'       => $session->customer->email ?? '—',
+                                    'customer'    => $customerName,
+                                    'email'       => $session->customer?->email ?? '—',
                                     'type'        => $sessionType,
                                     'mac'         => $session->mac_address ?? '—',
                                     'ip'          => $session->ip_address ?? '—',
-                                    'router'      => $session->router->name ?? '—',
-                                    'site'        => $session->router->site ?? '—',
-                                    'package'     => $session->package->name ?? '—',
+                                    'router'      => $session->router?->name ?? '—',
+                                    'site'        => $session->router?->site ?? '—',
+                                    'package'     => $session->package?->name ?? '—',
                                     'started'     => $session->started_at->format('Y-m-d H:i:s'),
                                     'expires'     => $session->expires_at?->format('Y-m-d H:i:s') ?? '—',
                                     'duration'    => $dur,
@@ -329,11 +332,11 @@
                                 <td class="px-4 py-3.5 whitespace-nowrap">
                                     <div class="flex items-center gap-2.5">
                                         <div class="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-700 font-bold text-[10px] shrink-0">
-                                            {{ strtoupper(substr($session->customer->name ?? 'G', 0, 1)) }}
+                                            {{ strtoupper(substr($customerName, 0, 1)) }}
                                         </div>
                                         <div>
                                             <p class="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">
-                                                {{ $session->customer->name ?? 'Guest User' }}
+                                                {{ $customerName }}
                                             </p>
                                             <p class="text-[11px] {{ $typeColor }} font-medium">
                                                 {{ $sessionType }}
@@ -347,8 +350,8 @@
 
                                 {{-- Site / Router --}}
                                 <td class="px-4 py-3.5 whitespace-nowrap">
-                                    <p class="text-gray-900 font-medium">{{ $session->router->site ?? '—' }}</p>
-                                    <p class="text-[11px] text-gray-400 font-mono">{{ $session->router->name ?? '—' }}</p>
+                                    <p class="text-gray-900 font-medium">{{ $session->router?->site ?? '—' }}</p>
+                                    <p class="text-[11px] text-gray-400 font-mono">{{ $session->router?->name ?? '—' }}</p>
                                 </td>
 
                                 {{-- Client IP --}}

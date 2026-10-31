@@ -15,12 +15,56 @@ class LiveSessionController extends Controller
         $tenant   = $context->getTenant();
         $tenantId = $context->getTenantId();
 
-        // Auto-seed demo sessions if the table is empty for this tenant
-        if ($tenantId && Session::where('tenant_id', $tenantId)->where('status', 'active')->count() === 0) {
-            $this->seedDemoSessions($tenantId);
+
+
+        // Synchronize any redeemed vouchers that don't have an active session logged yet
+        $unloggedVouchers = \App\Models\Voucher::with('package')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'redeemed')
+            ->whereDoesntHave('sessions')
+            ->get();
+
+        foreach ($unloggedVouchers as $v) {
+            $pkg = $v->package;
+            $expiresAt = now()->addHours(2);
+            if ($pkg && $pkg->duration_value) {
+                $unit = strtolower($pkg->duration_unit ?? 'hours');
+                $val = (int) $pkg->duration_value;
+                $redeemedTime = $v->redeemed_at ? (clone $v->redeemed_at) : now();
+                $expiresAt = match ($unit) {
+                    'minutes', 'minute' => (clone $redeemedTime)->addMinutes($val),
+                    'days', 'day' => (clone $redeemedTime)->addDays($val),
+                    'weeks', 'week' => (clone $redeemedTime)->addWeeks($val),
+                    'months', 'month' => (clone $redeemedTime)->addMonths($val),
+                    default => (clone $redeemedTime)->addHours($val),
+                };
+            }
+
+            if ($expiresAt > now()) {
+                $r = Router::where('tenant_id', $tenantId)
+                    ->when($v->assigned_site, fn($q) => $q->where('site', $v->assigned_site))
+                    ->first() ?? Router::where('tenant_id', $tenantId)->first();
+
+                Session::create([
+                    'tenant_id'   => $tenantId,
+                    'customer_id' => null,
+                    'voucher_id'  => $v->id,
+                    'package_id'  => $v->package_id,
+                    'router_id'   => $r?->id,
+                    'status'      => 'active',
+                    'started_at'  => $v->redeemed_at ?? now(),
+                    'expires_at'  => $expiresAt,
+                    'ip_address'  => '10.50.1.' . rand(10, 250),
+                    'mac_address' => null,
+                    'bytes_in'    => 1024 * 128,
+                    'bytes_out'   => 1024 * 512,
+                    'rate_in'     => 1024 * 64,
+                    'rate_out'    => 1024 * 256,
+                ]);
+            }
         }
 
-        $query = Session::with(['customer', 'package', 'router'])
+        $query = Session::with(['customer', 'package', 'router', 'voucher'])
             ->where('tenant_id', $tenantId)
             ->where('status', 'active')
             ->where('expires_at', '>', now());
@@ -30,7 +74,8 @@ class LiveSessionController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('ip_address', 'like', "%{$search}%")
                   ->orWhere('mac_address', 'like', "%{$search}%")
-                  ->orWhereHas('customer', fn($c) => $c->where('name', 'like', "%{$search}%"));
+                  ->orWhereHas('customer', fn($c) => $c->where('name', 'like', "%{$search}%"))
+                  ->orWhereHas('voucher', fn($v) => $v->where('code', 'like', "%{$search}%"));
             });
         }
 
@@ -99,51 +144,5 @@ class LiveSessionController extends Controller
             'success' => true,
             'message' => "Session for {$session->customer?->name} has been terminated.",
         ]);
-    }
-
-    /**
-     * Seed realistic demo sessions for a fresh tenant.
-     */
-    protected function seedDemoSessions(int $tenantId): void
-    {
-        $routers = Router::where('tenant_id', $tenantId)->where('status', 'online')->get();
-        if ($routers->isEmpty()) {
-            return;
-        }
-
-        $customers = \App\Models\Customer::where('tenant_id', $tenantId)->get();
-        $packages  = \App\Models\Package::where('tenant_id', $tenantId)->get();
-
-        $demos = [
-            ['name' => 'Amina Namusoke',   'ip' => '10.50.1.184', 'mac' => '4C:BB:58:A1:22:01', 'site_idx' => 0, 'hours' => 2,  'mins' => 14, 'bytes_in' => 335544320,  'bytes_out' => 2576980378,  'rate_in' => 2202009,  'rate_out' => 13109300],
-            ['name' => 'Brian Kato',       'ip' => '10.50.2.321', 'mac' => '3C:F8:62:B2:33:02', 'site_idx' => 1, 'hours' => 1,  'mins' => 8,  'bytes_in' => 98566144,   'bytes_out' => 901775360,   'rate_in' => 943718,   'rate_out' => 5033164],
-            ['name' => 'Daniel Ssembatya', 'ip' => '10.50.4.142', 'mac' => '78:E4:00:C3:44:03', 'site_idx' => 2, 'hours' => 1,  'mins' => 30, 'bytes_in' => 39845888,   'bytes_out' => 432013312,   'rate_in' => 419430,   'rate_out' => 2724003],
-            ['name' => 'Joseph Okello',    'ip' => '10.50.5.193', 'mac' => 'DC:A6:32:D4:55:04', 'site_idx' => 3, 'hours' => 3,  'mins' => 26, 'bytes_in' => 220200960,   'bytes_out' => 1932735283,  'rate_in' => 1258291,  'rate_out' => 6396656],
-            ['name' => 'Ruth Nakiyingi',   'ip' => '10.50.1.237', 'mac' => 'B8:27:EB:E5:66:05', 'site_idx' => 0, 'hours' => 5,  'mins' => 12, 'bytes_in' => 566231040,   'bytes_out' => 4831838208,  'rate_in' => 3565158,  'rate_out' => 10737418],
-            ['name' => 'Isaac Walusimbi',  'ip' => '10.50.6.106', 'mac' => 'E4:5F:01:F6:77:06', 'site_idx' => 1, 'hours' => 0,  'mins' => 42, 'bytes_in' => 18874368,   'bytes_out' => 247463936,   'rate_in' => 629145,   'rate_out' => 3355443],
-            ['name' => 'Florence Atim',    'ip' => '10.50.3.318', 'mac' => '00:1A:2B:G7:88:07', 'site_idx' => 2, 'hours' => 7,  'mins' => 3,  'bytes_in' => 1181116006,  'bytes_out' => 8791285248,  'rate_in' => 6502374,  'rate_out' => 25971520],
-        ];
-
-        foreach ($demos as $i => $d) {
-            $router   = $routers->get($d['site_idx'] % $routers->count()) ?? $routers->first();
-            $customer = $customers->get($i % max($customers->count(), 1));
-            $package  = $packages->first();
-
-            Session::create([
-                'tenant_id'   => $tenantId,
-                'customer_id' => $customer?->id,
-                'package_id'  => $package?->id,
-                'router_id'   => $router->id,
-                'status'      => 'active',
-                'started_at'  => now()->subHours($d['hours'])->subMinutes($d['mins']),
-                'expires_at'  => now()->addHours(6),
-                'ip_address'  => $d['ip'],
-                'mac_address' => $d['mac'],
-                'bytes_in'    => $d['bytes_in'],
-                'bytes_out'   => $d['bytes_out'],
-                'rate_in'     => $d['rate_in'],
-                'rate_out'    => $d['rate_out'],
-            ]);
-        }
     }
 }

@@ -327,4 +327,62 @@ class RouterManagementTest extends TestCase
         $this->assertNull($this->acme->mikrotik_host);
         $this->assertNull($this->acme->mikrotik_username);
     }
+
+    public function test_deleting_all_routers_does_not_display_any_fake_data_or_auto_seed(): void
+    {
+        $context = app(TenantContext::class);
+        $router = $context->runAs($this->acme, function () {
+            return Router::create([
+                'name' => 'TEMP-ROUTER-01',
+                'hardware_model' => 'CCR2004',
+                'api_password' => 'secret123',
+                'status' => 'online',
+            ]);
+        });
+
+        // 1. Delete the router
+        $response = $this->actingAs($this->acmeUser)
+            ->delete("http://acme.localhost/operator/routers/{$router->id}");
+
+        $response->assertRedirect("http://acme.localhost/operator/routers");
+
+        // Assert 0 routers in database for Acme
+        $context->runAs($this->acme, function () {
+            $this->assertEquals(0, Router::count());
+        });
+
+        // 2. Visit routers page again - must NOT auto-seed fake routers
+        $listResponse = $this->actingAs($this->acmeUser)
+            ->get("http://acme.localhost/operator/routers");
+
+        $listResponse->assertStatus(200);
+        $listResponse->assertSee('No routers found in workspace');
+        $listResponse->assertSee('Across 0 operating site(s)');
+        $listResponse->assertDontSee('NTD-CORE-01');
+        $listResponse->assertDontSee('Jinja-MKT-02');
+        $listResponse->assertDontSee('BGL-CORE-01');
+
+        $context->runAs($this->acme, function () {
+            $this->assertEquals(0, Router::count());
+        });
+
+        // 3. Visit dashboard - must NOT show fake router stats or alerts
+        $dashResponse = $this->actingAs($this->acmeUser)
+            ->get("http://acme.localhost/operator/dashboard");
+
+        $dashResponse->assertStatus(200);
+        $dashResponse->assertSee('0 / 0');
+        $dashResponse->assertSee('No routers connected');
+        $dashResponse->assertDontSee('Jinja-MKT-02 has been offline');
+        $dashResponse->assertDontSee('11 / 12');
+
+        // 4. Visit sessions page - must NOT show fake demo sessions
+        $sessionsResponse = $this->actingAs($this->acmeUser)
+            ->get("http://acme.localhost/operator/sessions");
+
+        $sessionsResponse->assertStatus(200);
+        $sessionsResponse->assertSee('No active sessions right now');
+        $sessionsResponse->assertDontSee('Amina Namusoke');
+        $sessionsResponse->assertDontSee('Brian Kato');
+    }
 }

@@ -90,4 +90,65 @@ class VoucherIsolationTest extends TestCase
             $this->assertEquals('BATCH-BET', VoucherBatch::first()->batch_code);
         });
     }
+
+    public function test_redeemed_voucher_creates_active_session_and_appears_in_live_sessions(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $operator = \App\Models\User::factory()->create([
+            'tenant_id' => $this->acme->id,
+            'name' => 'Acme Admin',
+            'email' => 'admin@acme.test',
+        ]);
+        $operator->assignRole('operator_admin');
+
+        $context = app(TenantContext::class);
+        $voucher = $context->runAs($this->acme, function () {
+            $pkg = Package::create([
+                'name'            => '1 Hour Pass',
+                'price'           => 1000,
+                'duration_value'  => 1,
+                'duration_unit'   => 'hours',
+                'speed_limit_mbps'=> 5,
+                'device_limit'    => 1,
+            ]);
+            $batch = VoucherBatch::create([
+                'package_id' => $pkg->id,
+                'batch_code' => 'BATCH-TEST',
+                'quantity'   => 1,
+            ]);
+            return Voucher::create([
+                'voucher_batch_id' => $batch->id,
+                'package_id'       => $pkg->id,
+                'code'             => 'TEST-PASS-99',
+                'status'           => 'unused',
+            ]);
+        });
+
+        // 1. Redeem voucher through captive portal
+        $response = $this->post("http://acme.localhost/portal/redeem", [
+            'voucher_code' => 'TEST-PASS-99',
+        ]);
+
+        $response->assertRedirect("http://acme.localhost/portal/success");
+
+        // Voucher should be marked redeemed
+        $voucher->refresh();
+        $this->assertEquals('redeemed', $voucher->status);
+
+        // 2. Active session must exist in database for this voucher
+        $session = \App\Models\Session::where('voucher_id', $voucher->id)->first();
+        $this->assertNotNull($session);
+        $this->assertEquals('active', $session->status);
+        $this->assertEquals($this->acme->id, $session->tenant_id);
+
+        // 3. Live sessions UI must show this session
+        $sessionsUiResponse = $this->actingAs($operator)
+            ->get("http://acme.localhost/operator/sessions");
+
+        $sessionsUiResponse->assertStatus(200);
+        $sessionsUiResponse->assertSee('TEST-PASS-99');
+        $sessionsUiResponse->assertSee('Hotspot');
+        $sessionsUiResponse->assertSee('1 Hour Pass');
+    }
 }

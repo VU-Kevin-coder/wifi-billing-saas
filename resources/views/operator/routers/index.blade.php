@@ -112,7 +112,7 @@
                         </svg>
                     </div>
                 </div>
-                <p class="text-[11px] font-medium text-gray-400 mt-3">Across {{ count($sites) > 0 ? count($sites) : 1 }} operating site(s)</p>
+                <p class="text-[11px] font-medium text-gray-400 mt-3">Across {{ count($sites) }} operating site(s)</p>
             </div>
 
             <!-- Online now -->
@@ -128,7 +128,7 @@
                         </svg>
                     </div>
                 </div>
-                <p class="text-[11px] font-medium text-emerald-600 mt-3">Live polling active</p>
+                <p class="text-[11px] font-medium text-emerald-600 mt-3">{{ $onlineRouters > 0 ? 'Live polling active' : 'No routers online' }}</p>
             </div>
 
             <!-- Offline -->
@@ -147,6 +147,8 @@
                 <p class="text-[11px] font-medium text-gray-400 mt-3">
                     @if($unreachableRouter)
                         <span class="text-red-600 font-semibold">{{ $unreachableRouter->name }}</span> · {{ $unreachableRouter->last_seen_at ? $unreachableRouter->last_seen_at->diffForHumans(null, true) : 'Offline' }}
+                    @elseif($totalRouters === 0)
+                        No routers added
                     @else
                         All nodes operational
                     @endif
@@ -158,7 +160,7 @@
                 <div class="flex items-start justify-between">
                     <div>
                         <p class="text-xs font-semibold text-gray-500">Average CPU load</p>
-                        <p class="text-3xl font-extrabold text-gray-900 mt-2">{{ number_format($avgCpu) }}%</p>
+                        <p class="text-3xl font-extrabold text-gray-900 mt-2">{{ $onlineRouters > 0 ? number_format($avgCpu) . '%' : '—' }}</p>
                     </div>
                     <div class="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,7 +168,7 @@
                         </svg>
                     </div>
                 </div>
-                <p class="text-[11px] font-medium text-emerald-600 mt-3">Isolated tenant resources</p>
+                <p class="text-[11px] font-medium text-gray-400 mt-3">{{ $onlineRouters > 0 ? 'Isolated tenant resources' : 'No active nodes' }}</p>
             </div>
 
         </div>

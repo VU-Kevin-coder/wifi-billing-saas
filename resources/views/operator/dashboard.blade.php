@@ -38,21 +38,23 @@
             </div>
         </div>
 
-        <!-- 2. Attention Alert Banner -->
-        <div class="rounded-2xl bg-amber-50/70 border border-amber-200/80 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
-            <div class="flex items-center gap-3">
-                <div class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
-                    !
+        <!-- 2. Attention Alert Banner (Only when an actual router is offline) -->
+        @if($unreachableRouter)
+            <div class="rounded-2xl bg-amber-50/70 border border-amber-200/80 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+                <div class="flex items-center gap-3">
+                    <div class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        !
+                    </div>
+                    <div>
+                        <span class="font-bold text-gray-900">1 router needs your attention</span>
+                        <span class="text-gray-500 ml-1">{{ $unreachableRouter->name }} is offline. Check power and connectivity.</span>
+                    </div>
                 </div>
-                <div>
-                    <span class="font-bold text-gray-900">1 router needs your attention</span>
-                    <span class="text-gray-500 ml-1">Jinja-MKT-02 has been offline for 18 minutes. 24 customers may be affected.</span>
-                </div>
+                <a href="{{ route('operator.routers.show', $unreachableRouter) }}" class="text-amber-800 font-semibold hover:underline flex items-center gap-1 shrink-0 ml-10 sm:ml-0">
+                    View router &rarr;
+                </a>
             </div>
-            <a href="#" class="text-amber-800 font-semibold hover:underline flex items-center gap-1 shrink-0 ml-10 sm:ml-0">
-                View router &rarr;
-            </a>
-        </div>
+        @endif
 
         <!-- 3. Four Top KPI Cards Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -84,9 +86,9 @@
                     </svg>
                 </div>
                 <p class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-                    {{ $customerCount > 0 ? number_format($customerCount) : '1,248' }}
+                    {{ number_format($customerCount) }}
                 </p>
-                <p class="text-xs text-emerald-600 font-semibold mt-2">+46 customers this month</p>
+                <p class="text-xs text-gray-400 font-medium mt-2">Active subscribers</p>
             </div>
 
             <!-- Card 3: Active sessions -->
@@ -98,9 +100,11 @@
                     </svg>
                 </div>
                 <p class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-                    {{ $activeSessions > 0 ? number_format($activeSessions) : '328' }}
+                    {{ number_format($activeSessions) }}
                 </p>
-                <p class="text-xs text-gray-400 font-medium mt-2">Across 6 hotspot sites</p>
+                <p class="text-xs text-gray-400 font-medium mt-2">
+                    {{ $activeSessions > 0 ? 'Across active hotspot sites' : 'No active sessions' }}
+                </p>
             </div>
 
             <!-- Card 4: Routers online -->
@@ -111,8 +115,18 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
                     </svg>
                 </div>
-                <p class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">11 / 12</p>
-                <p class="text-xs text-gray-400 font-medium mt-2">1 offline · 99.2% uptime</p>
+                <p class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+                    {{ $onlineRouters }} / {{ $totalRouters }}
+                </p>
+                <p class="text-xs text-gray-400 font-medium mt-2">
+                    @if($totalRouters === 0)
+                        No routers connected
+                    @elseif($offlineRouters > 0)
+                        {{ $offlineRouters }} offline · {{ $totalRouters > 0 ? round(($onlineRouters / $totalRouters) * 100, 1) : 0 }}% uptime
+                    @else
+                        All routers online
+                    @endif
+                </p>
             </div>
 
         </div>
@@ -228,13 +242,17 @@
                             <p class="text-xs font-medium text-gray-400 flex items-center gap-1">
                                 <span class="text-blue-500">&darr;</span> Download
                             </p>
-                            <p class="text-xl font-extrabold text-gray-900 mt-1">842 Mbps</p>
+                            <p class="text-xl font-extrabold text-gray-900 mt-1">
+                                {{ $downloadThroughput > 0 ? number_format($downloadThroughput / 1_000_000, 1) . ' Mbps' : '—' }}
+                            </p>
                         </div>
                         <div>
                             <p class="text-xs font-medium text-gray-400 flex items-center gap-1">
                                 <span class="text-blue-500">&uarr;</span> Upload
                             </p>
-                            <p class="text-xl font-extrabold text-gray-900 mt-1">186 Mbps</p>
+                            <p class="text-xl font-extrabold text-gray-900 mt-1">
+                                {{ $uploadThroughput > 0 ? number_format($uploadThroughput / 1_000_000, 1) . ' Mbps' : '—' }}
+                            </p>
                         </div>
                     </div>
 
@@ -243,20 +261,20 @@
                         <div>
                             <div class="flex justify-between text-xs font-medium mb-1.5">
                                 <span class="text-gray-600">Backhaul utilization</span>
-                                <span class="font-bold text-gray-900">64%</span>
+                                <span class="font-bold text-gray-900">{{ $totalRouters > 0 && $downloadThroughput > 0 ? min(round(($downloadThroughput / 100_000_000) * 100), 100) . '%' : '0%' }}</span>
                             </div>
                             <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                                <div class="bg-blue-600 h-2 rounded-full" style="width: 64%"></div>
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: {{ $totalRouters > 0 && $downloadThroughput > 0 ? min(round(($downloadThroughput / 100_000_000) * 100), 100) : 0 }}%"></div>
                             </div>
                         </div>
 
                         <div>
                             <div class="flex justify-between text-xs font-medium mb-1.5">
                                 <span class="text-gray-600">RADIUS availability</span>
-                                <span class="font-bold text-gray-900">99.98%</span>
+                                <span class="font-bold text-gray-900">{{ $totalRouters > 0 ? '100%' : '—' }}</span>
                             </div>
                             <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                                <div class="bg-emerald-500 h-2 rounded-full" style="width: 99.98%"></div>
+                                <div class="bg-emerald-500 h-2 rounded-full" style="width: {{ $totalRouters > 0 ? 100 : 0 }}%"></div>
                             </div>
                         </div>
                     </div>
@@ -503,21 +521,23 @@
                             </svg>
                         </a>
 
-                        <!-- Action 3: Router offline -->
-                        <a href="#" class="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group">
-                            <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 font-bold text-sm flex items-center justify-center shrink-0">
-                                    1
+                        @if($offlineRouters > 0 && $unreachableRouter)
+                            <!-- Action 3: Router offline -->
+                            <a href="{{ route('operator.routers.show', $unreachableRouter) }}" class="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 font-bold text-sm flex items-center justify-center shrink-0">
+                                        {{ $offlineRouters }}
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Router offline</p>
+                                        <p class="text-[11px] text-gray-400 mt-0.5">{{ $unreachableRouter->name }}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p class="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Router offline</p>
-                                    <p class="text-[11px] text-gray-400 mt-0.5">Jinja Central Market</p>
-                                </div>
-                            </div>
-                            <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                            </svg>
-                        </a>
+                                <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                            </a>
+                        @endif
 
                     </div>
                 </div>

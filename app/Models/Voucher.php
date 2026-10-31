@@ -28,4 +28,9 @@ class Voucher extends Model
     {
         return $this->belongsTo(Package::class);
     }
+
+    public function sessions()
+    {
+        return $this->hasMany(Session::class);
+    }
 }
