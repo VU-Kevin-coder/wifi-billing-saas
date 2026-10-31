@@ -352,18 +352,18 @@
                                         {{ $router->name }}
                                     </a>
                                     <span class="text-[11px] text-gray-400 block mt-0.5">
-                                        {{ $router->hardware_model ?? 'CCR2004 · ROS 7.16.2' }}
+                                        {{ $router->hardware_model ?? '—' }}
                                     </span>
                                 </td>
 
                                 <!-- Management IP -->
                                 <td class="px-4 py-3.5 whitespace-nowrap font-mono text-gray-600">
-                                    {{ $router->management_ip ?? '10.20.1.1' }}
+                                    {{ $router->management_ip ?? '—' }}
                                 </td>
 
                                 <!-- Site -->
                                 <td class="px-4 py-3.5 whitespace-nowrap text-gray-700">
-                                    {{ $router->site ?? 'Ntinda Hub' }}
+                                    {{ $router->site ?? '—' }}
                                 </td>
 
                                 <!-- CPU / Memory -->

@@ -91,7 +91,7 @@
                             • Offline
                         </span>
                     @endif
-                    <span class="text-xs text-gray-400 font-mono">{{ $router->management_ip ?? '10.20.1.1' }}</span>
+                    <span class="text-xs text-gray-400 font-mono">{{ $router->management_ip ?? '—' }}</span>
                 </div>
 
                 <!-- Action Button Toolbar -->
@@ -338,7 +338,7 @@
                         <div>
                             <p class="text-gray-400 font-semibold mb-1">Username</p>
                             <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#1e222d] border border-gray-700 text-blue-400 font-mono">
-                                {{ $router->api_username ?? 'sopraent_user' }}
+                                {{ $router->api_username ?? '—' }}
                             </span>
                         </div>
                         <div>
@@ -353,7 +353,7 @@
                         <div>
                             <p class="text-gray-400 font-semibold mb-1">API Port</p>
                             <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#1e222d] border border-gray-700 text-amber-400 font-mono">
-                                {{ $router->api_port ?? 8728 }}
+                                {{ $router->api_port ?? '—' }}
                             </span>
                         </div>
                     </div>
@@ -409,7 +409,7 @@
                         <div>
                             <p class="text-gray-400 font-semibold mb-1">Hardware Model</p>
                             <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#1e222d] border border-gray-700 text-amber-400 font-mono">
-                                {{ $router->hardware_model ?? 'CCR2004' }}
+                                {{ $router->hardware_model ?? '—' }}
                             </span>
                         </div>
                         <div>
