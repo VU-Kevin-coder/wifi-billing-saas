@@ -25,6 +25,15 @@ Route::middleware(['auth', 'role:platform_admin'])
 // If they visit acme.localhost:8000/operator/dashboard, it routes here.
 Route::domain('{tenant}.localhost')
     ->group(function () {
+        // ─── Public Captive Portal (No Auth Required) ─────────────
+        Route::prefix('portal')
+            ->name('portal.')
+            ->group(function () {
+                Route::get('/', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
+                Route::post('/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])->name('redeem');
+                Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+            });
+
         // Secure single-use SSO transfer for cross-domain login
         Route::get('/sso/verify', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'ssoVerify'])
             ->name('operator.sso.verify');
@@ -37,6 +46,10 @@ Route::domain('{tenant}.localhost')
 
                 Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
                 Route::resource('vouchers', \App\Http\Controllers\Operator\VoucherController::class)->only(['index', 'store']);
+
+                // Captive Portal Settings
+                Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');
+                Route::put('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'update'])->name('settings.portal.update');
 
                 // Staff Management is strictly for operator_admin
                 Route::middleware('role:operator_admin')->group(function () {

@@ -29,6 +29,9 @@
                         <x-nav-link :href="route('operator.staff.index')" :active="request()->routeIs('operator.staff.*')">
                             {{ __('Staff') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('operator.settings.portal')" :active="request()->routeIs('operator.settings.*')">
+                            {{ __('Settings') }}
+                        </x-nav-link>
                     @endif
                 </div>
             </div>
@@ -98,6 +101,9 @@
             @if(auth()->user()->hasRole('operator_admin') || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
                 <x-responsive-nav-link :href="route('operator.staff.index')" :active="request()->routeIs('operator.staff.*')">
                     {{ __('Staff') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('operator.settings.portal')" :active="request()->routeIs('operator.settings.*')">
+                    {{ __('Settings') }}
                 </x-responsive-nav-link>
             @endif
         </div>
