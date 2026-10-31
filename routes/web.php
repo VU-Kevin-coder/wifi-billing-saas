@@ -43,13 +43,28 @@ Route::domain('{tenant}.localhost')
             ->name('operator.')
             ->group(function () {
                 Route::get('/dashboard', OperatorDashboard::class)->name('dashboard');
+                Route::resource('customers', \App\Http\Controllers\Operator\CustomerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
 
                 Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
                 Route::resource('vouchers', \App\Http\Controllers\Operator\VoucherController::class)->only(['index', 'store']);
+                // Router Management & Actions
+                Route::post('routers/ping-all', [\App\Http\Controllers\Operator\RouterController::class, 'pingAll'])->name('routers.ping-all');
+                Route::post('routers/bulk-action', [\App\Http\Controllers\Operator\RouterController::class, 'bulkAction'])->name('routers.bulk-action');
+                Route::post('routers/{router}/ping', [\App\Http\Controllers\Operator\RouterController::class, 'ping'])->name('routers.ping');
+                Route::post('routers/{router}/reboot', [\App\Http\Controllers\Operator\RouterController::class, 'reboot'])->name('routers.reboot');
+                Route::post('routers/{router}/sync', [\App\Http\Controllers\Operator\RouterController::class, 'sync'])->name('routers.sync');
+                Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
 
                 // Captive Portal Settings
                 Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');
                 Route::put('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'update'])->name('settings.portal.update');
+
+                // MikroTik Router Settings
+                Route::get('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'edit'])->name('settings.router');
+                Route::put('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'update'])->name('settings.router.update');
+                Route::post('/settings/router/test', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'testConnection'])->name('settings.router.test');
+                Route::post('/settings/router/sync-all', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'syncAll'])->name('settings.router.sync-all');
+                Route::post('/settings/router/disconnect', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'disconnect'])->name('settings.router.disconnect');
 
                 // Staff Management is strictly for operator_admin
                 Route::middleware('role:operator_admin')->group(function () {

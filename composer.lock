@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "33ebf42e96420cc7077c191e6b47dad1",
+    "content-hash": "09e306b513f8af0c841df16d9f29e513",
     "packages": [
         {
             "name": "brick/math",
@@ -3455,6 +3455,65 @@
             "time": "2026-10-19T16:31:21+00:00"
         },
         {
+            "name": "spatie/ssh",
+            "version": "1.13.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/spatie/ssh.git",
+                "reference": "3335ab102d1ad3e2cabc4e1079cd8b03f59bcd64"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/spatie/ssh/zipball/3335ab102d1ad3e2cabc4e1079cd8b03f59bcd64",
+                "reference": "3335ab102d1ad3e2cabc4e1079cd8b03f59bcd64",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^7.4|^8.0",
+                "symfony/process": "^4.4|^5.3|^6.0|^7.0|^8.0"
+            },
+            "require-dev": {
+                "pestphp/pest": "^1.22",
+                "spatie/pest-plugin-snapshots": "^1.1",
+                "symfony/var-dumper": "^5.3|^6.0|^7.0|^8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Spatie\\Ssh\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Freek Van der Herten",
+                    "email": "freek@spatie.be",
+                    "homepage": "https://spatie.be",
+                    "role": "Developer"
+                }
+            ],
+            "description": "A lightweight package to execute commands over an SSH connection",
+            "homepage": "https://github.com/spatie/ssh",
+            "keywords": [
+                "spatie",
+                "ssh"
+            ],
+            "support": {
+                "issues": "https://github.com/spatie/ssh/issues",
+                "source": "https://github.com/spatie/ssh/tree/1.13.2"
+            },
+            "funding": [
+                {
+                    "url": "https://spatie.be/open-source/support-us",
+                    "type": "custom"
+                }
+            ],
+            "time": "2026-07-24T12:17:04+00:00"
+        },
+        {
             "name": "symfony/clock",
             "version": "v7.4.21",
             "source": {
@@ -6258,6 +6317,82 @@
                 }
             ],
             "time": "2026-04-26T05:33:54+00:00"
+        },
+        {
+            "name": "zilleali/mikrotik-laravel",
+            "version": "v1.8.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Zilleali/mikrotik-laravel.git",
+                "reference": "ca59531b349e4672acafb4ea25e9fd2ec8c4f1e1"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Zilleali/mikrotik-laravel/zipball/ca59531b349e4672acafb4ea25e9fd2ec8c4f1e1",
+                "reference": "ca59531b349e4672acafb4ea25e9fd2ec8c4f1e1",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/support": "^11.0|^12.0|^13.0",
+                "php": "^8.2",
+                "spatie/ssh": "^1.8"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.0",
+                "laravel/pulse": "^1.0",
+                "orchestra/testbench": "^9.0|^10.0",
+                "pestphp/pest": "^3.0",
+                "pestphp/pest-plugin-laravel": "^3.0",
+                "phpstan/extension-installer": "^1.4",
+                "phpstan/phpstan": "^2.1",
+                "phpstan/phpstan-phpunit": "^2.0"
+            },
+            "suggest": {
+                "laravel/pulse": "^1.0 — Required for the MikroTik RouterHealth Pulse card"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "MikroTik": "ZillEAli\\MikrotikLaravel\\Facades\\MikroTik"
+                    },
+                    "providers": [
+                        "ZillEAli\\MikrotikLaravel\\MikrotikServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "ZillEAli\\MikrotikLaravel\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Zill E Ali",
+                    "email": "zilleali1245@gmail.com",
+                    "homepage": "https://zilleali.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "MikroTik RouterOS API for Laravel — PPPoE, Hotspot, Queues & Monitoring",
+            "keywords": [
+                "hotspot",
+                "isp",
+                "laravel",
+                "mikrotik",
+                "networking",
+                "pppoe",
+                "routeros"
+            ],
+            "support": {
+                "issues": "https://github.com/Zilleali/mikrotik-laravel/issues",
+                "source": "https://github.com/Zilleali/mikrotik-laravel/tree/v1.8.0"
+            },
+            "time": "2026-10-04T08:32:29+00:00"
         }
     ],
     "packages-dev": [

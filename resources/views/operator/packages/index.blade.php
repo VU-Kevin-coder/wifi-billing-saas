@@ -343,14 +343,37 @@
                                             Synced
                                         </span>
                                     </td>
-                                    <td class="px-6 py-3.5 text-right">
-                                        <button type="button" class="text-slate-400 hover:text-slate-600">
+                                    <td class="px-6 py-3.5 text-right relative" x-data="{ open: false }">
+                                        <button @click="open = !open" type="button" class="text-slate-400 hover:text-slate-600 p-1 rounded-md focus:outline-none">
                                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                                 <circle cx="5" cy="12" r="2"/>
                                                 <circle cx="12" cy="12" r="2"/>
                                                 <circle cx="19" cy="12" r="2"/>
                                             </svg>
                                         </button>
+                                        <div x-show="open" 
+                                             @click.away="open = false" 
+                                             x-transition:enter="transition ease-out duration-100"
+                                             x-transition:enter-start="transform opacity-0 scale-95"
+                                             x-transition:enter-end="transform opacity-100 scale-100"
+                                             x-transition:leave="transition ease-in duration-75"
+                                             x-transition:leave-start="transform opacity-100 scale-100"
+                                             x-transition:leave-end="transform opacity-0 scale-95"
+                                             class="absolute right-6 mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-50 text-left"
+                                             x-cloak>
+                                            <button type="button" 
+                                                    @click="open = false; openEdit({{ $package->toJson() }})" 
+                                                    class="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors">
+                                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                                Edit package
+                                            </button>
+                                            <button type="button" 
+                                                    @click="open = false; openCreate(); form = { ...{{ $package->toJson() }}, name: '{{ $package->name }} (Copy)', is_published: false }" 
+                                                    class="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors">
+                                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+                                                Duplicate plan
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             @empty

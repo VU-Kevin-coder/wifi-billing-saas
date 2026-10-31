@@ -15,10 +15,16 @@ class Tenant extends Model
         'slug',
         'status',
         'portal_settings',
+        'mikrotik_host',
+        'mikrotik_username',
+        'mikrotik_password',
+        'mikrotik_port',
     ];
 
     protected $casts = [
         'portal_settings' => 'array',
+        'mikrotik_password' => 'encrypted',
+        'mikrotik_port' => 'integer',
     ];
 
     /**

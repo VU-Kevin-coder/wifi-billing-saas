@@ -47,13 +47,16 @@
             <!-- Navigation Tabs -->
             <div class="border-b border-gray-200 mb-8 bg-white px-6 rounded-xl shadow-sm">
                 <nav class="-mb-px flex space-x-8">
-                    <a href="#" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">General Settings</a>
-                    <a href="#" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Hotspot & RADIUS</a>
-                    <a href="#" class="border-blue-600 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-sm flex items-center gap-2">
+                    <a href="{{ route('operator.settings.router') }}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                        </svg>
+                        MikroTik Router
+                    </a>
+                    <a href="{{ route('operator.settings.portal') }}" class="border-blue-600 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-sm flex items-center gap-2">
                         <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                         Captive Portal
                     </a>
-                    <a href="#" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Domain & SSL</a>
                 </nav>
             </div>
 
