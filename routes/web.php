@@ -99,6 +99,9 @@ if ($hasCustomDomain) {
 }
 
 // Single-Domain Routing (Active on Railway default domain, testing, localhost fallback)
+Route::get('/sso/verify', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'ssoVerify'])
+    ->name('operator.sso.verify');
+
 Route::middleware(['auth', 'role:operator_admin|operator_finance|operator_support|operator_network'])
     ->prefix('operator')
     ->name('operator.')

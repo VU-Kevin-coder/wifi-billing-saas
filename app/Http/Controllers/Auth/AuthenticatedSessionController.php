@@ -53,28 +53,34 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('platform.dashboard', absolute: false));
         }
 
-        // 2. If user is an operator, route to their specific tenant subdomain
+        // 2. If user is an operator, check if custom subdomain routing is active
         $tenantSlug = $user->tenant?->slug;
-        if ($tenantSlug) {
+        $hasCustomDomain = config('app.tenant_domain') 
+            && ! str_contains(config('app.tenant_domain'), 'railway.app') 
+            && ! str_contains(config('app.tenant_domain'), 'localhost');
+
+        if ($tenantSlug && $hasCustomDomain) {
             $currentHost = explode(':', $request->getHost())[0];
-            $targetHost = "{$tenantSlug}.localhost";
+            $targetHost = "{$tenantSlug}." . config('app.tenant_domain');
 
             // If already on this subdomain, go directly to the operator dashboard
             if ($currentHost === $targetHost) {
                 return redirect()->intended(route('operator.dashboard'));
             }
 
-            // If logged in from main domain (or another domain), transfer authentication via signed SSO
+            // Transfer authentication via signed SSO
             $parameters = ['tenant' => $tenantSlug, 'user' => $user->id];
             if ($mfaVerified) {
                 $parameters['mfa_verified'] = 1;
             }
 
-            $redirectUrl = URL::temporarySignedRoute('operator.sso.verify', now()->addMinutes(2), $parameters);
-
-            return redirect()->to($redirectUrl);
+            if (\Illuminate\Support\Facades\Route::has('operator.sso.verify')) {
+                $redirectUrl = URL::temporarySignedRoute('operator.sso.verify', now()->addMinutes(2), $parameters);
+                return redirect()->to($redirectUrl);
+            }
         }
 
+        // Single-domain mode (e.g. Railway testing): stay on the current domain
         return redirect()->intended(route('operator.dashboard'));
     }
 
