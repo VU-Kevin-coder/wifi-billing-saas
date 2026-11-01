@@ -7,6 +7,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "coding-libs/laravel-mfa": "^2.0",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.9",
         "spatie/laravel-permission": "^8.3",

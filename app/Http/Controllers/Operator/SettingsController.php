@@ -17,7 +17,7 @@ class SettingsController extends Controller
 
         $activeTab = $request->query('tab', 'general');
 
-        abort_unless(in_array($activeTab, ['general', 'hotspot', 'portal'], true), 404);
+        abort_unless(in_array($activeTab, ['general', 'hotspot', 'portal', 'sms', 'whatsapp', 'notifications', 'security'], true), 404);
 
         $settings = $tenant->settings;
 
@@ -105,5 +105,137 @@ class SettingsController extends Controller
             'tenant' => $tenant->slug,
             'tab' => 'hotspot',
         ])->with('status', 'Hotspot settings updated successfully.');
+    }
+
+    public function updateSms(Request $request, TenantContext $context)
+    {
+        $tenant = $context->getTenant();
+
+        abort_unless($tenant, 404, 'Tenant not found');
+
+        $validated = $request->validate([
+            'sms_gateway' => ['required', 'in:mambo,africastalking'],
+            'sms_api_key' => ['nullable', 'string', 'max:2048'],
+            'sms_sender_id' => ['nullable', 'string', 'max:11'],
+            'sms_enabled' => ['sometimes', 'boolean'],
+        ]);
+
+        $settings = array_merge($tenant->settings, [
+            'sms_enabled' => $request->boolean('sms_enabled'),
+            'sms_gateway' => $validated['sms_gateway'],
+            'sms_sender_id' => $validated['sms_sender_id'] ?? '',
+        ]);
+
+        if ($request->filled('sms_api_key')) {
+            $settings['sms_api_key'] = $validated['sms_api_key'];
+        }
+
+        $tenant->update(['settings' => $settings]);
+
+        return redirect()->route('operator.settings.index', [
+            'tenant' => $tenant->slug,
+            'tab' => 'sms',
+        ])->with('status', 'SMS settings updated successfully.');
+    }
+
+    public function updateWhatsapp(Request $request, TenantContext $context)
+    {
+        $tenant = $context->getTenant();
+
+        abort_unless($tenant, 404, 'Tenant not found');
+
+        $validated = $request->validate([
+            'whatsapp_gateway' => ['required', 'string', 'max:100'],
+            'whatsapp_api_key' => ['nullable', 'string', 'max:2048'],
+            'whatsapp_device_id' => ['nullable', 'string', 'max:255'],
+            'whatsapp_webhook_secret' => ['nullable', 'string', 'max:2048'],
+            'whatsapp_enabled' => ['sometimes', 'boolean'],
+            'whatsapp_chatbot_enabled' => ['sometimes', 'boolean'],
+        ]);
+
+        $settings = array_merge($tenant->settings, [
+            'whatsapp_gateway' => $validated['whatsapp_gateway'],
+            'whatsapp_device_id' => $validated['whatsapp_device_id'] ?? '',
+            'whatsapp_enabled' => $request->boolean('whatsapp_enabled'),
+            'whatsapp_chatbot_enabled' => $request->boolean('whatsapp_chatbot_enabled'),
+        ]);
+
+        foreach (['whatsapp_api_key', 'whatsapp_webhook_secret'] as $secret) {
+            if ($request->filled($secret)) {
+                $settings[$secret] = $validated[$secret];
+            }
+        }
+
+        $tenant->update(['settings' => $settings]);
+
+        return redirect()->route('operator.settings.index', [
+            'tenant' => $tenant->slug,
+            'tab' => 'whatsapp',
+        ])->with('status', 'WhatsApp settings updated successfully.');
+    }
+
+    public function updateNotifications(Request $request, TenantContext $context)
+    {
+        $tenant = $context->getTenant();
+
+        abort_unless($tenant, 404, 'Tenant not found');
+
+        $validated = $request->validate([
+            'notify_expiry_reminder_mins' => ['required', 'integer', 'in:30,60,1440'],
+            'template_voucher' => ['required', 'string', 'max:2000'],
+            'template_expiry' => ['required', 'string', 'max:2000'],
+            'template_expiry_reminder' => ['required', 'string', 'max:2000'],
+            'notify_voucher_sms' => ['sometimes', 'boolean'],
+            'notify_credentials_sms' => ['sometimes', 'boolean'],
+            'notify_receipt_sms' => ['sometimes', 'boolean'],
+            'notify_expiry_sms' => ['sometimes', 'boolean'],
+            'notify_expiry_sms_reminder' => ['sometimes', 'boolean'],
+        ]);
+
+        foreach ([
+            'notify_voucher_sms',
+            'notify_credentials_sms',
+            'notify_receipt_sms',
+            'notify_expiry_sms',
+            'notify_expiry_sms_reminder',
+        ] as $setting) {
+            $validated[$setting] = $request->boolean($setting);
+        }
+
+        $tenant->update([
+            'settings' => array_merge($tenant->settings, $validated),
+        ]);
+
+        return redirect()->route('operator.settings.index', [
+            'tenant' => $tenant->slug,
+            'tab' => 'notifications',
+        ])->with('status', 'Notification settings updated successfully.');
+    }
+
+    public function updateSecurity(Request $request, TenantContext $context)
+    {
+        $tenant = $context->getTenant();
+
+        abort_unless($tenant, 404, 'Tenant not found');
+
+        $validated = $request->validate([
+            'enable_2fa' => ['sometimes', 'boolean'],
+            'require_2fa' => ['sometimes', 'boolean'],
+        ]);
+
+        $requireTwoFactor = $request->boolean('require_2fa');
+        $enableTwoFactor = $request->boolean('enable_2fa') || $requireTwoFactor;
+
+        $tenant->update([
+            'settings' => array_merge($tenant->settings, [
+                'enable_2fa' => $enableTwoFactor,
+                'require_2fa' => $requireTwoFactor,
+            ]),
+        ]);
+
+        return redirect()->route('operator.settings.index', [
+            'tenant' => $tenant->slug,
+            'tab' => 'security',
+        ])->with('status', 'Security settings updated successfully.');
     }
 }

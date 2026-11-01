@@ -135,6 +135,143 @@ class TenantSettingsTest extends TestCase
         $this->assertTrue($settings['extend_gateway_fee']);
     }
 
+    public function test_operator_can_configure_communication_and_notification_settings(): void
+    {
+        Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $tenant = Tenant::create([
+            'name' => 'Acme Wi-Fi',
+            'slug' => 'acme',
+            'settings' => [
+                'portal_title' => 'Acme Guest Wi-Fi',
+                'sms_api_key' => 'sms-secret-value',
+                'whatsapp_api_key' => 'whatsapp-secret-value',
+                'whatsapp_webhook_secret' => 'webhook-secret-value',
+            ],
+        ]);
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole('operator_admin');
+
+        $this->actingAs($operator)
+            ->get('http://acme.localhost/operator/settings?tab=sms')
+            ->assertOk()
+            ->assertSee('SMS Gateway Configuration')
+            ->assertSee('aria-current="page"', false)
+            ->assertDontSee('sms-secret-value');
+
+        $this->actingAs($operator)
+            ->get('http://acme.localhost/operator/settings?tab=whatsapp')
+            ->assertOk()
+            ->assertSee('WhatsApp Configuration')
+            ->assertDontSee('whatsapp-secret-value')
+            ->assertDontSee('webhook-secret-value');
+
+        $this->actingAs($operator)
+            ->get('http://acme.localhost/operator/settings?tab=notifications')
+            ->assertOk()
+            ->assertSee('Expiry Reminder Notifications')
+            ->assertSee('name="notify_expiry_sms_reminder"', false);
+
+        $this->actingAs($operator)
+            ->put('http://acme.localhost/operator/settings/sms', [
+                'sms_enabled' => '1',
+                'sms_gateway' => 'africastalking',
+                'sms_sender_id' => 'ACME',
+                'sms_api_key' => '',
+            ])
+            ->assertRedirect(route('operator.settings.index', [
+                'tenant' => $tenant->slug,
+                'tab' => 'sms',
+            ]));
+
+        $this->actingAs($operator)
+            ->put('http://acme.localhost/operator/settings/whatsapp', [
+                'whatsapp_enabled' => '1',
+                'whatsapp_chatbot_enabled' => '1',
+                'whatsapp_gateway' => 'soprasend',
+                'whatsapp_device_id' => 'device-123',
+                'whatsapp_api_key' => '',
+                'whatsapp_webhook_secret' => '',
+            ])
+            ->assertRedirect(route('operator.settings.index', [
+                'tenant' => $tenant->slug,
+                'tab' => 'whatsapp',
+            ]));
+
+        $this->actingAs($operator)
+            ->put('http://acme.localhost/operator/settings/notifications', [
+                'notify_expiry_reminder_mins' => 60,
+                'template_voucher' => 'Voucher: @password',
+                'template_expiry' => 'Expired: @package_name',
+                'template_expiry_reminder' => 'Expires in @hours_left',
+                'notify_voucher_sms' => '1',
+                'notify_receipt_sms' => '1',
+            ])
+            ->assertRedirect(route('operator.settings.index', [
+                'tenant' => $tenant->slug,
+                'tab' => 'notifications',
+            ]));
+
+        $settings = $tenant->fresh()->settings;
+        $this->assertSame('Acme Guest Wi-Fi', $settings['portal_title']);
+        $this->assertSame('africastalking', $settings['sms_gateway']);
+        $this->assertTrue($settings['sms_enabled']);
+        $this->assertSame('ACME', $settings['sms_sender_id']);
+        $this->assertSame('sms-secret-value', $settings['sms_api_key']);
+        $this->assertTrue($settings['whatsapp_enabled']);
+        $this->assertTrue($settings['whatsapp_chatbot_enabled']);
+        $this->assertSame('device-123', $settings['whatsapp_device_id']);
+        $this->assertSame('whatsapp-secret-value', $settings['whatsapp_api_key']);
+        $this->assertSame('webhook-secret-value', $settings['whatsapp_webhook_secret']);
+        $this->assertTrue($settings['notify_voucher_sms']);
+        $this->assertFalse($settings['notify_credentials_sms']);
+        $this->assertTrue($settings['notify_receipt_sms']);
+        $this->assertFalse($settings['notify_expiry_sms']);
+        $this->assertFalse($settings['notify_expiry_sms_reminder']);
+        $this->assertSame(60, $settings['notify_expiry_reminder_mins']);
+        $this->assertSame('Voucher: @password', $settings['template_voucher']);
+    }
+
+    public function test_operator_can_configure_workspace_two_factor_enforcement(): void
+    {
+        Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $tenant = Tenant::create([
+            'name' => 'Acme Wi-Fi',
+            'slug' => 'acme',
+            'settings' => ['portal_title' => 'Acme Guest Wi-Fi'],
+        ]);
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole('operator_admin');
+
+        $this->actingAs($operator)
+            ->get('http://acme.localhost/operator/settings?tab=security')
+            ->assertOk()
+            ->assertSee('Two-Factor Authentication')
+            ->assertSee('Require two-factor authentication for all workspace users')
+            ->assertSee('aria-current="page"', false)
+            ->assertSee(route('profile.security.index'));
+
+        $this->actingAs($operator)
+            ->put('http://acme.localhost/operator/settings/security', [
+                'enable_2fa' => '0',
+                'require_2fa' => '1',
+            ])
+            ->assertRedirect(route('operator.settings.index', [
+                'tenant' => $tenant->slug,
+                'tab' => 'security',
+            ]));
+
+        $settings = $tenant->fresh()->settings;
+        $this->assertTrue($settings['enable_2fa']);
+        $this->assertTrue($settings['require_2fa']);
+        $this->assertSame('Acme Guest Wi-Fi', $settings['portal_title']);
+
+        $this->actingAs($operator)
+            ->get('http://acme.localhost/operator/settings?tab=security')
+            ->assertRedirect('http://acme.localhost/profile/security');
+    }
+
     public function test_captive_portal_displays_the_saved_tenant_logo(): void
     {
         Storage::fake('public');

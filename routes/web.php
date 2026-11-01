@@ -63,6 +63,10 @@ Route::domain('{tenant}.localhost')
                 Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');
                 Route::put('/settings/general', [\App\Http\Controllers\Operator\SettingsController::class, 'updateGeneral'])->name('settings.general.update');
                 Route::put('/settings/hotspot', [\App\Http\Controllers\Operator\SettingsController::class, 'updateHotspot'])->name('settings.hotspot.update');
+                Route::put('/settings/sms', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSms'])->name('settings.sms.update');
+                Route::put('/settings/whatsapp', [\App\Http\Controllers\Operator\SettingsController::class, 'updateWhatsapp'])->name('settings.whatsapp.update');
+                Route::put('/settings/notifications', [\App\Http\Controllers\Operator\SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
+                Route::put('/settings/security', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSecurity'])->name('settings.security.update');
 
                 // Captive Portal Settings
                 Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');
@@ -97,6 +101,13 @@ Route::get('/dashboard', function () {
 // ─── Authentication Routes (Breeze) ────────────────────────
 // These are accessible on all domains.
 Route::middleware('auth')->group(function () {
+    Route::get('/profile/security', [\App\Http\Controllers\Profile\SecurityController::class, 'index'])->name('profile.security.index');
+    Route::post('/profile/security/enable', [\App\Http\Controllers\Profile\SecurityController::class, 'enable'])
+        ->middleware('throttle:6,1')
+        ->name('profile.security.enable');
+    Route::post('/profile/security/confirm', [\App\Http\Controllers\Profile\SecurityController::class, 'confirm'])
+        ->middleware('throttle:6,1')
+        ->name('profile.security.confirm');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

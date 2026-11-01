@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\RequireTwoFactor;
 use App\Http\Middleware\SetTenantContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register the tenant context middleware globally for web routes
         $middleware->web(append: [
             SetTenantContext::class,
+            RequireTwoFactor::class,
         ]);
 
         // Register the role alias

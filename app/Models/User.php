@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -10,7 +11,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasRoles, BelongsToTenant;
+    use BelongsToTenant, HasFactory, HasRoles, Notifiable;
 
     protected $fillable = [
         'tenant_id',
@@ -38,5 +39,12 @@ class User extends Authenticatable
     public function isPlatformAdmin(): bool
     {
         return $this->hasRole('platform_admin');
+    }
+
+    public function hasEnabledTwoFactorAuthentication(): bool
+    {
+        return MFA::isEnabled($this, 'totp')
+            || MFA::isEnabled($this, 'email')
+            || MFA::isEnabled($this, 'sms');
     }
 }

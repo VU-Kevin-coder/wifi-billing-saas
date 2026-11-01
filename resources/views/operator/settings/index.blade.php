@@ -22,9 +22,10 @@
                     <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'hotspot']) }}" @if ($activeTab === 'hotspot') aria-current="page" @endif class="{{ $activeTab === 'hotspot' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Hotspot</a>
                     <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'portal']) }}" @if ($activeTab === 'portal') aria-current="page" @endif class="{{ $activeTab === 'portal' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Captive Portal</a>
                     <a href="#domain" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Domain</a>
-                    <a href="#sms" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">SMS</a>
-                    <a href="#whatsapp" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">WhatsApp</a>
-                    <a href="#security" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Security</a>
+                    <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'sms']) }}" @if ($activeTab === 'sms') aria-current="page" @endif class="{{ $activeTab === 'sms' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">SMS</a>
+                    <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'whatsapp']) }}" @if ($activeTab === 'whatsapp') aria-current="page" @endif class="{{ $activeTab === 'whatsapp' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">WhatsApp</a>
+                    <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'notifications']) }}" @if ($activeTab === 'notifications') aria-current="page" @endif class="{{ $activeTab === 'notifications' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Notifications</a>
+                    <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'security']) }}" @if ($activeTab === 'security') aria-current="page" @endif class="{{ $activeTab === 'security' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Security</a>
                 </nav>
             </div>
 
@@ -48,6 +49,14 @@
                 @include('operator.settings.portal')
             @elseif ($activeTab === 'hotspot')
                 @include('operator.settings.hotspot')
+            @elseif ($activeTab === 'sms')
+                @include('operator.settings.sms')
+            @elseif ($activeTab === 'whatsapp')
+                @include('operator.settings.whatsapp')
+            @elseif ($activeTab === 'notifications')
+                @include('operator.settings.notifications')
+            @elseif ($activeTab === 'security')
+                @include('operator.settings.security')
             @else
             <form method="POST" action="{{ route('operator.settings.general.update', ['tenant' => $tenant->slug]) }}" enctype="multipart/form-data" @change="hasChanges = true">
                 @csrf

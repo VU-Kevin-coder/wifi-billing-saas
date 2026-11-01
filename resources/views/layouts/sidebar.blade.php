@@ -61,6 +61,7 @@
             </div>
         </div>
 
+        @if ($currentTenant)
         <!-- Navigation Menu -->
         <nav class="px-3 py-2 space-y-6">
             
@@ -213,6 +214,7 @@
             </div>
 
         </nav>
+        @endif
     </div>
 
     <!-- Bottom Sidebar Section -->
