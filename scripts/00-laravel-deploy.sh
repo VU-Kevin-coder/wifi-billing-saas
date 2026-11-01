@@ -16,7 +16,7 @@ mkdir -p \
     bootstrap/cache
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
-chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+chmod -R 777 storage bootstrap/cache 2>/dev/null || true
 
 # ── 2. Wait for the database ──────────────────────────────────────────────────
 if [ -n "${DB_HOST:-}" ]; then

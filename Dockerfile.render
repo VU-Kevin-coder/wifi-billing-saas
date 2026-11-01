@@ -69,9 +69,10 @@ RUN composer dump-autoload --optimize --no-interaction \
         storage/logs \
         bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache
+    && chmod -R 777 storage bootstrap/cache
 
-# ─── Nginx config ────────────────────────────────────────────────────────────
+# ─── PHP-FPM & Nginx config ─────────────────────────────────────────────────
+COPY docker/php/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/nginx/render.conf /etc/nginx/http.d/default.conf
 
 # ─── Supervisor config ───────────────────────────────────────────────────────
