@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 
 // ─── Public / Landing Page ──────────────────────────────────
 Route::get('/', function () {
-    return view('welcome');
+    return view('landing');
 });
 
 // ─── Platform Administration (Main Domain) ─────────────────

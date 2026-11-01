@@ -1,60 +1,96 @@
-<x-guest-layout>
-    <form method="POST" action="{{ route('register') }}">
+<x-layouts.auth
+    title="Set up your Wi-Fi business."
+    subtitle="Join ISPs managing their networks, selling vouchers, and tracking revenue with Hamnet."
+>
+    <div class="mb-7">
+        <h1 class="text-2xl font-bold text-gray-900">Create your account</h1>
+        <p class="text-gray-500 text-sm mt-1">Start free — no credit card required.</p>
+    </div>
+
+    <form method="POST" action="{{ route('register') }}" class="space-y-4">
         @csrf
 
-        <!-- Business Name -->
+        {{-- ── Business Name ──────────────────────────────────────────────── --}}
         <div>
-            <x-input-label for="business_name" :value="__('Business Name')" />
-            <x-text-input id="business_name" class="block mt-1 w-full" type="text" name="business_name" :value="old('business_name')" required autofocus />
-            <x-input-error :messages="$errors->get('business_name')" class="mt-2" />
+            <label for="business_name" class="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
+            <input id="business_name" type="text" name="business_name" value="{{ old('business_name') }}"
+                required autofocus placeholder="e.g. Kampala Connect"
+                class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('business_name') border-red-400 bg-red-50 @enderror">
+            @error('business_name')
+                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+            @enderror
         </div>
 
-        <!-- Subdomain -->
-        <div class="mt-4">
-            <x-input-label for="subdomain" :value="__('Subdomain (e.g., acme)')" />
-            <div class="flex items-center mt-1">
-                <x-text-input id="subdomain" class="block w-full" type="text" name="subdomain" :value="old('subdomain')" required />
-                <span class="ml-2 text-gray-500 font-medium">.localhost:8000</span>
+        {{-- ── Subdomain ──────────────────────────────────────────────────── --}}
+        <div>
+            <label for="subdomain" class="block text-sm font-medium text-gray-700 mb-1">Portal Subdomain</label>
+            <div class="flex rounded-xl shadow-sm overflow-hidden border border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition @error('subdomain') border-red-400 bg-red-50 @enderror">
+                <input id="subdomain" type="text" name="subdomain" value="{{ old('subdomain') }}"
+                    required placeholder="acme"
+                    class="flex-1 min-w-0 block w-full border-0 text-sm py-2.5 px-3 outline-none bg-transparent">
+                <span class="inline-flex items-center px-3 bg-gray-50 text-gray-400 text-sm border-l border-gray-300 whitespace-nowrap">
+                    .hamnet.com
+                </span>
             </div>
-            <x-input-error :messages="$errors->get('subdomain')" class="mt-2" />
+            @error('subdomain')
+                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+            @enderror
         </div>
 
-        <!-- Name -->
-        <div class="mt-4">
-            <x-input-label for="name" :value="__('Your Name')" />
-            <x-text-input id="name" class="block mt-1 w-full" type="text" name="name" :value="old('name')" required />
-            <x-input-error :messages="$errors->get('name')" class="mt-2" />
+        {{-- ── Full Name ──────────────────────────────────────────────────── --}}
+        <div>
+            <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Your Full Name</label>
+            <input id="name" type="text" name="name" value="{{ old('name') }}"
+                required
+                class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('name') border-red-400 bg-red-50 @enderror">
+            @error('name')
+                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+            @enderror
         </div>
 
-        <!-- Email Address -->
-        <div class="mt-4">
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+        {{-- ── Email ──────────────────────────────────────────────────────── --}}
+        <div>
+            <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+            <input id="email" type="email" name="email" value="{{ old('email') }}"
+                required autocomplete="email"
+                class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('email') border-red-400 bg-red-50 @enderror">
+            @error('email')
+                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+            @enderror
         </div>
 
-        <!-- Password -->
-        <div class="mt-4">
-            <x-input-label for="password" :value="__('Password')" />
-            <x-text-input id="password" class="block mt-1 w-full" type="password" name="password" required autocomplete="new-password" />
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
+        {{-- ── Password ───────────────────────────────────────────────────── --}}
+        <div>
+            <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input id="password" type="password" name="password"
+                required autocomplete="new-password"
+                class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('password') border-red-400 bg-red-50 @enderror">
+            @error('password')
+                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+            @enderror
         </div>
 
-        <!-- Confirm Password -->
-        <div class="mt-4">
-            <x-input-label for="password_confirmation" :value="__('Confirm Password')" />
-            <x-text-input id="password_confirmation" class="block mt-1 w-full" type="password" name="password_confirmation" required />
-            <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
+        {{-- ── Confirm Password ───────────────────────────────────────────── --}}
+        <div>
+            <label for="password_confirmation" class="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+            <input id="password_confirmation" type="password" name="password_confirmation"
+                required autocomplete="new-password"
+                class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition">
         </div>
 
-        <div class="flex items-center justify-end mt-4">
-            <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('login') }}">
-                {{ __('Already registered?') }}
-            </a>
-
-            <x-primary-button class="ms-4">
-                {{ __('Register') }}
-            </x-primary-button>
-        </div>
+        {{-- ── Submit ─────────────────────────────────────────────────────── --}}
+        <button type="submit"
+            class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold shadow-sm shadow-blue-200 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-2">
+            Get Started Free
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+            </svg>
+        </button>
     </form>
-</x-guest-layout>
+
+    <!-- Sign in link -->
+    <p class="text-center text-sm text-gray-500 mt-6">
+        Already have an account?
+        <a href="{{ route('login') }}" class="font-semibold text-blue-600 hover:text-blue-500">Sign in</a>
+    </p>
+</x-layouts.auth>

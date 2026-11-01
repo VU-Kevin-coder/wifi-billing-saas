@@ -1,0 +1,59 @@
+# render.yaml — Hamnet Wi-Fi Billing System
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Push this file to the repo root; Render will detect it automatically.
+services:
+  - type: web
+    name: hamnet-app
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    plan: free
+    # Render injects PORT; our Nginx listens on 8080
+    healthCheckPath: /
+    envVars:
+      - key: APP_NAME
+        value: "Hamnet Wi-Fi Billing System"
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        generateValue: true       # Render auto-generates a secure key
+      - key: APP_URL
+        value: https://hamnet-app.onrender.com  # update after first deploy
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        fromDatabase:
+          name: hamnet-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: hamnet-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: hamnet-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: hamnet-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: hamnet-db
+          property: password
+      - key: CACHE_STORE
+        value: file
+      - key: SESSION_DRIVER
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: LOG_CHANNEL
+        value: stderr
+
+databases:
+  - name: hamnet-db
+    plan: free          # Render free PostgreSQL (use DB_CONNECTION=pgsql above if switching)
+    databaseName: hamnet
+    user: hamnet
+

@@ -1,0 +1,75 @@
+# syntax=docker/dockerfile:1.7
+# ─────────────────────────────────────────────────────────────────────────────
+# Render-optimised Dockerfile for Hamnet Wi-Fi Billing System
+# Uses a single container that runs Nginx + PHP-FPM via supervisord.
+# Render provides the MySQL-compatible database (or use their PostgreSQL free tier).
+# ─────────────────────────────────────────────────────────────────────────────
+FROM php:8.3-fpm-alpine AS base
+
+# Install system packages + PHP extensions
+RUN apk add --no-cache \
+        bash \
+        git \
+        unzip \
+        curl \
+        nginx \
+        supervisor \
+        linux-headers \
+    && curl -sSLf https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions \
+       -o /usr/local/bin/install-php-extensions \
+    && chmod +x /usr/local/bin/install-php-extensions \
+    && install-php-extensions \
+        pdo_mysql \
+        pdo_pgsql \
+        pdo_sqlite \
+        mbstring \
+        bcmath \
+        gd \
+        zip \
+        intl \
+        opcache \
+        pcntl \
+        redis
+
+# Install Composer
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+
+# ─── App ────────────────────────────────────────────────────────────────────
+WORKDIR /var/www/html
+
+# Composer dependencies (cached layer)
+COPY composer.json composer.lock ./
+RUN composer install \
+    --no-scripts \
+    --no-autoloader \
+    --prefer-dist \
+    --no-interaction
+
+# Copy source
+COPY . .
+
+# Autoloader + storage dirs
+RUN composer dump-autoload --optimize --no-interaction \
+    && mkdir -p \
+        storage/framework/cache/data \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs \
+        bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+# ─── Nginx config ────────────────────────────────────────────────────────────
+COPY docker/nginx/render.conf /etc/nginx/http.d/default.conf
+
+# ─── Supervisor config ───────────────────────────────────────────────────────
+COPY docker/supervisor/supervisord.render.conf /etc/supervisor/conf.d/supervisord.conf
+
+# ─── Deploy script ───────────────────────────────────────────────────────────
+COPY scripts/00-laravel-deploy.sh /usr/local/bin/deploy.sh
+RUN chmod +x /usr/local/bin/deploy.sh
+
+EXPOSE 8080
+
+CMD ["/bin/sh", "-c", "/usr/local/bin/deploy.sh && supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
+
