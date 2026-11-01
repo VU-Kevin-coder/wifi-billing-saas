@@ -58,13 +58,20 @@ class RegisteredUserController extends Controller
         event(new Registered($user));
         Auth::login($user);
 
-        // Redirect to their new subdomain via signed SSO transfer
-        $redirectUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
-            'operator.sso.verify',
-            now()->addMinutes(2),
-            ['tenant' => $user->tenant->slug, 'user' => $user->id]
-        );
-        
-        return redirect()->to($redirectUrl);
+        $hasCustomDomain = config('app.tenant_domain') 
+            && ! str_contains(config('app.tenant_domain'), 'railway.app') 
+            && ! str_contains(config('app.tenant_domain'), 'localhost');
+
+        // Redirect to subdomain via SSO transfer if custom domain is active, otherwise direct
+        if ($hasCustomDomain) {
+            $redirectUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                'operator.sso.verify',
+                now()->addMinutes(2),
+                ['tenant' => $user->tenant->slug, 'user' => $user->id]
+            );
+            return redirect()->to($redirectUrl);
+        }
+
+        return redirect()->route('operator.dashboard');
     }
 }
