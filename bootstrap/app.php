@@ -14,6 +14,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Trust all proxies (required for Railway / reverse proxy HTTPS termination)
+        $middleware->trustProxies(at: '*');
+
         // Register the tenant context middleware globally for web routes
         $middleware->web(append: [
             SetTenantContext::class,
