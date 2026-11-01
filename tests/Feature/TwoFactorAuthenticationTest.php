@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -108,12 +109,81 @@ class TwoFactorAuthenticationTest extends TestCase
 
         $this->actingAs($user)
             ->get('http://acme.localhost/profile/security')
+            ->assertRedirect('http://acme.localhost/two-factor-challenge');
+
+        $this->actingAs($user)
+            ->withSession(['mfa' => ['verified' => true]])
+            ->get('http://acme.localhost/profile/security')
             ->assertOk()
             ->assertSee('Two-Factor Authentication is enabled.');
 
         $this->actingAs($user)
+            ->withSession(['mfa' => ['verified' => true]])
             ->get('http://acme.localhost/operator/settings')
             ->assertOk();
+    }
+
+    public function test_login_requires_and_verifies_totp_before_entering_workspace(): void
+    {
+        Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $tenant = Tenant::create(['name' => 'Acme Wi-Fi', 'slug' => 'acme']);
+        $user = User::factory()->create(['tenant_id' => $tenant->id]);
+        $user->assignRole('operator_admin');
+        MFA::enableMethod($user, 'totp', ['secret' => 'JBSWY3DPEHPK3PXP']);
+
+        $this->post('http://acme.localhost/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ])
+            ->assertRedirect('http://acme.localhost/two-factor-challenge');
+
+        $this->assertAuthenticatedAs($user);
+
+        $this->get('http://acme.localhost/operator/dashboard')
+            ->assertRedirect('http://acme.localhost/two-factor-challenge');
+
+        $this->get('http://acme.localhost/two-factor-challenge')
+            ->assertOk()
+            ->assertSee('authenticator app');
+
+        $this->post('http://acme.localhost/two-factor-challenge', ['code' => '000000'])
+            ->assertRedirect()
+            ->assertSessionHasErrors('code');
+
+        $validCode = $this->currentTotpCode('JBSWY3DPEHPK3PXP');
+        $this->post('http://acme.localhost/two-factor-challenge', ['code' => $validCode])
+            ->assertRedirect('http://acme.localhost/operator/dashboard');
+
+        $this->get('http://acme.localhost/operator/dashboard')->assertOk();
+    }
+
+    public function test_mfa_is_preserved_through_signed_tenant_sso_transfer(): void
+    {
+        Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $tenant = Tenant::create(['name' => 'Acme Wi-Fi', 'slug' => 'acme']);
+        $user = User::factory()->create(['tenant_id' => $tenant->id]);
+        $user->assignRole('operator_admin');
+        MFA::enableMethod($user, 'totp', ['secret' => 'JBSWY3DPEHPK3PXP']);
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect('/two-factor-challenge');
+
+        $verification = $this->post('/two-factor-challenge', [
+            'code' => $this->currentTotpCode('JBSWY3DPEHPK3PXP'),
+        ]);
+        $verification->assertRedirect();
+        $ssoUrl = $verification->headers->get('Location');
+        $this->assertStringContainsString('mfa_verified=1', $ssoUrl);
+        $this->assertTrue(URL::hasValidSignature(request()->create($ssoUrl)));
+
+        $this->get($ssoUrl)
+            ->assertRedirect('http://acme.localhost:8000/operator/dashboard');
+
+        $this->get('http://acme.localhost:8000/operator/dashboard')->assertOk();
     }
 
     public function test_enforcement_does_not_break_unauthenticated_login_or_unrequired_tenants(): void

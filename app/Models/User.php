@@ -17,6 +17,7 @@ class User extends Authenticatable
         'tenant_id',
         'name',
         'email',
+        'phone',
         'password',
     ];
 
@@ -43,8 +44,6 @@ class User extends Authenticatable
 
     public function hasEnabledTwoFactorAuthentication(): bool
     {
-        return MFA::isEnabled($this, 'totp')
-            || MFA::isEnabled($this, 'email')
-            || MFA::isEnabled($this, 'sms');
+        return MFA::isEnabled($this, 'totp');
     }
 }

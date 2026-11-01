@@ -58,6 +58,9 @@ Route::domain('{tenant}.localhost')
                 // Live Sessions
                 Route::get('/sessions', [\App\Http\Controllers\Operator\LiveSessionController::class, 'index'])->name('sessions.index');
                 Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
+                Route::get('/billing', [\App\Http\Controllers\Operator\BillingController::class, 'index'])
+                    ->middleware('role:operator_admin|operator_finance')
+                    ->name('billing.index');
 
                 // General Settings
                 Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');
@@ -81,6 +84,7 @@ Route::domain('{tenant}.localhost')
 
                 // Staff Management is strictly for operator_admin
                 Route::middleware('role:operator_admin')->group(function () {
+                    Route::get('/team', [\App\Http\Controllers\Operator\TeamController::class, 'index'])->name('team.index');
                     Route::resource('staff', StaffController::class)->only(['index', 'create', 'store']);
                 });
             });

@@ -14,12 +14,21 @@ class RequireTwoFactor
         $user = $request->user();
         $tenant = app(TenantContext::class)->getTenant();
 
-        if (! $user || ! $tenant || ! ($tenant->settings['require_2fa'] ?? false)) {
+        if (! $user) {
             return $next($request);
         }
 
-        if (! $user->hasEnabledTwoFactorAuthentication()
-            && ! $request->routeIs('profile.security.*', 'logout')) {
+        if ($user->hasEnabledTwoFactorAuthentication()) {
+            if ($request->session()->get('mfa.verified') === true
+                || $request->routeIs('two-factor.challenge', 'two-factor.verify', 'logout')) {
+                return $next($request);
+            }
+
+            return redirect()->route('two-factor.challenge');
+        }
+
+        if ($tenant && ($tenant->settings['require_2fa'] ?? false)
+            && ! $request->routeIs('profile.security.*', 'two-factor.challenge', 'two-factor.verify', 'logout')) {
             return redirect()->route('profile.security.index')
                 ->with('error', 'Your organization requires Two-Factor Authentication. Please set it up to continue.');
         }

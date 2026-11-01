@@ -31,7 +31,11 @@ class StaffController extends Controller
             abort(403, 'Only an Administrator can add staff.');
         }
 
-        return view('operator.staff.create');
+        $allowedRoles = ['operator_admin', 'operator_finance', 'operator_support', 'operator_network'];
+        $selectedRole = request()->query('role');
+        $selectedRole = in_array($selectedRole, $allowedRoles, true) ? $selectedRole : '';
+
+        return view('operator.staff.create', compact('selectedRole'));
     }
 
     public function store(Request $request, TenantContext $context)
@@ -50,6 +54,7 @@ class StaffController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
+            'phone' => ['nullable', 'string', 'max:30'],
             'role' => ['required', 'in:operator_admin,operator_finance,operator_support,operator_network'],
         ]);
 
@@ -57,13 +62,14 @@ class StaffController extends Controller
             'tenant_id' => $tenant->id,
             'name' => $validated['name'],
             'email' => $validated['email'],
+            'phone' => $validated['phone'] ?? null,
             'password' => Hash::make('password'), // Default password for demo
             'email_verified_at' => now(),
         ]);
 
         $user->assignRole($validated['role']);
 
-        return redirect()->route('operator.staff.index')
+        return redirect()->route('operator.team.index')
             ->with('status', 'Staff member added successfully. Default password is "password".');
     }
 }

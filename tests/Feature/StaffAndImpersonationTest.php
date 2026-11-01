@@ -67,14 +67,16 @@ class StaffAndImpersonationTest extends TestCase
             ->post(route('operator.staff.store'), [
                 'name' => 'Support Tech',
                 'email' => 'tech@acme.test',
+                'phone' => '+256700123456',
                 'role' => 'operator_support',
             ]);
 
-        $response->assertRedirect(route('operator.staff.index'));
+        $response->assertRedirect(route('operator.team.index'));
         $this->assertDatabaseHas('users', [
             'tenant_id' => $this->acme->id,
             'name' => 'Support Tech',
             'email' => 'tech@acme.test',
+            'phone' => '+256700123456',
         ]);
 
         $created = User::where('email', 'tech@acme.test')->first();

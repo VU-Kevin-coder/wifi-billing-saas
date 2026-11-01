@@ -34,6 +34,20 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
 
+        if ($user->hasEnabledTwoFactorAuthentication()) {
+            $request->session()->put('mfa.verified', false);
+
+            return redirect()->route('two-factor.challenge');
+        }
+
+        return $this->redirectAfterLogin($request, $user);
+    }
+
+    /**
+     * Finish authentication after the password and, when enabled, MFA checks.
+     */
+    public function redirectAfterLogin(Request $request, User $user, bool $mfaVerified = false): RedirectResponse
+    {
         // 1. If user is a platform admin, send to platform dashboard
         if ($user->hasRole('platform_admin')) {
             return redirect()->intended(route('platform.dashboard', absolute: false));
@@ -51,11 +65,12 @@ class AuthenticatedSessionController extends Controller
             }
 
             // If logged in from main domain (or another domain), transfer authentication via signed SSO
-            $redirectUrl = URL::temporarySignedRoute(
-                'operator.sso.verify',
-                now()->addMinutes(2),
-                ['tenant' => $tenantSlug, 'user' => $user->id]
-            );
+            $parameters = ['tenant' => $tenantSlug, 'user' => $user->id];
+            if ($mfaVerified) {
+                $parameters['mfa_verified'] = 1;
+            }
+
+            $redirectUrl = URL::temporarySignedRoute('operator.sso.verify', now()->addMinutes(2), $parameters);
 
             return redirect()->to($redirectUrl);
         }
@@ -87,6 +102,8 @@ class AuthenticatedSessionController extends Controller
             abort(403, 'You do not belong to this workspace.');
         }
 
+        $mfaVerified = $request->boolean('mfa_verified') && $user->hasEnabledTwoFactorAuthentication();
+
         // If impersonation was requested by platform admin
         if ($request->query('impersonate') && $user->hasRole('platform_admin')) {
             session(['impersonate_tenant' => $tenant->id]);
@@ -94,6 +111,11 @@ class AuthenticatedSessionController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        $request->session()->put('mfa.verified', $mfaVerified);
+
+        if ($user->hasEnabledTwoFactorAuthentication() && ! $mfaVerified) {
+            return redirect()->route('two-factor.challenge');
+        }
 
         return redirect()->route('operator.dashboard');
     }

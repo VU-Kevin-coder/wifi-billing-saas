@@ -23,20 +23,26 @@
                         @error('email') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                     </div>
 
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">Phone</label>
+                        <input type="tel" name="phone" value="{{ old('phone') }}" maxlength="30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        @error('phone') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                    </div>
+
                     <div class="mb-6">
                         <label class="block text-sm font-medium text-gray-700">Role</label>
                         <select name="role" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                             <option value="">Select a role...</option>
-                            <option value="operator_admin">Administrator (Full Access)</option>
-                            <option value="operator_finance">Finance & Sales</option>
-                            <option value="operator_support">Customer Support</option>
-                            <option value="operator_network">Network Technician</option>
+                            <option value="operator_admin" @selected(old('role', $selectedRole) === 'operator_admin')>Administrator (Full Access)</option>
+                            <option value="operator_finance" @selected(old('role', $selectedRole) === 'operator_finance')>Finance & Sales</option>
+                            <option value="operator_support" @selected(old('role', $selectedRole) === 'operator_support')>Customer Support</option>
+                            <option value="operator_network" @selected(old('role', $selectedRole) === 'operator_network')>Network Technician</option>
                         </select>
                         @error('role') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                     </div>
 
                     <div class="flex justify-end">
-                        <a href="{{ route('operator.staff.index') }}" class="mr-4 text-gray-600 hover:text-gray-900">Cancel</a>
+                        <a href="{{ route('operator.team.index') }}" class="mr-4 text-gray-600 hover:text-gray-900">Cancel</a>
                         <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">
                             Create Staff
                         </button>
