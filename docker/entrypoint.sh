@@ -46,6 +46,9 @@ mkdir -p storage/framework/cache/data \
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
+# Ensure public storage link exists
+php artisan storage:link || true
+
 # ─────────────────────────────────────────────────────────────
 # Warm Laravel caches (config, routes, views, events)
 # This makes every request faster by pre-compiling everything.

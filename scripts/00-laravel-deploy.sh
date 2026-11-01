@@ -70,7 +70,11 @@ php artisan migrate --force --no-interaction
 echo ">>> Seeding roles..."
 php artisan db:seed --class=RoleSeeder --force --no-interaction
 
-# ── 6. Warm Laravel caches ────────────────────────────────────────────────────
+# ── 6. Storage link
+echo ">>> Linking storage..."
+php artisan storage:link || true
+
+# ── 7. Warm Laravel caches ────────────────────────────────────────────────────
 echo ">>> Warming caches..."
 php artisan config:cache  --quiet || true
 php artisan route:cache   --quiet || true
