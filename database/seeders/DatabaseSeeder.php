@@ -10,7 +10,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             RoleSeeder::class,
-            DemoDataSeeder::class,
+            // DemoDataSeeder::class, // ❌ DO NOT run in production — test data only
         ]);
     }
 }

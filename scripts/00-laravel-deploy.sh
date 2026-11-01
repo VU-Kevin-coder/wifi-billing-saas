@@ -66,9 +66,9 @@ fi
 echo ">>> Running migrations..."
 php artisan migrate --force --no-interaction
 
-# ── 5. Seed platform admin (only on first boot — idempotent guard inside seeder)
-# Uncomment once you have a DatabaseSeeder guard in place:
-# php artisan db:seed --class=PlatformAdminSeeder --force --no-interaction
+# ── 5. Seed roles (idempotent — safe to run every boot)
+echo ">>> Seeding roles..."
+php artisan db:seed --class=RoleSeeder --force --no-interaction
 
 # ── 6. Warm Laravel caches ────────────────────────────────────────────────────
 echo ">>> Warming caches..."
