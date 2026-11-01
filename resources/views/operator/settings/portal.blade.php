@@ -1,21 +1,4 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <h2 class="font-bold text-xl text-gray-900 leading-tight">
-                Settings
-            </h2>
-            <a href="{{ route('portal.index', ['tenant' => $tenant->slug]) }}" 
-               target="_blank" 
-               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm transition-colors">
-                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                </svg>
-                View Live Portal
-            </a>
-        </div>
-    </x-slot>
-
-    <div class="py-8" x-data="{ 
+<div x-data="{
         primaryColor: '{{ $settings['primary_color'] ?? '#d91c5c' }}',
         secondaryColor: '{{ $settings['secondary_color'] ?? '#ffffff' }}',
         template: '{{ $settings['template'] ?? 'rose' }}',
@@ -25,7 +8,6 @@
         showDeviceReg: {{ ($settings['show_device_registration'] ?? true) ? 'true' : 'false' }},
         showTrouble: {{ ($settings['show_troubleshooting'] ?? true) ? 'true' : 'false' }},
         supportPhone: '{{ $settings['support_phone'] ?? '+256 791346328' }}',
-
         templates: [
             { id: 'rose', name: 'Rose', color: '#d91c5c', desc: 'Warm crimson & soft rose glow' },
             { id: 'ocean', name: 'Ocean Blue', color: '#0284c7', desc: 'Vibrant azure & clean cyan' },
@@ -44,31 +26,6 @@
     }">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             
-            <!-- Navigation Tabs -->
-            <div class="border-b border-gray-200 mb-8 bg-white px-6 rounded-xl shadow-sm">
-                <nav class="-mb-px flex space-x-8">
-                    <a href="{{ route('operator.settings.router') }}" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2">
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
-                        </svg>
-                        MikroTik Router
-                    </a>
-                    <a href="{{ route('operator.settings.portal') }}" class="border-blue-600 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-sm flex items-center gap-2">
-                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                        Captive Portal
-                    </a>
-                </nav>
-            </div>
-
-            @if(session('status'))
-                <div class="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between shadow-sm">
-                    <div class="flex items-center gap-2">
-                        <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                        <span class="text-sm font-semibold">{{ session('status') }}</span>
-                    </div>
-                </div>
-            @endif
-
             <div class="flex flex-col lg:flex-row gap-8 items-start">
                 
                 <!-- Left Column: The Form -->
@@ -344,4 +301,3 @@
 
         </div>
     </div>
-</x-app-layout>

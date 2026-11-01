@@ -10,7 +10,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
         :root {
-            --primary: {{ $tenant->portal_settings['primary_color'] ?? '#d91c5c' }};
+            --primary: {{ $tenant->settings['primary_color'] ?? '#3B82F6' }};
             --primary-dark: color-mix(in srgb, var(--primary), black 18%);
             --primary-light: color-mix(in srgb, var(--primary), white 88%);
             --primary-tint: color-mix(in srgb, var(--primary), white 95%);
@@ -48,13 +48,19 @@
             <div class="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/5 pointer-events-none"></div>
             <div class="absolute -bottom-10 -left-10 w-28 h-28 rounded-full bg-white/5 pointer-events-none"></div>
 
-            <div class="inline-flex items-center justify-center w-14 h-14 bg-white/20 rounded-full mb-3 backdrop-blur-sm shadow-inner">
-                <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
-                </svg>
-            </div>
-            <h1 class="text-2xl font-bold text-white tracking-tight">{{ strtolower($tenant->portal_settings['portal_title'] ?? $tenant->name) }}</h1>
-            <p class="text-white/80 text-xs font-medium mt-1">{{ $tenant->portal_settings['portal_subtitle'] ?? 'Connect to the internet' }}</p>
+            @if (!empty($tenant->settings['logo_path']))
+                <img src="{{ asset('storage/' . $tenant->settings['logo_path']) }}"
+                     alt="{{ $tenant->settings['brand_name'] }} logo"
+                     class="max-h-16 max-w-36 object-contain mx-auto mb-3 rounded bg-white/90 p-2">
+            @else
+                <div class="inline-flex items-center justify-center w-14 h-14 bg-white/20 rounded-full mb-3 backdrop-blur-sm shadow-inner">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                    </svg>
+                </div>
+            @endif
+            <h1 class="text-2xl font-bold text-white tracking-tight">{{ strtolower($tenant->settings['portal_title'] ?? $tenant->name) }}</h1>
+            <p class="text-white/80 text-xs font-medium mt-1">{{ $tenant->settings['portal_subtitle'] ?? 'Connect to the internet' }}</p>
         </div>
 
         <div class="p-5 sm:p-6 space-y-4">
@@ -102,7 +108,7 @@
                 </a>
             </div>
 
-            @if($tenant->portal_settings['show_packages'] ?? true)
+            @if($tenant->settings['show_packages'] ?? true)
             <!-- Divider -->
             <div class="relative flex items-center py-1">
                 <div class="flex-grow border-t border-primary-border/60"></div>
@@ -141,7 +147,7 @@
             </div>
             @endif
 
-            @if($tenant->portal_settings['show_device_registration'] ?? true)
+            @if($tenant->settings['show_device_registration'] ?? true)
             <!-- Smart TV / Console helper box -->
             <div class="bg-primary-light/50 border border-primary-border/70 rounded-2xl p-3 flex items-start gap-2.5">
                 <div class="mt-0.5 text-primary">
@@ -158,7 +164,7 @@
             </div>
             @endif
 
-            @if($tenant->portal_settings['show_troubleshooting'] ?? true)
+            @if($tenant->settings['show_troubleshooting'] ?? true)
             <!-- Connection Issues Collapsible -->
             <div class="bg-primary-light/50 border border-primary-border/70 rounded-2xl overflow-hidden">
                 <button type="button" 
@@ -186,7 +192,7 @@
 
             <!-- Support Info -->
             <div class="pt-2 text-center text-xs text-gray-600">
-                Need help? Call <span class="font-bold text-primary">{{ $tenant->portal_settings['support_phone'] ?? '+256 791346328' }}</span>
+                Need help? Call <span class="font-bold text-primary">{{ $tenant->settings['support_phone'] ?? '+256 791346328' }}</span>
             </div>
             
             <div class="text-center text-[11px] text-gray-400 pb-1">

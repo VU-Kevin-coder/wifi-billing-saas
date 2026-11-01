@@ -14,7 +14,7 @@ class Tenant extends Model
         'name',
         'slug',
         'status',
-        'portal_settings',
+        'settings',
         'mikrotik_host',
         'mikrotik_username',
         'mikrotik_password',
@@ -22,29 +22,42 @@ class Tenant extends Model
     ];
 
     protected $casts = [
-        'portal_settings' => 'array',
+        'settings' => 'array',
         'mikrotik_password' => 'encrypted',
         'mikrotik_port' => 'integer',
     ];
 
     /**
-     * Get portal settings with defaults if not set.
+     * Get tenant settings with defaults if not set.
      */
-    public function getPortalSettingsAttribute($value)
+    public function getSettingsAttribute($value): array
     {
         $defaults = [
-            'primary_color' => '#d91c5c', // The Rose color from your screenshot
+            'brand_name' => $this->name,
+            'logo_path' => null,
+            'primary_color' => '#3B82F6',
+            'support_phone' => '+256700000000',
+            'support_email' => '',
+            'whatsapp_number' => '',
+            'domain' => $this->slug . '.localhost:8000',
+            'show_packages' => true,
+            'voucher_prefix' => 'KL',
+            'voucher_length' => 8,
+            'voucher_format' => 'alphanumeric',
+            'enable_2fa' => false,
+            'require_2fa' => false,
+            'trust_device_days' => 30,
             'secondary_color' => '#ffffff',
             'template' => 'rose',
             'portal_title' => $this->name ?? 'Wi-Fi Hotspot',
             'portal_subtitle' => 'Connect to the internet',
-            'show_packages' => true,
             'show_device_registration' => true,
             'show_troubleshooting' => true,
-            'support_phone' => '+256 791346328',
         ];
 
-        return array_merge($defaults, json_decode($value ?? '', true) ?? []);
+        $storedSettings = is_array($value) ? $value : (json_decode($value ?? '', true) ?? []);
+
+        return array_merge($defaults, $storedSettings);
     }
 
     /**

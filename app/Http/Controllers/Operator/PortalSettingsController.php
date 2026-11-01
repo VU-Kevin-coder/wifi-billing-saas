@@ -13,15 +13,13 @@ class PortalSettingsController extends Controller
     {
         $tenantModel = $context->getTenant() ?? ($tenant ? Tenant::where('slug', $tenant)->first() : null);
 
-        if (!$tenantModel) {
+        if (! $tenantModel) {
             abort(404, 'Tenant not found');
         }
 
-        $settings = $tenantModel->portal_settings;
-
-        return view('operator.settings.portal', [
-            'tenant' => $tenantModel,
-            'settings' => $settings,
+        return redirect()->route('operator.settings.index', [
+            'tenant' => $tenantModel->slug,
+            'tab' => 'portal',
         ]);
     }
 
@@ -29,7 +27,7 @@ class PortalSettingsController extends Controller
     {
         $tenantModel = $context->getTenant() ?? ($tenant ? Tenant::where('slug', $tenant)->first() : null);
 
-        if (!$tenantModel) {
+        if (! $tenantModel) {
             abort(404, 'Tenant not found');
         }
 
@@ -50,12 +48,15 @@ class PortalSettingsController extends Controller
         $validated['show_troubleshooting'] = $request->boolean('show_troubleshooting', true);
 
         // Merge with existing settings so we don't overwrite unexpected keys
-        $currentSettings = $tenantModel->portal_settings;
+        $currentSettings = $tenantModel->settings;
         $newSettings = array_merge($currentSettings, $validated);
 
-        $tenantModel->update(['portal_settings' => $newSettings]);
+        $tenantModel->update(['settings' => $newSettings]);
 
-        return redirect()->route('operator.settings.portal', ['tenant' => $tenantModel->slug])
+        return redirect()->route('operator.settings.index', [
+            'tenant' => $tenantModel->slug,
+            'tab' => 'portal',
+        ])
             ->with('status', 'Captive portal settings updated successfully.');
     }
 }

@@ -12,7 +12,6 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html:delegated
-      - app-storage:/var/www/html/storage
     environment:
       # Override any .env values that must match Docker service names
       DB_CONNECTION: mysql
@@ -103,7 +102,6 @@ services:
 volumes:
   db-data:
   redis-data:
-  app-storage:
 
 # ─────────────────────────────────────────────────────────────
 # Network

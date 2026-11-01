@@ -9,7 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
-            --primary: {{ $tenant->portal_settings['primary_color'] ?? '#d91c5c' }};
+            --primary: {{ $tenant->settings['primary_color'] ?? '#3B82F6' }};
             --primary-dark: color-mix(in srgb, var(--primary), black 18%);
             --primary-light: color-mix(in srgb, var(--primary), white 88%);
         }

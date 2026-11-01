@@ -59,6 +59,10 @@ Route::domain('{tenant}.localhost')
                 Route::get('/sessions', [\App\Http\Controllers\Operator\LiveSessionController::class, 'index'])->name('sessions.index');
                 Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
 
+                // General Settings
+                Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');
+                Route::put('/settings/general', [\App\Http\Controllers\Operator\SettingsController::class, 'updateGeneral'])->name('settings.general.update');
+
                 // Captive Portal Settings
                 Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');
                 Route::put('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'update'])->name('settings.portal.update');
