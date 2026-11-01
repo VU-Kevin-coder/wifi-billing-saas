@@ -33,9 +33,11 @@ class VoucherController extends Controller
             ->latest()
             ->first();
 
+        $voucherSettings = $context->getTenant()->settings;
+
         return view('operator.vouchers.index', compact(
             'generatedThisMonth', 'unusedStock', 'redeemed', 'voided',
-            'vouchers', 'packages', 'latestBatch'
+            'vouchers', 'packages', 'latestBatch', 'voucherSettings'
         ));
     }
 
@@ -43,46 +45,72 @@ class VoucherController extends Controller
     {
         $validated = $request->validate([
             'package_id' => ['required', 'exists:packages,id'],
-            'quantity'   => ['required', 'integer', 'min:1', 'max:1000'],
+            'quantity' => ['required', 'integer', 'min:1', 'max:1000'],
         ]);
 
-        // Auto-increment batch code scoped to this tenant
+        $tenant = $context->getTenant();
+        $settings = $tenant->settings;
+
+        // 1. Create the Batch
+        // Use the customer_id_prefix from settings, fallback to 'BATCH'
+        $batchPrefix = strtoupper($settings['customer_id_prefix'] ?? 'BATCH');
         $batchCount = VoucherBatch::count() + 1;
-        $batchCode  = 'BATCH-' . str_pad($batchCount, 3, '0', STR_PAD_LEFT);
+        $batchCode = $batchPrefix . '-' . str_pad($batchCount, 3, '0', STR_PAD_LEFT);
 
         $batch = VoucherBatch::create([
-            'tenant_id'  => $context->getTenantId(),
+            'tenant_id' => $tenant->id,
             'package_id' => $validated['package_id'],
             'created_by' => auth()->id(),
             'batch_code' => $batchCode,
-            'quantity'   => $validated['quantity'],
+            'quantity' => $validated['quantity'],
         ]);
 
-        // Generate individual vouchers in bulk
+        // 2. Generate the individual Vouchers
         $vouchersToInsert = [];
         $now = now();
 
+        // Extract settings
+        $prefix = $settings['voucher_prefix'] ?? '';
+        $length = (int) ($settings['voucher_length'] ?? 8);
+        $format = $settings['voucher_format'] ?? 'alphanumeric';
+
         for ($i = 0; $i < $validated['quantity']; $i++) {
-            // Format: KL-XXXX-XXXX (e.g. KL-D7XP-4M2A)
-            $code = 'KL-' . strtoupper(Str::random(4)) . '-' . strtoupper(Str::random(4));
+            // Generate the raw code string
+            if ($format === 'numeric') {
+                // Generate random number of specific length
+                $min = (int) str_pad('1', $length, '0');
+                $max = (int) str_pad('9', $length, '9');
+                $rawCode = (string) rand($min, $max);
+            } else {
+                // Generate alphanumeric string of specific length
+                // Remove confusing characters (O, 0, I, 1)
+                $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                $rawCode = '';
+                for ($j = 0; $j < $length; $j++) {
+                    $rawCode .= $chars[random_int(0, strlen($chars) - 1)];
+                }
+            }
+
+            // Combine prefix and raw code (e.g., ACME-12345678)
+            $finalCode = $prefix ? "{$prefix}-{$rawCode}" : $rawCode;
 
             $vouchersToInsert[] = [
-                'tenant_id'        => $context->getTenantId(),
+                'tenant_id' => $tenant->id,
                 'voucher_batch_id' => $batch->id,
-                'package_id'       => $validated['package_id'],
-                'code'             => $code,
-                'status'           => 'unused',
-                'created_at'       => $now,
-                'updated_at'       => $now,
+                'package_id' => $validated['package_id'],
+                'code' => $finalCode,
+                'status' => 'unused',
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
         }
 
-        // Insert in chunks of 100 to avoid memory pressure
+        // Insert in chunks to avoid memory issues
         foreach (array_chunk($vouchersToInsert, 100) as $chunk) {
             Voucher::insert($chunk);
         }
 
-        return redirect()->route('operator.vouchers.index')
+        return redirect()->route('operator.vouchers.index', ['tenant' => $tenant->slug])
             ->with('status', "Successfully generated {$validated['quantity']} vouchers for {$batchCode}.");
     }
 }

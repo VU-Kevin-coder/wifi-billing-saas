@@ -173,7 +173,7 @@
 
                         <!-- Action Buttons -->
                         <div class="flex items-center justify-end gap-3 pt-2">
-                            <a href="{{ route('operator.settings.portal') }}" class="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+                            <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'portal']) }}" class="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
                                 Reset Changes
                             </a>
                             <button type="submit" class="bg-blue-600 text-white px-7 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 shadow-sm transition-all duration-150 flex items-center gap-2">

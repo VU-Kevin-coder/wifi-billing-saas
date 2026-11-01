@@ -91,6 +91,33 @@ class VoucherIsolationTest extends TestCase
         });
     }
 
+    public function test_voucher_generation_overlay_shows_tenant_voucher_format(): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $this->acme->update([
+            'settings' => [
+                'voucher_prefix' => 'AC',
+                'voucher_length' => 10,
+                'voucher_format' => 'numeric',
+            ],
+        ]);
+
+        $operator = \App\Models\User::factory()->create([
+            'tenant_id' => $this->acme->id,
+        ]);
+        $operator->assignRole('operator_admin');
+
+        $this->actingAs($operator)
+            ->get('http://acme.localhost/operator/vouchers')
+            ->assertOk()
+            ->assertSee("voucherPrefix: 'AC'", false)
+            ->assertSee('voucherLength: 10', false)
+            ->assertSee("voucherFormat: 'numeric'", false)
+            ->assertSee('x-text="voucherFormatPreview()"', false)
+            ->assertDontSee('KL-XXXX-XXXX');
+    }
+
     public function test_redeemed_voucher_creates_active_session_and_appears_in_live_sessions(): void
     {
         \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);

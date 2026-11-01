@@ -17,7 +17,7 @@ class SettingsController extends Controller
 
         $activeTab = $request->query('tab', 'general');
 
-        abort_unless(in_array($activeTab, ['general', 'portal'], true), 404);
+        abort_unless(in_array($activeTab, ['general', 'hotspot', 'portal'], true), 404);
 
         $settings = $tenant->settings;
 
@@ -62,5 +62,48 @@ class SettingsController extends Controller
 
         return redirect()->route('operator.settings.index', ['tenant' => $tenant->slug])
             ->with('status', 'General settings updated successfully.');
+    }
+
+    public function updateHotspot(Request $request, TenantContext $context)
+    {
+        $tenant = $context->getTenant();
+
+        abort_unless($tenant, 404, 'Tenant not found');
+
+        $validated = $request->validate([
+            'customer_id_prefix' => ['required', 'string', 'max:10', 'regex:/^[A-Za-z0-9]+$/'],
+            'voucher_prefix' => ['nullable', 'string', 'max:10'],
+            'voucher_length' => ['required', 'integer', 'in:6,8,10'],
+            'printed_voucher_length' => ['required', 'integer', 'in:6,8'],
+            'voucher_format' => ['required', 'in:alphanumeric,numeric'],
+            'prune_inactive_days' => ['required', 'integer', 'in:0,30,60,90'],
+            'auto_reconnect_method' => ['required', 'in:mac_cookie,ip_binding'],
+            'device_remember_days' => ['required', 'integer', 'in:7,30,60'],
+            'enable_agent_portal' => ['sometimes', 'boolean'],
+            'enable_agent_reselling' => ['sometimes', 'boolean'],
+            'enable_pppoe_self_registration' => ['sometimes', 'boolean'],
+            'block_tethering' => ['sometimes', 'boolean'],
+            'tethering_action' => ['required', 'in:block,log'],
+            'extend_gateway_fee' => ['sometimes', 'boolean'],
+        ]);
+
+        foreach ([
+            'enable_agent_portal',
+            'enable_agent_reselling',
+            'enable_pppoe_self_registration',
+            'block_tethering',
+            'extend_gateway_fee',
+        ] as $setting) {
+            $validated[$setting] = $request->boolean($setting);
+        }
+
+        $tenant->update([
+            'settings' => array_merge($tenant->settings, $validated),
+        ]);
+
+        return redirect()->route('operator.settings.index', [
+            'tenant' => $tenant->slug,
+            'tab' => 'hotspot',
+        ])->with('status', 'Hotspot settings updated successfully.');
     }
 }

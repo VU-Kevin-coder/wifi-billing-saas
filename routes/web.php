@@ -62,6 +62,7 @@ Route::domain('{tenant}.localhost')
                 // General Settings
                 Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');
                 Route::put('/settings/general', [\App\Http\Controllers\Operator\SettingsController::class, 'updateGeneral'])->name('settings.general.update');
+                Route::put('/settings/hotspot', [\App\Http\Controllers\Operator\SettingsController::class, 'updateHotspot'])->name('settings.hotspot.update');
 
                 // Captive Portal Settings
                 Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');

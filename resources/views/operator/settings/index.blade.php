@@ -19,7 +19,7 @@
             <div class="border-b border-gray-200 mb-8 overflow-x-auto">
                 <nav class="-mb-px flex space-x-8 min-w-max" aria-label="Settings">
                     <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'general']) }}" @if ($activeTab === 'general') aria-current="page" @endif class="{{ $activeTab === 'general' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">General Settings</a>
-                    <a href="#hotspot" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Hotspot</a>
+                    <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'hotspot']) }}" @if ($activeTab === 'hotspot') aria-current="page" @endif class="{{ $activeTab === 'hotspot' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Hotspot</a>
                     <a href="{{ route('operator.settings.index', ['tenant' => $tenant->slug, 'tab' => 'portal']) }}" @if ($activeTab === 'portal') aria-current="page" @endif class="{{ $activeTab === 'portal' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Captive Portal</a>
                     <a href="#domain" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Domain</a>
                     <a href="#sms" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">SMS</a>
@@ -46,6 +46,8 @@
 
             @if ($activeTab === 'portal')
                 @include('operator.settings.portal')
+            @elseif ($activeTab === 'hotspot')
+                @include('operator.settings.hotspot')
             @else
             <form method="POST" action="{{ route('operator.settings.general.update', ['tenant' => $tenant->slug]) }}" enctype="multipart/form-data" @change="hasChanges = true">
                 @csrf

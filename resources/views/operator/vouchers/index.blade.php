@@ -8,7 +8,17 @@
     <div class="py-8" x-data="{
         showOverlay: false,
         activeTab: 'all',
-        form: { package_id: '', quantity: 50 }
+        form: { package_id: '', quantity: 50 },
+        voucherPrefix: @js($voucherSettings['voucher_prefix']),
+        voucherLength: @js($voucherSettings['voucher_length']),
+        voucherFormat: @js($voucherSettings['voucher_format']),
+        voucherFormatPreview() {
+            const characters = this.voucherFormat === 'numeric'
+                ? '0'.repeat(this.voucherLength)
+                : 'X'.repeat(this.voucherLength);
+
+            return this.voucherPrefix ? `${this.voucherPrefix}-${characters}` : characters;
+        }
     }">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 
@@ -443,7 +453,7 @@
                                                     </div>
                                                     <div class="flex justify-between text-xs text-blue-800">
                                                         <span>Format</span>
-                                                        <span class="font-mono">KL-XXXX-XXXX</span>
+                                                        <span class="font-mono" x-text="voucherFormatPreview()"></span>
                                                     </div>
                                                 </div>
                                             </div>
