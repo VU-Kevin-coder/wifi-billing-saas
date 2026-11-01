@@ -23,7 +23,7 @@ Route::middleware(['auth', 'role:platform_admin'])
 
 // ─── Operator Workspace (Tenant Subdomains) ────────────────
 // If they visit acme.localhost:8000/operator/dashboard, it routes here.
-Route::domain('{tenant}.localhost')
+Route::domain('{tenant}.' . config('app.tenant_domain'))
     ->group(function () {
         // ─── Public Captive Portal (No Auth Required) ─────────────
         Route::prefix('portal')
