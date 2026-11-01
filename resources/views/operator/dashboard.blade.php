@@ -101,7 +101,7 @@
                 <article class="rounded-xl bg-gradient-to-br from-blue-600 to-blue-900 p-4 text-white shadow-sm sm:p-5">
                     <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-blue-100">Router health</p><span class="text-blue-100" aria-hidden="true">▤</span></div>
                     <p class="mt-3 text-lg font-bold sm:text-2xl">{{ number_format($onlineRouters) }} / {{ number_format($totalRouters) }}</p>
-                    <p class="mt-1 text-[11px] text-blue-100">Routers online</p>
+                    <p class="mt-1 text-[11px] text-blue-100">{{ $totalRouters === 0 ? 'No routers connected' : 'Routers online' }}</p>
                 </article>
                 <article class="rounded-xl bg-gradient-to-br from-rose-500 to-red-700 p-4 text-white shadow-sm sm:p-5">
                     <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-red-100">Data usage</p><span class="text-red-100" aria-hidden="true">▰</span></div>

@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Models\Router;
+use App\Models\Session;
+use App\Models\Site;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class RouterController extends Controller
 {
@@ -18,23 +21,24 @@ class RouterController extends Controller
         $tenant = $context->getTenant();
         $tenantId = $context->getTenantId();
 
-
-
         $query = Router::where('tenant_id', $tenantId);
 
         // Search Filter
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('management_ip', 'like', "%{$search}%")
-                  ->orWhere('serial_number', 'like', "%{$search}%")
-                  ->orWhere('hardware_model', 'like', "%{$search}%")
-                  ->orWhere('site', 'like', "%{$search}%");
+                    ->orWhere('management_ip', 'like', "%{$search}%")
+                    ->orWhere('serial_number', 'like', "%{$search}%")
+                    ->orWhere('hardware_model', 'like', "%{$search}%")
+                    ->orWhere('site', 'like', "%{$search}%")
+                    ->orWhereHas('assignedSite', fn ($siteQuery) => $siteQuery->where('name', 'like', "%{$search}%"));
             });
         }
 
         // Site Filter
-        if ($site = $request->input('site')) {
+        if ($siteId = $request->integer('site_id')) {
+            $query->where('site_id', $siteId);
+        } elseif ($site = $request->input('site')) {
             if ($site !== 'all') {
                 $query->where('site', $site);
             }
@@ -48,7 +52,7 @@ class RouterController extends Controller
         }
 
         // Sort by name or custom sort
-        $routers = $query->orderBy('name')->paginate(10)->withQueryString();
+        $routers = $query->with('assignedSite')->orderBy('name')->paginate(10)->withQueryString();
 
         // Calculate KPIs strictly across all routers for this tenant
         $allRouters = Router::where('tenant_id', $tenantId)->get();
@@ -62,6 +66,7 @@ class RouterController extends Controller
 
         // Distinct sites for dropdown filter (strictly for this tenant)
         $sites = Router::where('tenant_id', $tenantId)->whereNotNull('site')->distinct()->pluck('site');
+        $siteRecords = Site::where('tenant_id', $tenantId)->orderBy('name')->get(['id', 'name']);
 
         return view('operator.routers.index', compact(
             'tenant',
@@ -71,7 +76,8 @@ class RouterController extends Controller
             'offlineRouters',
             'avgCpu',
             'unreachableRouter',
-            'sites'
+            'sites',
+            'siteRecords',
         ));
     }
 
@@ -82,9 +88,11 @@ class RouterController extends Controller
     {
         $tenant = $context->getTenant();
         $tenantId = $context->getTenantId();
+        abort_unless($tenant, 404, 'Tenant not found');
         $nextNumber = Router::where('tenant_id', $tenantId)->count() + 1;
         $defaultName = "MikroTik-{$nextNumber}";
         $apiPassword = Str::random(16);
+        $sites = Site::where('tenant_id', $tenantId)->orderBy('name')->get(['id', 'name']);
 
         // Unique provisioning token simulated for zero-touch provisioning script
         $provisionToken = base64_encode(json_encode([
@@ -103,7 +111,8 @@ class RouterController extends Controller
             'apiPassword',
             'provisionToken',
             'provisionUrl',
-            'provisionCommand'
+            'provisionCommand',
+            'sites',
         ));
     }
 
@@ -112,9 +121,17 @@ class RouterController extends Controller
      */
     public function store(Request $request, TenantContext $context)
     {
+        $tenantId = $context->getTenantId();
+        abort_unless($context->getTenant(), 404, 'Tenant not found');
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'site' => ['nullable', 'string', 'max:255'],
+            'site_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
+            ],
             'hardware_model' => ['nullable', 'string', 'max:255'],
             'management_ip' => ['nullable', 'string', 'max:45'],
             'api_username' => ['nullable', 'string', 'max:255'],
@@ -128,14 +145,17 @@ class RouterController extends Controller
             'hotspot_domain' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $tenantId = $context->getTenantId();
+        $site = isset($validated['site_id'])
+            ? Site::where('tenant_id', $tenantId)->findOrFail($validated['site_id'])
+            : null;
 
         $router = Router::create([
             'tenant_id' => $tenantId,
+            'site_id' => $site?->id,
             'name' => $validated['name'],
-            'site' => $validated['site'] ?? 'Ntinda Hub',
+            'site' => $site?->name ?? ($validated['site'] ?? null),
             'hardware_model' => $validated['hardware_model'] ?? 'hEX / RB750Gr3',
-            'management_ip' => $validated['management_ip'] ?? '10.20.' . rand(1, 254) . '.1',
+            'management_ip' => $validated['management_ip'] ?? '10.20.'.rand(1, 254).'.1',
             'status' => 'provisioning',
             'cpu_usage' => 0,
             'memory_usage' => 0,
@@ -167,16 +187,22 @@ class RouterController extends Controller
         $context = app(TenantContext::class);
         $tenant = $context->getTenant();
         $router = $this->resolveTenantRouter($args, $context);
+        $assignedSite = $router->site_id
+            ? Site::withoutGlobalScopes()
+                ->where('tenant_id', $router->tenant_id)
+                ->find($router->site_id)
+            : null;
 
         // 30 days dummy uptime blocks
         $uptimeDays = collect(range(1, 30))->map(function ($day) use ($router) {
             if ($router->status === 'offline') {
                 return $day > 25 ? 'down' : 'up';
             }
+
             return 'up';
         });
 
-        return view('operator.routers.show', compact('tenant', 'router', 'uptimeDays'));
+        return view('operator.routers.show', compact('tenant', 'router', 'assignedSite', 'uptimeDays'));
     }
 
     /**
@@ -188,7 +214,7 @@ class RouterController extends Controller
         $router = $this->resolveTenantRouter($args, $context);
 
         $name = $router->name;
-        \App\Models\Session::where('router_id', $router->id)
+        Session::where('router_id', $router->id)
             ->where('status', 'active')
             ->update([
                 'status' => 'disconnected',
@@ -297,7 +323,7 @@ class RouterController extends Controller
             }
         }
 
-        $message = "Health check completed across all " . $routers->count() . " router(s) in your workspace.";
+        $message = 'Health check completed across all '.$routers->count().' router(s) in your workspace.';
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
@@ -355,7 +381,7 @@ class RouterController extends Controller
 
             case 'delete':
                 foreach ($routers as $r) {
-                    \App\Models\Session::where('router_id', $r->id)
+                    Session::where('router_id', $r->id)
                         ->where('status', 'active')
                         ->update([
                             'status' => 'disconnected',
@@ -377,8 +403,8 @@ class RouterController extends Controller
     {
         $tenantId = $context->getTenantId();
 
-        $router = collect($args)->first(fn($a) => $a instanceof Router);
-        if (!$router) {
+        $router = collect($args)->first(fn ($a) => $a instanceof Router);
+        if (! $router) {
             $routerId = collect($args)->last();
             $router = Router::where('tenant_id', $tenantId)->findOrFail($routerId);
         } else {

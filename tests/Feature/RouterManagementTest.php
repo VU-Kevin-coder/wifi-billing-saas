@@ -15,7 +15,9 @@ class RouterManagementTest extends TestCase
     use RefreshDatabase;
 
     protected Tenant $acme;
+
     protected Tenant $beta;
+
     protected User $acmeUser;
 
     protected function setUp(): void
@@ -39,6 +41,16 @@ class RouterManagementTest extends TestCase
 
     public function test_router_list_page_can_be_rendered_with_kpis(): void
     {
+        $site = $this->acme->sites()->create(['name' => 'Central Office']);
+        app(TenantContext::class)->runAs($this->acme, function () use ($site): void {
+            Router::create([
+                'name' => 'CENTRAL-ROUTER',
+                'site_id' => $site->id,
+                'site' => $site->name,
+                'api_password' => 'password123',
+            ]);
+        });
+
         $response = $this->actingAs($this->acmeUser)
             ->get("http://acme.localhost/operator/routers");
 
@@ -48,16 +60,22 @@ class RouterManagementTest extends TestCase
         $response->assertSee('Online now');
         $response->assertSee('Offline');
         $response->assertSee('Average CPU load');
+        $response->assertSee('Central Office');
     }
 
     public function test_router_provisioning_wizard_can_be_rendered(): void
     {
+        $site = $this->acme->sites()->create(['name' => 'Central Office']);
+
         $response = $this->actingAs($this->acmeUser)
             ->get("http://acme.localhost/operator/routers/create");
 
         $response->assertStatus(200);
         $response->assertSee('Add Mikrotik Device');
         $response->assertSee('MikroTik Identity');
+        $response->assertSee('Operating Site');
+        $response->assertSee('Central Office');
+        $response->assertSee('value="'.$site->id.'"', false);
         $response->assertSee('Provisioning Command');
         $response->assertSee('/tool fetch mode=https');
         $response->assertSee('Service Setup');
@@ -93,12 +111,14 @@ class RouterManagementTest extends TestCase
 
     public function test_router_detail_page_can_be_rendered(): void
     {
+        $site = $this->acme->sites()->create(['name' => 'Ntinda Hub']);
         $context = app(TenantContext::class);
-        $router = $context->runAs($this->acme, function () {
+        $router = $context->runAs($this->acme, function () use ($site) {
             return Router::create([
                 'name' => 'CORE-MKT-01',
                 'hardware_model' => 'RB4011',
                 'management_ip' => '10.20.1.1',
+                'site_id' => $site->id,
                 'site' => 'Ntinda Hub',
                 'status' => 'online',
                 'cpu_usage' => 24,
@@ -108,6 +128,8 @@ class RouterManagementTest extends TestCase
             ]);
         });
 
+        $this->assertSame($site->name, $router->assignedSite()->firstOrFail()->name);
+
         $response = $this->actingAs($this->acmeUser)
             ->get("http://acme.localhost/operator/routers/{$router->id}");
 
@@ -115,6 +137,8 @@ class RouterManagementTest extends TestCase
         $response->assertSee('CORE-MKT-01');
         $response->assertSee('System Information');
         $response->assertSee('General Information');
+        $response->assertSee('Operating Site');
+        $response->assertSee('Ntinda Hub');
         $response->assertSee('RADIUS Configuration');
         $response->assertSee('Device Information');
         $response->assertSee('Connection Health');

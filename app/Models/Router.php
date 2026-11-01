@@ -9,10 +9,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Router extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasFactory;
 
     protected $fillable = [
         'tenant_id',
+        'site_id',
         'name',
         'serial_number',
         'hardware_model',
@@ -33,20 +34,30 @@ class Router extends Model
     ];
 
     protected $casts = [
-        'api_password'   => 'encrypted',
-        'last_seen_at'   => 'datetime',
-        'has_wireless'   => 'boolean',
+        'api_password' => 'encrypted',
+        'last_seen_at' => 'datetime',
+        'has_wireless' => 'boolean',
         'enable_hotspot' => 'boolean',
         'hotspot_config' => 'array',
         'ethernet_ports' => 'array',
-        'api_port'       => 'integer',
-        'cpu_usage'      => 'integer',
-        'memory_usage'   => 'integer',
-        'active_users'   => 'integer',
+        'api_port' => 'integer',
+        'cpu_usage' => 'integer',
+        'memory_usage' => 'integer',
+        'active_users' => 'integer',
     ];
 
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
+
+    public function assignedSite(): BelongsTo
+    {
+        return $this->belongsTo(Site::class, 'site_id');
     }
 }

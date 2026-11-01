@@ -8,10 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class Voucher extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasFactory;
 
     protected $fillable = [
-        'tenant_id', 'voucher_batch_id', 'package_id', 'code', 'status',
+        'tenant_id', 'site_id', 'voucher_batch_id', 'package_id', 'code', 'status',
         'assigned_site', 'redeemed_by', 'redeemed_at',
     ];
 
@@ -32,5 +32,10 @@ class Voucher extends Model
     public function sessions()
     {
         return $this->hasMany(Session::class);
+    }
+
+    public function site()
+    {
+        return $this->belongsTo(Site::class);
     }
 }

@@ -332,6 +332,16 @@
                     
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 text-xs">
                         <div>
+                            <p class="text-gray-400 font-semibold mb-1">Operating Site</p>
+                            @if($assignedSite)
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-950 border border-blue-800 text-blue-300 font-medium">
+                                    {{ $assignedSite->name }}
+                                </span>
+                            @else
+                                <span class="text-gray-500 italic">Unassigned</span>
+                            @endif
+                        </div>
+                        <div>
                             <p class="text-gray-400 font-semibold mb-1">Management IP</p>
                             <p class="font-mono text-gray-200">{{ $router->management_ip ?? '—' }}</p>
                         </div>

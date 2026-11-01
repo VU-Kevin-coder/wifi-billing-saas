@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use App\Models\Router;
 use App\Models\Session;
+use App\Models\Site;
+use App\Models\Voucher;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 
@@ -12,13 +14,11 @@ class LiveSessionController extends Controller
 {
     public function index(Request $request, TenantContext $context)
     {
-        $tenant   = $context->getTenant();
+        $tenant = $context->getTenant();
         $tenantId = $context->getTenantId();
 
-
-
         // Synchronize any redeemed vouchers that don't have an active session logged yet
-        $unloggedVouchers = \App\Models\Voucher::with('package')
+        $unloggedVouchers = Voucher::with('package')
             ->where('tenant_id', $tenantId)
             ->where('status', 'redeemed')
             ->whereDoesntHave('sessions')
@@ -41,30 +41,34 @@ class LiveSessionController extends Controller
             }
 
             if ($expiresAt > now()) {
-                $r = Router::where('tenant_id', $tenantId)
-                    ->when($v->assigned_site, fn($q) => $q->where('site', $v->assigned_site))
+                $r = $v->site_id
+                    ? Router::where('tenant_id', $tenantId)->where('site_id', $v->site_id)->first()
+                    : null;
+                $r ??= Router::where('tenant_id', $tenantId)
+                    ->when($v->assigned_site, fn ($q) => $q->where('site', $v->assigned_site))
                     ->first() ?? Router::where('tenant_id', $tenantId)->first();
 
                 Session::create([
-                    'tenant_id'   => $tenantId,
+                    'tenant_id' => $tenantId,
+                    'site_id' => $v->site_id ?? $r?->site_id,
                     'customer_id' => null,
-                    'voucher_id'  => $v->id,
-                    'package_id'  => $v->package_id,
-                    'router_id'   => $r?->id,
-                    'status'      => 'active',
-                    'started_at'  => $v->redeemed_at ?? now(),
-                    'expires_at'  => $expiresAt,
-                    'ip_address'  => '10.50.1.' . rand(10, 250),
+                    'voucher_id' => $v->id,
+                    'package_id' => $v->package_id,
+                    'router_id' => $r?->id,
+                    'status' => 'active',
+                    'started_at' => $v->redeemed_at ?? now(),
+                    'expires_at' => $expiresAt,
+                    'ip_address' => '10.50.1.'.rand(10, 250),
                     'mac_address' => null,
-                    'bytes_in'    => 1024 * 128,
-                    'bytes_out'   => 1024 * 512,
-                    'rate_in'     => 1024 * 64,
-                    'rate_out'    => 1024 * 256,
+                    'bytes_in' => 1024 * 128,
+                    'bytes_out' => 1024 * 512,
+                    'rate_in' => 1024 * 64,
+                    'rate_out' => 1024 * 256,
                 ]);
             }
         }
 
-        $query = Session::with(['customer', 'package', 'router', 'voucher'])
+        $query = Session::with(['customer', 'package', 'router', 'voucher', 'site'])
             ->where('tenant_id', $tenantId)
             ->where('status', 'active')
             ->where('expires_at', '>', now());
@@ -73,9 +77,9 @@ class LiveSessionController extends Controller
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('ip_address', 'like', "%{$search}%")
-                  ->orWhere('mac_address', 'like', "%{$search}%")
-                  ->orWhereHas('customer', fn($c) => $c->where('name', 'like', "%{$search}%"))
-                  ->orWhereHas('voucher', fn($v) => $v->where('code', 'like', "%{$search}%"));
+                    ->orWhere('mac_address', 'like', "%{$search}%")
+                    ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$search}%"))
+                    ->orWhereHas('voucher', fn ($v) => $v->where('code', 'like', "%{$search}%"));
             });
         }
 
@@ -84,9 +88,8 @@ class LiveSessionController extends Controller
             $query->where('router_id', $routerId);
         }
 
-        // Site filter (through router)
-        if ($site = $request->input('site')) {
-            $query->whereHas('router', fn($q) => $q->where('site', $site));
+        if ($siteId = $request->integer('site_id')) {
+            $query->where('site_id', $siteId);
         }
 
         $activeSessions = $query->orderBy('started_at', 'desc')->paginate(20)->withQueryString();
@@ -96,17 +99,17 @@ class LiveSessionController extends Controller
             ->where('status', 'active')
             ->where('expires_at', '>', now());
 
-        $connectedNow        = $allActive->count();
-        $downloadThroughput  = (clone $allActive)->sum('rate_out');  // bps
-        $uploadThroughput    = (clone $allActive)->sum('rate_in');   // bps
-        $dataUsedToday       = (clone $allActive)->sum('bytes_in') + (clone $allActive)->sum('bytes_out');
+        $connectedNow = $allActive->count();
+        $downloadThroughput = (clone $allActive)->sum('rate_out');  // bps
+        $uploadThroughput = (clone $allActive)->sum('rate_in');   // bps
+        $dataUsedToday = (clone $allActive)->sum('bytes_in') + (clone $allActive)->sum('bytes_out');
 
         // Counts by type for tab badges
         $hotspotCount = (clone $allActive)->whereHas('voucher')->count();
-        $pppoeCount   = $connectedNow - $hotspotCount;
+        $pppoeCount = $connectedNow - $hotspotCount;
 
-        $routers = Router::where('tenant_id', $tenantId)->select('id', 'name', 'site')->orderBy('name')->get();
-        $sites   = $routers->pluck('site')->unique()->filter()->values();
+        $routers = Router::where('tenant_id', $tenantId)->select('id', 'name', 'site_id')->orderBy('name')->get();
+        $sites = Site::where('tenant_id', $tenantId)->orderBy('name')->get(['id', 'name']);
 
         return view('operator.sessions.index', compact(
             'tenant',
@@ -136,7 +139,7 @@ class LiveSessionController extends Controller
         }
 
         $session->update([
-            'status'     => 'disconnected',
+            'status' => 'disconnected',
             'expires_at' => now(),
         ]);
 

@@ -100,17 +100,22 @@
                             <p class="text-[11px] text-gray-500 mt-2">Auto-generated name - you can change it if needed</p>
                         </div>
 
-                        <!-- Site Location (Optional) -->
+                        <!-- Operating Site -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">
                                     Operating Site
                                 </label>
-                                <input type="text" 
-                                       name="site" 
-                                       value="{{ old('site', 'Ntinda Hub') }}" 
-                                       placeholder="e.g. Ntinda Hub, Entebbe Gateway"
-                                       class="w-full bg-[#1e222d] border border-gray-700/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors">
+                                <select name="site_id" class="w-full bg-[#1e222d] border border-gray-700/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors">
+                                    <option value="">Unassigned</option>
+                                    @foreach ($sites as $site)
+                                        <option value="{{ $site->id }}" @selected(old('site_id') == $site->id)>{{ $site->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('site_id') <p class="mt-1 text-xs text-red-400">{{ $message }}</p> @enderror
+                                @if ($sites->isEmpty())
+                                    <p class="mt-2 text-[11px] text-gray-500">Create a site before connecting this router.</p>
+                                @endif
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">

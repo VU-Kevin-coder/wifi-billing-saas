@@ -283,12 +283,12 @@
                 </div>
 
                 <!-- Site Filter -->
-                <select name="site" 
+                <select name="site_id"
                         onchange="this.form.submit()"
                         class="bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                     <option value="all">All sites</option>
-                    @foreach($sites as $siteName)
-                        <option value="{{ $siteName }}" {{ request('site') == $siteName ? 'selected' : '' }}>{{ $siteName }}</option>
+                    @foreach($siteRecords as $siteRecord)
+                        <option value="{{ $siteRecord->id }}" @selected(request('site_id') == $siteRecord->id)>{{ $siteRecord->name }}</option>
                     @endforeach
                 </select>
 
@@ -304,7 +304,7 @@
             </div>
 
             <!-- Clear Search / Filters if active -->
-            @if(request('search') || (request('site') && request('site') !== 'all') || (request('status') && request('status') !== 'all'))
+            @if(request('search') || (request('site_id') && request('site_id') !== 'all') || (request('site') && request('site') !== 'all') || (request('status') && request('status') !== 'all'))
                 <a href="{{ route('operator.routers.index') }}" class="text-xs text-blue-600 hover:text-blue-800 font-semibold self-center">
                     Reset filters
                 </a>
@@ -365,7 +365,13 @@
 
                                 <!-- Site -->
                                 <td class="px-4 py-3.5 whitespace-nowrap text-gray-700">
-                                    {{ $router->site ?? '—' }}
+                                    @if($router->site_id && $router->assignedSite)
+                                        <span class="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-medium border border-blue-100">
+                                            {{ $router->assignedSite->name }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400 italic text-xs">Unassigned</span>
+                                    @endif
                                 </td>
 
                                 <!-- CPU / Memory -->

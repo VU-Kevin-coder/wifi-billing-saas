@@ -9,12 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Session extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasFactory;
 
     protected $table = 'sessions_log';
 
     protected $fillable = [
-        'tenant_id', 'customer_id', 'voucher_id', 'package_id', 'router_id',
+        'tenant_id', 'site_id', 'customer_id', 'voucher_id', 'package_id', 'router_id',
         'status', 'started_at', 'expires_at', 'ip_address', 'mac_address',
         'bytes_in', 'bytes_out', 'rate_in', 'rate_out',
     ];
@@ -22,10 +22,10 @@ class Session extends Model
     protected $casts = [
         'started_at' => 'datetime',
         'expires_at' => 'datetime',
-        'bytes_in'   => 'integer',
-        'bytes_out'  => 'integer',
-        'rate_in'    => 'integer',
-        'rate_out'   => 'integer',
+        'bytes_in' => 'integer',
+        'bytes_out' => 'integer',
+        'rate_in' => 'integer',
+        'rate_out' => 'integer',
     ];
 
     public function customer(): BelongsTo
@@ -46,5 +46,10 @@ class Session extends Model
     public function router(): BelongsTo
     {
         return $this->belongsTo(Router::class);
+    }
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 }

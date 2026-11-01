@@ -70,6 +70,12 @@
             <!-- Voucher Form -->
             <form method="POST" action="{{ route('portal.redeem', ['tenant' => $tenant->slug]) }}">
                 @csrf
+                @if ($routerId)
+                    <input type="hidden" name="router_id" value="{{ $routerId }}">
+                @endif
+                @if ($routerIdentity)
+                    <input type="hidden" name="router" value="{{ $routerIdentity }}">
+                @endif
                 <div class="relative mb-3">
                     <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                         <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

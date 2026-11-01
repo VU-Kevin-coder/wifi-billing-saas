@@ -221,11 +221,11 @@
                            class="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
 
-                <select name="site" onchange="this.form.submit()"
+                <select name="site_id" onchange="this.form.submit()"
                         class="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                     <option value="">All sites</option>
                     @foreach($sites as $site)
-                        <option value="{{ $site }}" {{ request('site') == $site ? 'selected' : '' }}>{{ $site }}</option>
+                        <option value="{{ $site->id }}" @selected(request('site_id') == $site->id)>{{ $site->name }}</option>
                     @endforeach
                 </select>
 
@@ -237,7 +237,7 @@
                     @endforeach
                 </select>
 
-                @if(request('search') || request('site') || request('router_id'))
+                @if(request('search') || request('site_id') || request('router_id'))
                     <a href="{{ route('operator.sessions.index') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-800">Reset</a>
                 @endif
             </form>
@@ -304,7 +304,7 @@
                                     'mac'         => $session->mac_address ?? '—',
                                     'ip'          => $session->ip_address ?? '—',
                                     'router'      => $session->router?->name ?? '—',
-                                    'site'        => $session->router?->site ?? '—',
+                                    'site'        => $session->site?->name ?? $session->router?->site ?? '—',
                                     'package'     => $session->package?->name ?? '—',
                                     'started'     => $session->started_at->format('Y-m-d H:i:s'),
                                     'expires'     => $session->expires_at?->format('Y-m-d H:i:s') ?? '—',
@@ -350,7 +350,7 @@
 
                                 {{-- Site / Router --}}
                                 <td class="px-4 py-3.5 whitespace-nowrap">
-                                    <p class="text-gray-900 font-medium">{{ $session->router?->site ?? '—' }}</p>
+                                    <p class="text-gray-900 font-medium">{{ $session->site?->name ?? $session->router?->site ?? '—' }}</p>
                                     <p class="text-[11px] text-gray-400 font-mono">{{ $session->router?->name ?? '—' }}</p>
                                 </td>
 

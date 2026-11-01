@@ -58,6 +58,11 @@ Route::domain('{tenant}.localhost')
                 // Live Sessions
                 Route::get('/sessions', [\App\Http\Controllers\Operator\LiveSessionController::class, 'index'])->name('sessions.index');
                 Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
+                Route::get('/sites/export', [\App\Http\Controllers\Operator\SiteController::class, 'export'])->name('sites.export');
+                Route::get('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'index'])->name('sites.index');
+                Route::post('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'store'])
+                    ->middleware('role:operator_admin|operator_network')
+                    ->name('sites.store');
                 Route::get('/billing', [\App\Http\Controllers\Operator\BillingController::class, 'index'])
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('billing.index');
