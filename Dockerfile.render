@@ -1,9 +1,18 @@
 # syntax=docker/dockerfile:1.7
 # ─────────────────────────────────────────────────────────────────────────────
-# Render-optimised Dockerfile for Hamnet Wi-Fi Billing System
-# Uses a single container that runs Nginx + PHP-FPM via supervisord.
-# Render provides the MySQL-compatible database (or use their PostgreSQL free tier).
+# Multi-stage Dockerfile for Hamnet Wi-Fi Billing System
+# Runs Nginx + PHP-FPM via supervisord, with pre-compiled Vite assets.
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Stage 1: Build Frontend Assets (Vite) ──────────────────────────────────
+FROM node:20-alpine AS frontend
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci || npm install
+COPY . .
+RUN npm run build
+
+# ─── Stage 2: PHP-FPM + Nginx runtime ───────────────────────────────────────
 FROM php:8.3-fpm-alpine AS base
 
 # Install system packages + PHP extensions
@@ -48,6 +57,9 @@ RUN composer install \
 # Copy source
 COPY . .
 
+# Copy compiled Vite assets from frontend stage
+COPY --from=frontend /app/public/build ./public/build
+
 # Autoloader + storage dirs
 RUN composer dump-autoload --optimize --no-interaction \
     && mkdir -p \
@@ -72,4 +84,3 @@ RUN chmod +x /usr/local/bin/deploy.sh
 EXPOSE 8080
 
 CMD ["/bin/sh", "-c", "/usr/local/bin/deploy.sh && supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
-
