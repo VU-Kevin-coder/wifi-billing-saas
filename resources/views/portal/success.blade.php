@@ -33,15 +33,26 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
             </svg>
         </div>
-        <h1 class="text-2xl font-bold text-gray-900 mb-2">Voucher Redeemed!</h1>
-        <p class="text-sm text-gray-500 mb-6">Connecting your device to the internet…</p>
+        <h1 class="text-2xl font-bold text-gray-900 mb-1">Payment Successful!</h1>
+        <p class="text-sm text-gray-500 mb-5">Your Wi-Fi access is now activated.</p>
+
+        @if(!empty($voucherCode))
+            <div class="mb-5 bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                <span class="text-xs uppercase font-semibold text-blue-700 tracking-wider">Your Voucher Code</span>
+                <div class="text-2xl font-extrabold text-blue-900 tracking-widest mt-1 select-all font-mono">
+                    {{ $voucherCode }}
+                </div>
+                <p class="text-[11px] text-blue-600 mt-1">Keep this code handy in case your device reconnects.</p>
+            </div>
+        @endif
         
-        <div class="mb-6 flex justify-center">
-            <div class="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
+        <div class="mb-5 flex items-center justify-center space-x-2 text-xs text-gray-400">
+            <div class="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
+            <span>Connecting to Wi-Fi gateway…</span>
         </div>
 
-        <a href="{{ $mikrotikUrl }}" class="inline-block w-full bg-primary text-white font-bold py-3.5 px-6 rounded-xl shadow-md hover:bg-primary-dark transition-all duration-150">
-            Click here if not redirected
+        <a href="{{ $mikrotikUrl }}" class="inline-block w-full bg-primary text-white font-bold py-3.5 px-6 rounded-xl shadow-md hover:bg-primary-dark transition-all duration-150 text-sm">
+            Connect Immediately
         </a>
     </div>
 </body>

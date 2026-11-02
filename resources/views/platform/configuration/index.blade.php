@@ -8,9 +8,9 @@
     </x-slot>
 
     <div class="py-8 bg-gray-50 min-h-screen" x-data="{ 
-        activeOverlay: null,
+        activeOverlay: '{{ session('overlay', '') }}',
         openOverlay(name) { this.activeOverlay = name; },
-        closeOverlay() { this.activeOverlay = null; }
+        closeOverlay() { this.activeOverlay = ''; }
     }">
         <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
             
@@ -30,7 +30,7 @@
                 </div>
             </div>
 
-            <!-- Flash Alert -->
+            <!-- Flash Alerts -->
             @if(session('success') || session('status'))
                 <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center justify-between shadow-sm">
                     <div class="flex items-center gap-2.5">
@@ -38,6 +38,17 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span>{{ session('success') ?? session('status') }}</span>
+                    </div>
+                </div>
+            @endif
+
+            @if(session('error'))
+                <div class="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-center justify-between shadow-sm">
+                    <div class="flex items-center gap-2.5">
+                        <svg class="w-5 h-5 text-red-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{{ session('error') }}</span>
                     </div>
                 </div>
             @endif
@@ -169,98 +180,96 @@
                     </button>
                 </div>
                 
+                @php
+                    $integrationItems = [
+                        [
+                            'key' => 'mtn',
+                            'name' => 'MTN MoMo',
+                            'desc' => 'Platform subscription billing & tenant voucher collections',
+                            'label' => 'MTN',
+                            'bg' => 'bg-amber-500/10',
+                            'text' => 'text-amber-600',
+                            'status' => $settings['mtn_status'],
+                        ],
+                        [
+                            'key' => 'airtel',
+                            'name' => 'Airtel Money',
+                            'desc' => 'Platform subscription billing & tenant voucher collections',
+                            'label' => 'AIR',
+                            'bg' => 'bg-red-500/10',
+                            'text' => 'text-red-600',
+                            'status' => $settings['airtel_status'],
+                        ],
+                        [
+                            'key' => 'email',
+                            'name' => 'Email delivery (SMTP)',
+                            'desc' => 'Invoices, password resets, security notifications & customer notices',
+                            'label' => 'icon',
+                            'bg' => 'bg-blue-500/10',
+                            'text' => 'text-blue-600',
+                            'status' => $settings['email_status'],
+                        ],
+                        [
+                            'key' => 'sms',
+                            'name' => 'SMS Gateway (' . ($settings['sms_provider'] === 'twilio' ? 'Twilio' : "Africa's Talking") . ')',
+                            'desc' => 'Critical platform alerts, customer hotspot vouchers & OTPs',
+                            'label' => 'icon',
+                            'bg' => 'bg-purple-500/10',
+                            'text' => 'text-purple-600',
+                            'status' => $settings['sms_status'],
+                        ],
+                    ];
+                @endphp
+
                 <div class="divide-y divide-gray-100">
-                    <!-- MTN MoMo -->
+                    @foreach($integrationItems as $item)
                     <div class="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/70 transition-colors">
                         <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-xs shrink-0">
-                                MTN
+                            <div class="w-9 h-9 rounded-xl {{ $item['bg'] }} {{ $item['text'] }} flex items-center justify-center font-bold text-xs shrink-0">
+                                @if($item['key'] === 'email')
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                @elseif($item['key'] === 'sms')
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                    </svg>
+                                @else
+                                    {{ $item['label'] }}
+                                @endif
                             </div>
                             <div>
-                                <p class="text-xs font-bold text-gray-900">MTN MoMo</p>
-                                <p class="text-[11px] text-gray-500">Platform subscription billing & tenant voucher collections</p>
+                                <p class="text-xs font-bold text-gray-900">{{ $item['name'] }}</p>
+                                <p class="text-[11px] text-gray-500">{{ $item['desc'] }}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
-                                <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                {{ $integrations['mtn']['status'] }}
+                            @php
+                                $statusColor = match(true) {
+                                    str_contains($item['status'], 'Connected') => 'bg-emerald-100 text-emerald-700',
+                                    str_contains($item['status'], 'Configured') => 'bg-blue-100 text-blue-700',
+                                    str_contains($item['status'], 'Failed') => 'bg-red-100 text-red-700',
+                                    str_contains($item['status'], 'Not Tested') => 'bg-amber-100 text-amber-700',
+                                    default => 'bg-gray-100 text-gray-600',
+                                };
+                                $dotColor = match(true) {
+                                    str_contains($item['status'], 'Connected') => 'bg-emerald-500',
+                                    str_contains($item['status'], 'Configured') => 'bg-blue-500',
+                                    str_contains($item['status'], 'Failed') => 'bg-red-500',
+                                    str_contains($item['status'], 'Not Tested') => 'bg-amber-500',
+                                    default => 'bg-gray-400',
+                                };
+                            @endphp
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium {{ $statusColor }}">
+                                <span class="w-1.5 h-1.5 rounded-full {{ $dotColor }}"></span>
+                                {{ $item['status'] }}
                             </span>
-                            <button @click="openOverlay('mtn')" type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                            <button @click="openOverlay('{{ $item['key'] }}')" type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
                                 Configure
                             </button>
                         </div>
                     </div>
-
-                    <!-- Airtel Money -->
-                    <div class="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/70 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-red-500/10 text-red-600 flex items-center justify-center font-bold text-xs shrink-0">
-                                AIR
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-gray-900">Airtel Money</p>
-                                <p class="text-[11px] text-gray-500">Platform subscription billing & tenant voucher collections</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
-                                <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                {{ $integrations['airtel']['status'] }}
-                            </span>
-                            <button @click="openOverlay('airtel')" type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
-                                Configure
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Email delivery -->
-                    <div class="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/70 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-gray-900">Email delivery</p>
-                                <p class="text-[11px] text-gray-500">Invoices, password resets, security notifications & notices</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
-                                <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                {{ $integrations['email']['status'] }}
-                            </span>
-                            <button @click="openOverlay('email')" type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
-                                Configure
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- SMS Gateway -->
-                    <div class="p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50/70 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-gray-900">SMS gateway</p>
-                                <p class="text-[11px] text-gray-500">Critical platform alerts, tenant OTPs & billing reminders</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
-                                <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                {{ $integrations['sms']['status'] }}
-                            </span>
-                            <button @click="openOverlay('sms')" type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
-                                Configure
-                            </button>
-                        </div>
-                    </div>
+                    @endforeach
                 </div>
 
                 <div class="p-4 bg-gray-50 border-t border-gray-200/80 text-xs text-gray-500 flex items-center gap-2">
@@ -338,57 +347,416 @@
 
         </div>
 
-        <!-- Slide-over Drawer for Batch 2 Integrations Placeholder -->
-        <div x-show="activeOverlay" 
-             class="fixed inset-0 z-50 overflow-hidden" 
-             style="display: none;"
-             x-description="Slide-over modal">
-            <div class="absolute inset-0 bg-gray-900/40 backdrop-blur-xs transition-opacity" 
-                 @click="closeOverlay()"
-                 x-show="activeOverlay"
-                 x-transition:enter="ease-out duration-300"
-                 x-transition:enter-start="opacity-0"
-                 x-transition:enter-end="opacity-100"
-                 x-transition:leave="ease-in duration-200"
-                 x-transition:leave-start="opacity-100"
-                 x-transition:leave-end="opacity-0"></div>
-
-            <div class="fixed inset-y-0 right-0 max-w-full flex pl-10">
-                <div class="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between"
-                     x-show="activeOverlay"
-                     x-transition:enter="transform transition ease-in-out duration-300 sm:duration-500"
-                     x-transition:enter-start="translate-x-full"
-                     x-transition:enter-end="translate-x-0"
-                     x-transition:leave="transform transition ease-in-out duration-300 sm:duration-500"
-                     x-transition:leave-start="translate-x-0"
-                     x-transition:leave-end="translate-x-full">
+        <!-- ─── MTN OVERLAY ─── -->
+        <div x-show="activeOverlay === 'mtn'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
+            <div x-show="activeOverlay === 'mtn'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
+            <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                <div x-show="activeOverlay === 'mtn'" x-transition:enter="transform transition ease-in-out duration-500" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transform transition ease-in-out duration-300" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full" class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+                    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-600 font-bold text-xs">MTN</div>
+                            <div>
+                                <h2 class="text-sm font-bold text-gray-900">MTN MoMo configuration</h2>
+                                <p class="text-[11px] text-gray-500">Collection API credentials & webhooks</p>
+                            </div>
+                        </div>
+                        <button @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
                     
-                    <div class="p-6 border-b border-gray-100 flex items-center justify-between">
-                        <div>
-                            <h3 class="text-sm font-bold text-gray-900 capitalize" x-text="activeOverlay + ' Integration Credentials'"></h3>
-                            <p class="text-xs text-gray-500 mt-0.5">Configure platform API credentials and webhooks</p>
+                    <form method="POST" action="{{ route('platform.configuration.mtn.update') }}" class="flex flex-col h-full overflow-y-auto">
+                        @csrf
+                        @method('PUT')
+                        <div class="flex-1 p-6 space-y-6">
+                            <div class="bg-blue-50 border border-blue-200/80 p-3.5 rounded-xl text-xs text-blue-800 leading-relaxed">
+                                <p class="font-bold">Sandbox draft &bull; {{ $settings['mtn_status'] }}</p>
+                                <p class="mt-1">Illustrative credentials only. Operator merchant accounts and customer hotspot payments are not affected.</p>
+                            </div>
+
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900 mb-3">Collection settings</h3>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Environment</label>
+                                    <select name="mtn_environment" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white">
+                                        <option value="sandbox" {{ $settings['mtn_environment'] === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
+                                        <option value="production" {{ $settings['mtn_environment'] === 'production' ? 'selected' : '' }}>Production</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900 mb-3">API credentials</h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">API user ID</label>
+                                        <input type="password" name="mtn_api_user" value="{{ $settings['mtn_api_user'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">API key</label>
+                                        <input type="password" name="mtn_api_key" value="{{ $settings['mtn_api_key'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Collection subscription key</label>
+                                        <input type="password" name="mtn_subscription_key" value="{{ $settings['mtn_subscription_key'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900 mb-3">Callback & validation</h3>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Collection callback URL</label>
+                                    <input type="text" name="mtn_callback_url" value="{{ $settings['mtn_callback_url'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                            </div>
                         </div>
-                        <button @click="closeOverlay()" type="button" class="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+
+                        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                            <p class="text-[10px] text-gray-500 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                                Secrets encrypted at rest
+                            </p>
+                            <div class="flex gap-2">
+                                <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+                                <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors">Save configuration</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── AIRTEL OVERLAY ─── -->
+        <div x-show="activeOverlay === 'airtel'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
+            <div x-show="activeOverlay === 'airtel'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
+            <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                <div x-show="activeOverlay === 'airtel'" x-transition:enter="transform transition ease-in-out duration-500" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transform transition ease-in-out duration-300" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full" class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+                    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-red-500/10 rounded-xl flex items-center justify-center text-red-600 font-bold text-xs">AIR</div>
+                            <div>
+                                <h2 class="text-sm font-bold text-gray-900">Airtel Money configuration</h2>
+                                <p class="text-[11px] text-gray-500">Merchant API credentials & webhooks</p>
+                            </div>
+                        </div>
+                        <button @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
+                    
+                    <form method="POST" action="{{ route('platform.configuration.airtel.update') }}" class="flex flex-col h-full overflow-y-auto">
+                        @csrf
+                        @method('PUT')
+                        <div class="flex-1 p-6 space-y-6">
+                            <div class="bg-blue-50 border border-blue-200/80 p-3.5 rounded-xl text-xs text-blue-800 leading-relaxed">
+                                <p class="font-bold">Sandbox draft &bull; {{ $settings['airtel_status'] }}</p>
+                            </div>
 
-                    <div class="p-6 flex-1 overflow-y-auto space-y-4">
-                        <div class="p-4 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-700 leading-relaxed">
-                            Integration settings drawer is ready for Batch 2 credentials and webhooks setup.
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900 mb-3">Merchant application</h3>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Environment</label>
+                                    <select name="airtel_environment" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white">
+                                        <option value="sandbox" {{ $settings['airtel_environment'] === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
+                                        <option value="production" {{ $settings['airtel_environment'] === 'production' ? 'selected' : '' }}>Production</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900 mb-3">Access & collection key</h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Client ID</label>
+                                        <input type="password" name="airtel_client_id" value="{{ $settings['airtel_client_id'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Client secret</label>
+                                        <input type="password" name="airtel_client_secret" value="{{ $settings['airtel_client_secret'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900 mb-3">Callback & validation</h3>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Payment callback URL</label>
+                                    <input type="text" name="airtel_callback_url" value="{{ $settings['airtel_callback_url'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                            <p class="text-[10px] text-gray-500 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                                Secrets encrypted at rest
+                            </p>
+                            <div class="flex gap-2">
+                                <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+                                <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors">Save configuration</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── EMAIL (SMTP) OVERLAY ─── -->
+        <div x-show="activeOverlay === 'email'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
+            <div x-show="activeOverlay === 'email'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
+            <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                <div x-show="activeOverlay === 'email'" x-transition:enter="transform transition ease-in-out duration-500" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transform transition ease-in-out duration-300" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full" class="w-screen max-w-lg bg-white shadow-2xl flex flex-col">
+                    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-600 shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                            </div>
+                            <div>
+                                <h2 class="text-sm font-bold text-gray-900">Email Gateway Configuration</h2>
+                                <p class="text-[11px] text-gray-500">SMTP Connection, Sender Identity & Live Test</p>
+                            </div>
+                        </div>
+                        <button @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                        <!-- Status Banner -->
+                        <div class="p-3.5 rounded-xl text-xs flex items-center justify-between {{ str_contains($settings['email_status'], 'Connected') ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : (str_contains($settings['email_status'], 'Failed') ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-blue-50 border border-blue-200/80 text-blue-800') }}">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full {{ str_contains($settings['email_status'], 'Connected') ? 'bg-emerald-500' : (str_contains($settings['email_status'], 'Failed') ? 'bg-red-500' : 'bg-blue-500') }}"></span>
+                                <span class="font-bold">Status: {{ $settings['email_status'] }}</span>
+                            </div>
+                            <span class="text-[11px] opacity-80">AES-256 Encrypted</span>
+                        </div>
+
+                        <!-- Credentials Form -->
+                        <form id="email-settings-form" method="POST" action="{{ route('platform.configuration.email.update') }}" class="space-y-4">
+                            @csrf
+                            @method('PUT')
+
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900 mb-3 uppercase tracking-wider text-gray-500">1. SMTP Connection</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div class="sm:col-span-2">
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">SMTP Host</label>
+                                        <input type="text" name="smtp_host" value="{{ $settings['smtp_host'] }}" placeholder="smtp.gmail.com or smtp.mailgun.org" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Port</label>
+                                        <input type="number" name="smtp_port" value="{{ $settings['smtp_port'] }}" placeholder="587" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                                <div class="mt-2.5">
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Encryption Protocol</label>
+                                    <select name="smtp_encryption" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="tls" {{ $settings['smtp_encryption'] === 'tls' ? 'selected' : '' }}>TLS (Port 587 - Recommended)</option>
+                                        <option value="ssl" {{ $settings['smtp_encryption'] === 'ssl' ? 'selected' : '' }}>SSL (Port 465)</option>
+                                        <option value="none" {{ $settings['smtp_encryption'] === 'none' ? 'selected' : '' }}>None (Port 25)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="pt-2 border-t border-gray-100">
+                                <h3 class="text-xs font-bold text-gray-900 mb-3 uppercase tracking-wider text-gray-500">2. Authentication</h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">SMTP Username</label>
+                                        <input type="text" name="smtp_username" value="{{ $settings['smtp_username'] }}" placeholder="your-email@domain.com or api" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">SMTP Password / App Password</label>
+                                        <input type="password" name="smtp_password" value="{{ $settings['smtp_password'] }}" placeholder="••••••••••••" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pt-2 border-t border-gray-100">
+                                <h3 class="text-xs font-bold text-gray-900 mb-3 uppercase tracking-wider text-gray-500">3. Sender Identity</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Sender Name</label>
+                                        <input type="text" name="mail_from_name" value="{{ $settings['mail_from_name'] }}" placeholder="Hamnet Platform" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Sender Email</label>
+                                        <input type="email" name="mail_from_address" value="{{ $settings['mail_from_address'] }}" placeholder="notifications@yourdomain.com" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end pt-2">
+                                <button type="submit" class="w-full bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-colors">
+                                    Save Email Settings
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Live SMTP Test Card -->
+                        <div class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 space-y-3">
+                            <div class="flex items-center gap-2 text-blue-900">
+                                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                <span class="text-xs font-bold">Verify & Send Live Test Email</span>
+                            </div>
+                            <p class="text-[11px] text-blue-700/90 leading-relaxed">
+                                Enter a recipient email to immediately test your SMTP connection and dispatch a real verification message.
+                            </p>
+                            <form method="POST" action="{{ route('platform.configuration.email.test') }}" class="flex gap-2">
+                                @csrf
+                                <input type="email" name="test_email" required value="{{ auth()->user()->email }}" placeholder="recipient@example.com" class="flex-1 rounded-xl border-blue-200 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-sm shrink-0 transition-colors">
+                                    Send Test Email
+                                </button>
+                            </form>
                         </div>
                     </div>
 
-                    <div class="p-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50">
-                        <button @click="closeOverlay()" type="button" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50">
-                            Close
-                        </button>
+                    <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <p class="text-[10px] text-gray-500 flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                            Encrypted at rest
+                        </p>
+                        <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Done</button>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- ─── SMS GATEWAY OVERLAY ─── -->
+        <div x-show="activeOverlay === 'sms'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
+            <div x-show="activeOverlay === 'sms'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
+            <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                <div x-show="activeOverlay === 'sms'" 
+                     x-data="{ provider: '{{ $settings['sms_provider'] }}' }"
+                     x-transition:enter="transform transition ease-in-out duration-500" 
+                     x-transition:enter-start="translate-x-full" 
+                     x-transition:enter-end="translate-x-0" 
+                     x-transition:leave="transform transition ease-in-out duration-300" 
+                     x-transition:leave-start="translate-x-0" 
+                     x-transition:leave-end="translate-x-full" 
+                     class="w-screen max-w-lg bg-white shadow-2xl flex flex-col">
+                    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-600 shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                            </div>
+                            <div>
+                                <h2 class="text-sm font-bold text-gray-900">SMS Gateway Configuration</h2>
+                                <p class="text-[11px] text-gray-500">Africa's Talking & Twilio Gateway Integration</p>
+                            </div>
+                        </div>
+                        <button @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                        <!-- Status Banner -->
+                        <div class="p-3.5 rounded-xl text-xs flex items-center justify-between {{ str_contains($settings['sms_status'], 'Connected') ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : (str_contains($settings['sms_status'], 'Failed') ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-purple-50 border border-purple-200/80 text-purple-800') }}">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full {{ str_contains($settings['sms_status'], 'Connected') ? 'bg-emerald-500' : (str_contains($settings['sms_status'], 'Failed') ? 'bg-red-500' : 'bg-purple-500') }}"></span>
+                                <span class="font-bold">Status: {{ $settings['sms_status'] }}</span>
+                            </div>
+                            <span class="text-[11px] opacity-80">E.164 Auto-formatting</span>
+                        </div>
+
+                        <!-- Credentials Form -->
+                        <form id="sms-settings-form" method="POST" action="{{ route('platform.configuration.sms.update') }}" class="space-y-4">
+                            @csrf
+                            @method('PUT')
+
+                            <div>
+                                <label class="block text-[11px] font-semibold text-gray-700 mb-1">SMS Service Provider</label>
+                                <select name="sms_provider" x-model="provider" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white focus:ring-purple-500 focus:border-purple-500">
+                                    <option value="africastalking">Africa's Talking (Uganda & East Africa Default)</option>
+                                    <option value="twilio">Twilio (Global)</option>
+                                </select>
+                            </div>
+
+                            <!-- Africa's Talking Specific Fields -->
+                            <div x-show="provider === 'africastalking'" class="space-y-3 pt-2 border-t border-gray-100">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Environment</label>
+                                        <select name="sms_environment" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white focus:ring-purple-500 focus:border-purple-500">
+                                            <option value="sandbox" {{ $settings['sms_environment'] === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
+                                            <option value="production" {{ $settings['sms_environment'] === 'production' ? 'selected' : '' }}>Production (Live)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">AT Username</label>
+                                        <input type="text" name="sms_username" value="{{ $settings['sms_username'] }}" placeholder="sandbox or account_username" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Africa's Talking API Key</label>
+                                    <input type="password" name="sms_api_key" value="{{ $settings['sms_api_key'] }}" placeholder="at_api_key_..." class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Sender ID / Shortcode (Optional in Sandbox)</label>
+                                    <input type="text" name="sms_sender_id" value="{{ $settings['sms_sender_id'] }}" placeholder="HAMNET" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                </div>
+                            </div>
+
+                            <!-- Twilio Specific Fields -->
+                            <div x-show="provider === 'twilio'" class="space-y-3 pt-2 border-t border-gray-100" style="display: none;">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Twilio Account SID</label>
+                                    <input type="text" name="sms_username" value="{{ $settings['sms_username'] }}" placeholder="ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Twilio Auth Token</label>
+                                    <input type="password" name="sms_api_key" value="{{ $settings['sms_api_key'] }}" placeholder="your_auth_token" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">From Phone Number or Messaging Service SID</label>
+                                    <input type="text" name="sms_sender_id" value="{{ $settings['sms_sender_id'] }}" placeholder="+1234567890" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end pt-2">
+                                <button type="submit" class="w-full bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-colors">
+                                    Save SMS Settings
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Live SMS Test Card -->
+                        <div class="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-4 space-y-3">
+                            <div class="flex items-center gap-2 text-purple-900">
+                                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                                <span class="text-xs font-bold">Verify & Send Live Test SMS</span>
+                            </div>
+                            <p class="text-[11px] text-purple-700/90 leading-relaxed">
+                                Enter your phone number (e.g. <span class="font-mono">0772123456</span> or <span class="font-mono">+256772123456</span>). The system will normalize to international E.164 and dispatch a live test voucher message.
+                            </p>
+                            <form method="POST" action="{{ route('platform.configuration.sms.test') }}" class="flex gap-2">
+                                @csrf
+                                <input type="text" name="test_phone" required placeholder="+256 7XX XXXXXX" class="flex-1 rounded-xl border-purple-200 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500 bg-white font-mono">
+                                <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-sm shrink-0 transition-colors">
+                                    Send Test SMS
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <p class="text-[10px] text-gray-500 flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                            Encrypted at rest
+                        </p>
+                        <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Done</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- ─── END OVERLAYS ─── -->
+
     </div>
 </x-app-layout>
-

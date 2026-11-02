@@ -10,7 +10,6 @@
         name: '{{ old('name', '') }}',
         slug: '{{ old('slug', '') }}',
         slugManual: false,
-        plan: '{{ old('plan', 'Growth') }}',
         status: '{{ old('status', 'trial') }}',
         owner_name: '{{ old('owner_name', '') }}',
         owner_email: '{{ old('owner_email', '') }}',
@@ -109,7 +108,10 @@
                     <option>All tenant states</option>
                 </select>
                 <select class="border border-gray-200 rounded-lg text-sm py-2 pl-3 pr-8 text-gray-600 bg-gray-50">
-                    <option>All plans</option>
+                    <option value="">All plans</option>
+                    @foreach($plans ?? [] as $p)
+                        <option value="{{ $p->id }}">{{ $p->name }}</option>
+                    @endforeach
                 </select>
                 <select class="border border-gray-200 rounded-lg text-sm py-2 pl-3 pr-8 text-gray-600 bg-gray-50">
                     <option>Uganda</option>
@@ -154,13 +156,17 @@
                                     <div class="text-xs text-gray-500">{{ $tenant->staff_count }} {{ Str::plural('operator', $tenant->staff_count) }}</div>
                                 </td>
                                 <td class="px-4 py-4 whitespace-nowrap">
-                                    <div class="text-sm text-gray-900">{{ $tenant->plan }}</div>
+                                    <div class="text-sm font-semibold text-gray-900">
+                                        {{ $tenant->plan?->name ?? (is_string($tenant->plan) ? $tenant->plan : ($tenant->getRawOriginal('plan') ?? 'No plan')) }}
+                                    </div>
                                     <div class="text-xs text-gray-500">
-                                        @php
-                                            $fees = ['Starter' => '10,000', 'Growth' => '25,000', 'Enterprise' => '60,000'];
-                                            $fee  = $fees[$tenant->plan] ?? '—';
-                                        @endphp
-                                        {{ $fee !== '—' ? "UGX {$fee} / month" : 'Custom' }}
+                                        @if($tenant->plan && $tenant->plan->price > 0)
+                                            UGX {{ number_format($tenant->plan->price) }} / month
+                                        @elseif($tenant->plan_fee > 0)
+                                            UGX {{ number_format($tenant->plan_fee) }} / month
+                                        @else
+                                            Custom / Trial
+                                        @endif
                                     </div>
                                 </td>
                                 <td class="px-4 py-4 whitespace-nowrap">
@@ -395,13 +401,15 @@
                                                         <!-- Plan -->
                                                         <div>
                                                             <label for="tenant_plan" class="block font-medium text-gray-700 mb-1">Subscription Plan</label>
-                                                            <select id="tenant_plan" name="plan" x-model="plan"
+                                                            <select id="tenant_plan" name="platform_plan_id"
                                                                     class="block w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                                                <option value="Starter">Starter (UGX 10,000/mo)</option>
-                                                                <option value="Growth">Growth (UGX 25,000/mo)</option>
-                                                                <option value="Enterprise">Enterprise (UGX 60,000/mo)</option>
+                                                                @forelse($plans ?? [] as $p)
+                                                                    <option value="{{ $p->id }}">{{ $p->name }} (UGX {{ number_format($p->price) }}/mo)</option>
+                                                                @empty
+                                                                    <option value="">No plans defined yet</option>
+                                                                @endforelse
                                                             </select>
-                                                            @error('plan')
+                                                            @error('platform_plan_id')
                                                                 <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                                                             @enderror
                                                         </div>

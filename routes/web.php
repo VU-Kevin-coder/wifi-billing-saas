@@ -11,22 +11,40 @@ Route::get('/', function () {
     return view('landing');
 });
 
+// ─── Public Captive Portal (Direct / IP / Ngrok / Path Access) ─
+Route::prefix('portal')->name('portal.direct.')->group(function () {
+    Route::get('/{tenant?}', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
+    Route::post('/{tenant?}/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])->name('redeem');
+    Route::post('/{tenant?}/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])->name('purchase');
+    Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+});
+
 // ─── Platform Administration (Main Domain) ─────────────────
 Route::middleware(['auth', 'role:platform_admin'])
     ->prefix('platform')
     ->name('platform.')
     ->group(function () {
-        Route::get('/dashboard', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('dashboard');
+        Route::get('/dashboard', PlatformDashboard::class)->name('dashboard');
         Route::get('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'store'])->name('tenants.store');
         Route::get('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'show'])->name('tenants.show');
         Route::get('/billing', [\App\Http\Controllers\Platform\BillingController::class, 'index'])->name('billing.index');
+        Route::get('/revenue', [\App\Http\Controllers\Platform\RevenueController::class, 'index'])->name('revenue.index');
+        Route::post('/revenue/withdrawals/{transaction}/approve', [\App\Http\Controllers\Platform\RevenueController::class, 'approveWithdrawal'])->name('revenue.withdrawals.approve');
+        Route::post('/revenue/withdrawals/{transaction}/reject', [\App\Http\Controllers\Platform\RevenueController::class, 'rejectWithdrawal'])->name('revenue.withdrawals.reject');
+        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\RevenueController::class, 'adjustBalance'])->name('revenue.adjust');
         Route::post('/plans', [\App\Http\Controllers\Platform\BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'destroyPlan'])->name('plans.destroy');
         Route::get('/configuration', [\App\Http\Controllers\Platform\ConfigurationController::class, 'index'])->name('configuration.index');
         Route::put('/configuration/general', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
+        Route::put('/configuration/mtn', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateMtn'])->name('configuration.mtn.update');
+        Route::put('/configuration/airtel', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateAirtel'])->name('configuration.airtel.update');
+        Route::put('/configuration/email', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
+        Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
+        Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
+        Route::post('/configuration/sms/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
         Route::get('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->name('impersonate');
         Route::get('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
@@ -41,6 +59,7 @@ Route::domain('{tenant}.localhost')
             ->group(function () {
                 Route::get('/', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
                 Route::post('/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])->name('redeem');
+                Route::post('/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])->name('purchase');
                 Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
             });
 
@@ -76,6 +95,14 @@ Route::domain('{tenant}.localhost')
                 Route::get('/billing', [\App\Http\Controllers\Operator\BillingController::class, 'index'])
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('billing.index');
+
+                // Operator Wallet & Withdrawals
+                Route::get('/wallet', [\App\Http\Controllers\Operator\WalletController::class, 'index'])
+                    ->middleware('role:operator_admin|operator_finance')
+                    ->name('wallet.index');
+                Route::post('/wallet/withdraw', [\App\Http\Controllers\Operator\WithdrawalController::class, 'store'])
+                    ->middleware('role:operator_admin|operator_finance')
+                    ->name('wallet.withdraw');
 
                 // General Settings
                 Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');

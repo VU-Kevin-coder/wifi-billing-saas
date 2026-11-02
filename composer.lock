@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6c0b93d1d170bbbfebf6e952024698a3",
+    "content-hash": "a09000d458180dc248df6b77ab180383",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -6484,6 +6484,76 @@
             "time": "2026-04-26T05:33:54+00:00"
         },
         {
+            "name": "yamoon/mtn-momo-api",
+            "version": "dev-main",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Yamoon224/MTN-MOMO-API.git",
+                "reference": "0cd9078d30281ed7930b4c45850a9640e8004ec8"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Yamoon224/MTN-MOMO-API/zipball/0cd9078d30281ed7930b4c45850a9640e8004ec8",
+                "reference": "0cd9078d30281ed7930b4c45850a9640e8004ec8",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/http": "^11.0|^12.0",
+                "illuminate/support": "^11.0|^12.0",
+                "php": "^8.2",
+                "ramsey/uuid": "^4.7"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.0",
+                "orchestra/testbench": "^9.0|^10.0",
+                "pestphp/pest": "^2.0|^3.0",
+                "pestphp/pest-plugin-laravel": "^2.0|^3.0"
+            },
+            "default-branch": true,
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "Momo": "Mtn\\MomoApi\\Facades\\Momo"
+                    },
+                    "providers": [
+                        "Mtn\\MomoApi\\MomoServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Mtn\\MomoApi\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Your Name",
+                    "email": "yamooon664@gmail.com"
+                }
+            ],
+            "description": "Laravel client for the MTN Mobile Money (MoMo) Open API — Collection, Disbursement and Remittance products.",
+            "keywords": [
+                "collection",
+                "disbursement",
+                "laravel",
+                "mobile money",
+                "momo",
+                "mtn",
+                "payments",
+                "remittance"
+            ],
+            "support": {
+                "issues": "https://github.com/Yamoon224/MTN-MOMO-API/issues",
+                "source": "https://github.com/Yamoon224/MTN-MOMO-API/tree/main"
+            },
+            "time": "2026-07-30T12:59:38+00:00"
+        },
+        {
             "name": "zilleali/mikrotik-laravel",
             "version": "v1.8.0",
             "source": {
@@ -8988,7 +9058,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "yamoon/mtn-momo-api": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

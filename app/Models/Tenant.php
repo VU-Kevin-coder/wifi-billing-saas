@@ -18,6 +18,8 @@ class Tenant extends Model
         'legal_name', 'address', 'contact_name', 'contact_email', 'contact_phone',
         // Plan & Subscription
         'platform_plan_id', 'plan', 'plan_fee', 'trial_ends_at', 'subscription_ends_at', 'subscription_status', 'auto_renew',
+        // Financial & Wallet
+        'wallet_balance', 'commission_rate', 'kyc_status',
     ];
 
     protected $casts = [
@@ -28,6 +30,8 @@ class Tenant extends Model
         'subscription_ends_at' => 'datetime',
         'auto_renew'           => 'boolean',
         'plan_fee'             => 'decimal:2',
+        'wallet_balance'       => 'decimal:2',
+        'commission_rate'      => 'decimal:2',
     ];
 
     /**
@@ -122,5 +126,20 @@ class Tenant extends Model
     public function sites(): HasMany
     {
         return $this->hasMany(Site::class);
+    }
+
+    public function packages(): HasMany
+    {
+        return $this->hasMany(Package::class);
+    }
+
+    public function vouchers(): HasMany
+    {
+        return $this->hasMany(Voucher::class);
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class);
     }
 }

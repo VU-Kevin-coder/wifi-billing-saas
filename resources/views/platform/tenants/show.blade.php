@@ -160,8 +160,8 @@
 
                     <div class="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-xl">
                         <div>
-                            <p class="text-sm font-bold text-gray-900">{{ $tenant->plan ?? 'Growth' }} Plan</p>
-                            <p class="text-xs text-gray-500">UGX {{ number_format($tenant->plan_fee ?? 0) }} / month</p>
+                            <p class="text-sm font-bold text-gray-900">{{ $tenant->plan?->name ?? (is_string($tenant->plan) ? $tenant->plan : ($tenant->getRawOriginal('plan') ?? 'Custom')) }} Plan</p>
+                            <p class="text-xs text-gray-500">UGX {{ number_format((float) ($tenant->plan?->price ?? $tenant->plan_fee ?? 0)) }} / month</p>
                         </div>
                         @if($tenant->subscription_status === 'active')
                             <span class="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded">Active</span>
@@ -181,7 +181,7 @@
                                 <p class="text-xs text-gray-500">Next invoice / renewal</p>
                                 <p class="text-sm font-medium text-gray-900">{{ $tenant->subscription_ends_at->format('d M Y') }}</p>
                             </div>
-                            <span class="text-xs font-bold text-gray-900">UGX {{ number_format($tenant->plan_fee ?? 0) }}</span>
+                            <span class="text-xs font-bold text-gray-900">UGX {{ number_format((float) ($tenant->plan?->price ?? $tenant->plan_fee ?? 0)) }}</span>
                         </div>
                         @endif
                         @if($tenant->trial_ends_at)

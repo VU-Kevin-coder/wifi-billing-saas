@@ -28,11 +28,15 @@ class TenantController extends Controller
         // Trials ending in the next 7 days
         $trialsEndingSoon  = Tenant::whereBetween('created_at', [now()->subDays(14), now()->subDays(7)])->count();
 
-        // 2. Fetch Tenants with counts
-        $tenants = Tenant::withCount([
-            'users as staff_count',
-            'routers as router_count',
-        ])->orderBy('created_at', 'desc')->paginate(10);
+        // 2. Fetch Tenants with counts and eager-loaded plan
+        $tenants = Tenant::with(['plan', 'users'])
+            ->withCount([
+                'users as staff_count',
+                'routers as router_count',
+            ])->orderBy('created_at', 'desc')->paginate(10);
+
+        // Fetch dynamic platform plans
+        $plans = \App\Models\PlatformPlan::orderBy('price', 'asc')->get();
 
         // 3. Attach additional metrics to each tenant
         foreach ($tenants as $tenant) {
@@ -50,20 +54,19 @@ class TenantController extends Controller
 
             // Account status
             $tenant->account_status = $tenant->created_at->diffInDays(now()) < 14 ? 'Trial' : 'Active';
-
-            // Plan from settings
-            $tenant->plan = $tenant->settings['plan'] ?? 'Growth';
         }
 
         return view('platform.tenants.index', compact(
             'totalOperators', 'managedRouters', 'onlineRouters', 'offlineRouters',
             'endCustomers', 'trialsInProgress', 'trialsEndingSoon',
-            'activeOperators', 'suspendedOperators', 'tenants'
+            'activeOperators', 'suspendedOperators', 'tenants', 'plans'
         ));
     }
 
     public function show(Tenant $tenant)
     {
+        $tenant->load('plan');
+
         // 1. KPI Metrics
         $customerCount = Customer::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count();
         $packageCount  = Package::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count();
@@ -92,15 +95,24 @@ class TenantController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:100|unique:tenants,slug|alpha_dash',
-            'plan' => 'required|string|in:Starter,Growth,Enterprise',
+            'platform_plan_id' => 'nullable|exists:platform_plans,id',
+            'plan' => 'nullable|string',
             'status' => 'required|string|in:trial,active,suspended',
             'owner_name' => 'required|string|max:255',
             'owner_email' => 'required|email|max:255|unique:users,email',
             'owner_password' => 'nullable|string|min:6',
         ]);
 
+        // Resolve plan dynamically from DB
+        $plan = null;
+        if (!empty($validated['platform_plan_id'])) {
+            $plan = \App\Models\PlatformPlan::find($validated['platform_plan_id']);
+        } elseif (!empty($validated['plan'])) {
+            $plan = \App\Models\PlatformPlan::where('name', $validated['plan'])->first();
+        }
+        $plan ??= \App\Models\PlatformPlan::orderBy('price', 'asc')->first();
+
         $settings = [
-            'plan' => $validated['plan'],
             'brand_name' => $validated['name'],
         ];
 
@@ -108,6 +120,11 @@ class TenantController extends Controller
             'name' => $validated['name'],
             'slug' => strtolower($validated['slug']),
             'status' => $validated['status'] === 'trial' ? 'active' : $validated['status'],
+            'platform_plan_id' => $plan?->id,
+            'plan' => $plan?->name,
+            'plan_fee' => $plan?->price ?? 0,
+            'subscription_status' => $validated['status'] === 'trial' ? 'trial' : 'active',
+            'trial_ends_at' => $validated['status'] === 'trial' ? now()->addDays($plan?->trial_days ?: 14) : null,
             'settings' => $settings,
             'created_at' => $validated['status'] === 'trial' ? now() : now()->subDays(15),
         ]);

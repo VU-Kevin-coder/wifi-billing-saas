@@ -253,12 +253,12 @@
                                     <div class="text-[11px] text-gray-400 font-mono">{{ $tenant->slug }}.localhost</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-800">
-                                        {{ is_string($tenant->plan) ? $tenant->plan : ($tenant->plan->name ?? 'Growth') }}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                        {{ $tenant->plan?->name ?? (is_string($tenant->plan) ? $tenant->plan : ($tenant->getRawOriginal('plan') ?? 'Custom')) }}
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                                    UGX {{ number_format($tenant->plan_fee ?? 0) }}
+                                    UGX {{ number_format((float) ($tenant->plan?->price ?? $tenant->plan_fee ?? 0)) }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-700">
                                     @if($tenant->subscription_ends_at)

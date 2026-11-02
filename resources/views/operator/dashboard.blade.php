@@ -90,8 +90,8 @@
                 </article>
                 <article class="rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 p-4 text-white shadow-sm sm:p-5">
                     <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-orange-100">Wallet balance</p><span class="text-orange-100" aria-hidden="true">▰</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">Not connected</p>
-                    <p class="mt-1 text-[11px] text-orange-100">Wallet data is unavailable</p>
+                    <p class="mt-3 text-lg font-bold sm:text-2xl">UGX {{ number_format((float) ($tenant->wallet_balance ?? 0)) }}</p>
+                    <a href="{{ route('operator.wallet.index') }}" class="mt-1 text-[11px] text-orange-100 underline hover:text-white flex items-center gap-1">Manage &amp; Withdraw &rarr;</a>
                 </article>
                 <article class="rounded-xl bg-gradient-to-br from-blue-500 to-indigo-700 p-4 text-white shadow-sm sm:p-5">
                     <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-blue-100">Total customers</p><span class="text-blue-100" aria-hidden="true">＋</span></div>

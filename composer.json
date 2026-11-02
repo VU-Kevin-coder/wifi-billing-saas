@@ -11,6 +11,7 @@
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.9",
         "spatie/laravel-permission": "^8.3",
+        "yamoon/mtn-momo-api": "dev-main",
         "zilleali/mikrotik-laravel": "^1.8"
     },
     "require-dev": {
