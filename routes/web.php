@@ -16,7 +16,17 @@ Route::middleware(['auth', 'role:platform_admin'])
     ->prefix('platform')
     ->name('platform.')
     ->group(function () {
-        Route::get('/dashboard', PlatformDashboard::class)->name('dashboard');
+        Route::get('/dashboard', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('dashboard');
+        Route::get('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('tenants.index');
+        Route::post('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'store'])->name('tenants.store');
+        Route::get('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'show'])->name('tenants.show');
+        Route::get('/billing', [\App\Http\Controllers\Platform\BillingController::class, 'index'])->name('billing.index');
+        Route::post('/plans', [\App\Http\Controllers\Platform\BillingController::class, 'storePlan'])->name('plans.store');
+        Route::put('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'updatePlan'])->name('plans.update');
+        Route::delete('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'destroyPlan'])->name('plans.destroy');
+        Route::get('/configuration', [\App\Http\Controllers\Platform\ConfigurationController::class, 'index'])->name('configuration.index');
+        Route::put('/configuration/general', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
+        Route::put('/configuration/security', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
         Route::get('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->name('impersonate');
         Route::get('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
@@ -98,7 +108,7 @@ Route::domain('{tenant}.localhost')
 // ─── Breeze default dashboard (fallback redirect) ──────────
 Route::get('/dashboard', function () {
     if (auth()->user()->hasRole('platform_admin')) {
-        return redirect()->route('platform.dashboard');
+        return redirect()->route('platform.tenants.index');
     }
     $slug = auth()->user()->tenant?->slug;
     if ($slug) {

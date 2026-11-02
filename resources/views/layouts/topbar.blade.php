@@ -1,10 +1,19 @@
 @php
     $currentTenant = app(\App\Services\Tenancy\TenantContext::class)->getTenant();
-    $tenantName = $currentTenant?->name ?? 'KampalaLink Internet';
     $routeName = request()->route()?->getName() ?? '';
+    $isPlatform = str_starts_with($routeName, 'platform.') || !$currentTenant;
+    $tenantName = $currentTenant?->name ?? ($isPlatform ? 'Platform Admin' : 'KampalaLink Internet');
     
     $breadcrumbTitle = 'Dashboard';
-    if (str_contains($routeName, 'packages')) {
+    if (str_contains($routeName, 'platform.configuration')) {
+        $breadcrumbTitle = 'Platform Configuration';
+    } elseif (str_contains($routeName, 'platform.billing')) {
+        $breadcrumbTitle = 'Platform Billing';
+    } elseif (str_contains($routeName, 'tenants')) {
+        $breadcrumbTitle = 'Operator Tenants';
+    } elseif (str_contains($routeName, 'platform.dashboard')) {
+        $breadcrumbTitle = 'Platform Overview';
+    } elseif (str_contains($routeName, 'packages')) {
         $breadcrumbTitle = 'Internet Packages';
     } elseif (str_contains($routeName, 'vouchers')) {
         $breadcrumbTitle = 'Vouchers';

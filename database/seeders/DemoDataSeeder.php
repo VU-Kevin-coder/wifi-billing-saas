@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\PlatformPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -11,16 +12,81 @@ class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
+        // ─── Platform Plans ──────────────────────────────────
+        $starterPlan = PlatformPlan::firstOrCreate(
+            ['name' => 'Starter'],
+            [
+                'price' => 100000,
+                'trial_days' => 14,
+                'max_customers' => 500,
+                'max_routers' => 3,
+                'features' => ['Up to 500 customers', 'Up to 3 routers', 'Basic reports'],
+            ]
+        );
+
+        $growthPlan = PlatformPlan::firstOrCreate(
+            ['name' => 'Growth'],
+            [
+                'price' => 180000,
+                'trial_days' => 14,
+                'max_customers' => 2000,
+                'max_routers' => 10,
+                'features' => ['Up to 2,000 customers', 'Up to 10 routers', 'M-Pesa / MoMo Integration', 'Priority Support'],
+            ]
+        );
+
+        $enterprisePlan = PlatformPlan::firstOrCreate(
+            ['name' => 'Enterprise'],
+            [
+                'price' => 350000,
+                'trial_days' => 30,
+                'max_customers' => 10000,
+                'max_routers' => 50,
+                'features' => ['Unlimited customers', 'Up to 50 routers', 'Dedicated Account Manager', 'Custom domain'],
+            ]
+        );
+
         // ─── Tenants ────────────────────────────────────────
         $acme = Tenant::firstOrCreate(
             ['slug' => 'acme'],
-            ['name' => 'Acme Wi-Fi', 'status' => 'active']
+            [
+                'name'                  => 'KampalaLink Internet',
+                'status'                => 'active',
+                'legal_name'            => 'KampalaLink Telecom Ltd',
+                'address'               => 'Ntinda Complex Road, Level 3',
+                'contact_name'          => 'Sarah Nakato',
+                'contact_email'         => 'sarah@kampala.net',
+                'contact_phone'         => '+256 772 411 883',
+                'platform_plan_id'      => $growthPlan->id,
+                'plan'                  => 'Growth',
+                'plan_fee'              => 180000,
+                'subscription_status'   => 'active',
+                'subscription_ends_at'  => now()->addDays(30),
+            ]
         );
+        if (!$acme->platform_plan_id) {
+            $acme->platform_plan_id = $growthPlan->id;
+            $acme->save();
+        }
 
         $beta = Tenant::firstOrCreate(
             ['slug' => 'beta'],
-            ['name' => 'Beta Networks', 'status' => 'active']
+            [
+                'name'               => 'Beta Networks',
+                'status'             => 'active',
+                'legal_name'         => 'Beta Net Ltd',
+                'contact_name'       => 'Peter Okello',
+                'platform_plan_id'   => $starterPlan->id,
+                'plan'               => 'Starter',
+                'plan_fee'           => 100000,
+                'subscription_status' => 'trial',
+                'trial_ends_at'      => now()->addDays(7),
+            ]
         );
+        if (!$beta->platform_plan_id) {
+            $beta->platform_plan_id = $starterPlan->id;
+            $beta->save();
+        }
 
         // ─── Platform Admin (no tenant) ─────────────────────
         $platformAdmin = User::firstOrCreate(

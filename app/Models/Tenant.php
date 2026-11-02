@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Tenant extends Model
@@ -11,20 +12,22 @@ class Tenant extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name',
-        'slug',
-        'status',
-        'settings',
-        'mikrotik_host',
-        'mikrotik_username',
-        'mikrotik_password',
-        'mikrotik_port',
+        'name', 'slug', 'status', 'settings',
+        'mikrotik_host', 'mikrotik_username', 'mikrotik_password', 'mikrotik_port',
+        // Account details
+        'legal_name', 'address', 'contact_name', 'contact_email', 'contact_phone',
+        // Plan & Subscription
+        'platform_plan_id', 'plan', 'plan_fee', 'trial_ends_at', 'subscription_ends_at', 'subscription_status', 'auto_renew',
     ];
 
     protected $casts = [
-        'settings' => 'array',
-        'mikrotik_password' => 'encrypted',
-        'mikrotik_port' => 'integer',
+        'settings'             => 'array',
+        'mikrotik_password'    => 'encrypted',
+        'mikrotik_port'        => 'integer',
+        'trial_ends_at'        => 'datetime',
+        'subscription_ends_at' => 'datetime',
+        'auto_renew'           => 'boolean',
+        'plan_fee'             => 'decimal:2',
     ];
 
     /**
@@ -96,6 +99,24 @@ class Tenant extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
+    }
+
+    public function routers(): HasMany
+    {
+        return $this->hasMany(Router::class);
+    }
+
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(PlatformPlan::class, 'platform_plan_id');
+    }
+
+    public function getPlanAttribute($value)
+    {
+        if ($this->relationLoaded('plan') && $this->getRelation('plan')) {
+            return $this->getRelation('plan');
+        }
+        return $value;
     }
 
     public function sites(): HasMany

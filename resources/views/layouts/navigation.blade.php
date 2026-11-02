@@ -16,6 +16,12 @@
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
+                    @if(auth()->user()->hasRole('platform_admin'))
+                        <x-nav-link :href="route('platform.tenants.index')" :active="request()->routeIs('platform.tenants.*')">
+                            {{ __('Operator Tenants') }}
+                        </x-nav-link>
+                    @endif
+
                     @if(auth()->user()->hasAnyRole(['operator_admin', 'operator_finance', 'operator_support', 'operator_network']) || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
                         <x-nav-link :href="route('operator.packages.index')" :active="request()->routeIs('operator.packages.*')">
                             {{ __('Packages') }}
@@ -88,6 +94,12 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard', 'operator.dashboard', 'platform.dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+
+            @if(auth()->user()->hasRole('platform_admin'))
+                <x-responsive-nav-link :href="route('platform.tenants.index')" :active="request()->routeIs('platform.tenants.*')">
+                    {{ __('Operator Tenants') }}
+                </x-responsive-nav-link>
+            @endif
 
             @if(auth()->user()->hasAnyRole(['operator_admin', 'operator_finance', 'operator_support', 'operator_network']) || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
                 <x-responsive-nav-link :href="route('operator.packages.index')" :active="request()->routeIs('operator.packages.*')">
