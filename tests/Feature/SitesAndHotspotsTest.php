@@ -136,6 +136,9 @@ class SitesAndHotspotsTest extends TestCase
             ->post('http://acme.localhost/operator/routers', [
                 'name' => 'Router with foreign site',
                 'site_id' => $foreignSite->id,
+                'management_ip' => '10.0.0.10',
+                'api_port' => 8728,
+                'api_username' => 'router-api',
                 'api_password' => 'password123',
             ])
             ->assertSessionHasErrors('site_id');
@@ -144,6 +147,9 @@ class SitesAndHotspotsTest extends TestCase
             ->post('http://acme.localhost/operator/routers', [
                 'name' => 'Router with own site',
                 'site_id' => $ownSite->id,
+                'management_ip' => '10.0.0.11',
+                'api_port' => 8728,
+                'api_username' => 'router-api',
                 'api_password' => 'password123',
             ])
             ->assertRedirect();

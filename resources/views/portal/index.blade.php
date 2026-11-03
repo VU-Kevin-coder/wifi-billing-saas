@@ -61,6 +61,12 @@
             <!-- 1. VOUCHER FORM (Customer enters only voucher code, no phone number) -->
             <form method="POST" action="{{ route('portal.redeem', ['tenant' => $tenant->slug], false) }}">
                 @csrf
+                @if($routerId)
+                    <input type="hidden" name="router_id" value="{{ $routerId }}">
+                @endif
+                @if($routerIdentity)
+                    <input type="hidden" name="router" value="{{ $routerIdentity }}">
+                @endif
                 <div class="relative mb-3">
                     <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                         <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,9 +122,15 @@
                             <form method="POST" action="{{ route('portal.purchase', ['tenant' => $tenant->slug], false) }}">
                                 @csrf
                                 <input type="hidden" name="package_id" value="{{ $pkg->id }}">
+                                @if($routerId)
+                                    <input type="hidden" name="router_id" value="{{ $routerId }}">
+                                @endif
+                                @if($routerIdentity)
+                                    <input type="hidden" name="router" value="{{ $routerIdentity }}">
+                                @endif
                                 <div class="flex items-center justify-between mb-1.5">
                                     <label class="block text-xs font-semibold text-gray-800">
-                                        Pay Ush {{ number_format($pkg->price) }} via MoMo:
+                                        Pay Ush {{ number_format($pkg->price) }} via mobile money:
                                     </label>
                                     <button type="button" @click="buyingPackageId = null" class="text-xs text-gray-400 hover:text-gray-600 font-bold">
                                         ✕
@@ -134,7 +146,10 @@
                                         Pay
                                     </button>
                                 </div>
-                                <p class="text-[10px] text-gray-500 mt-1">Prompt will be sent to this MTN / Airtel number.</p>
+                                <label class="mt-2 block text-[10px] font-medium text-gray-700" for="checkout-email-{{ $pkg->id }}">Email (optional)</label>
+                                <input id="checkout-email-{{ $pkg->id }}" type="email" name="email" autocomplete="email" placeholder="you@example.com"
+                                       class="mt-1 block w-full rounded-xl border border-gray-300 text-xs px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <p class="text-[10px] text-gray-500 mt-1">If omitted, the operator's contact email is sent to Flutterwave. A payment prompt will be sent to your MTN or Airtel number.</p>
                             </form>
                         </div>
                     </div>

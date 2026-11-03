@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Carbon\Carbon;
 use App\Models\Package;
 use App\Models\Tenant;
 use App\Models\User;
@@ -70,6 +71,29 @@ class PackageIsolationTest extends TestCase
         });
     }
 
+    public function test_package_expiry_supports_all_duration_units(): void
+    {
+        $startedAt = Carbon::parse('2026-01-15 12:00:00');
+        $durations = [
+            'minutes' => 'addMinutes',
+            'hours' => 'addHours',
+            'days' => 'addDays',
+            'weeks' => 'addWeeks',
+            'months' => 'addMonths',
+            'years' => 'addYears',
+        ];
+
+        foreach ($durations as $unit => $addMethod) {
+            $package = new Package([
+                'duration_value' => 2,
+                'duration_unit' => $unit,
+            ]);
+
+            $this->assertSame(rtrim($unit, 's'), $package->duration_unit_singular);
+            $this->assertEquals($startedAt->copy()->$addMethod(2), $package->expiresAt($startedAt));
+        }
+    }
+
     public function test_operator_can_view_packages_page_and_dashboard(): void
     {
         \Illuminate\Support\Facades\URL::defaults(['tenant' => $this->acme->slug]);
@@ -77,10 +101,10 @@ class PackageIsolationTest extends TestCase
         $admin = User::factory()->create(['tenant_id' => $this->acme->id]);
         $admin->assignRole('operator_admin');
 
-        // Test dashboard renders with Packages link
+        // Test dashboard renders with the package navigation link
         $dashResponse = $this->actingAs($admin)->get('http://acme.localhost:8000/operator/dashboard');
         $dashResponse->assertOk();
-        $dashResponse->assertSee('Manage Packages');
+        $dashResponse->assertSee('Internet packages');
 
         // Test packages index renders
         $indexResponse = $this->actingAs($admin)->get('http://acme.localhost:8000/operator/packages');

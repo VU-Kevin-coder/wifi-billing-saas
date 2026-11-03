@@ -26,19 +26,8 @@ class LiveSessionController extends Controller
 
         foreach ($unloggedVouchers as $v) {
             $pkg = $v->package;
-            $expiresAt = now()->addHours(2);
-            if ($pkg && $pkg->duration_value) {
-                $unit = strtolower($pkg->duration_unit ?? 'hours');
-                $val = (int) $pkg->duration_value;
-                $redeemedTime = $v->redeemed_at ? (clone $v->redeemed_at) : now();
-                $expiresAt = match ($unit) {
-                    'minutes', 'minute' => (clone $redeemedTime)->addMinutes($val),
-                    'days', 'day' => (clone $redeemedTime)->addDays($val),
-                    'weeks', 'week' => (clone $redeemedTime)->addWeeks($val),
-                    'months', 'month' => (clone $redeemedTime)->addMonths($val),
-                    default => (clone $redeemedTime)->addHours($val),
-                };
-            }
+            $redeemedTime = $v->redeemed_at ?? now();
+            $expiresAt = $pkg?->expiresAt($redeemedTime) ?? $redeemedTime->copy()->addHours(2);
 
             if ($expiresAt > now()) {
                 $r = $v->site_id

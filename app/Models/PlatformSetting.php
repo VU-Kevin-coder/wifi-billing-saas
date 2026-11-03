@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Crypt;
 
 class PlatformSetting extends Model
 {
@@ -21,7 +23,7 @@ class PlatformSetting extends Model
     {
         $setting = static::where('key', $key)->first();
 
-        if (!$setting || is_null($setting->value)) {
+        if (! $setting || is_null($setting->value)) {
             return $default;
         }
 
@@ -36,7 +38,7 @@ class PlatformSetting extends Model
         }
 
         // JSON decode if applicable (e.g. arrays)
-        if ((str_starts_with($value, '{') && str_ends_with($value, '}')) || 
+        if ((str_starts_with($value, '{') && str_ends_with($value, '}')) ||
             (str_starts_with($value, '[') && str_ends_with($value, ']'))) {
             $decoded = json_decode($value, true);
             if (json_last_error() === JSON_ERROR_NONE) {
@@ -65,5 +67,27 @@ class PlatformSetting extends Model
             ['value' => $storeValue]
         );
     }
-}
 
+    public static function getSecret(string $key, mixed $default = null): mixed
+    {
+        $value = static::where('key', $key)->value('value');
+
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        try {
+            return Crypt::decryptString($value);
+        } catch (DecryptException) {
+            return $value;
+        }
+    }
+
+    public static function setSecret(string $key, string $value): static
+    {
+        return static::updateOrCreate(
+            ['key' => $key],
+            ['value' => Crypt::encryptString($value)]
+        );
+    }
+}

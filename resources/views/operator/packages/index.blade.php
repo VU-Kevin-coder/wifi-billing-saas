@@ -495,9 +495,12 @@
                                                     <label class="block font-medium text-slate-700 mb-1">Unit</label>
                                                     <select name="duration_unit" x-model="form.duration_unit" 
                                                             class="block w-full rounded-lg border-slate-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                        <option value="minutes">Minutes</option>
                                                         <option value="hours">Hours</option>
                                                         <option value="days">Days</option>
+                                                        <option value="weeks">Weeks</option>
                                                         <option value="months">Months</option>
+                                                        <option value="years">Years</option>
                                                     </select>
                                                 </div>
                                             </div>

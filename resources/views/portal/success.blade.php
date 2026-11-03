@@ -20,10 +20,85 @@
         .text-primary { color: var(--primary); }
     </style>
     <script>
-        // Auto-redirect to the MikroTik URL after 3 seconds
-        setTimeout(function() {
-            window.location.href = "{{ $mikrotikUrl }}";
-        }, 3000);
+        const paymentStatusUrl = @json($paymentStatusUrl);
+        const paymentActivationUrl = @json($paymentActivationUrl);
+        const initialMikrotikUrl = @json($mikrotikUrl);
+
+        function connectToWifi(url, voucherCode = null) {
+            document.getElementById('mikrotik-link').href = url;
+            document.getElementById('mikrotik-link').classList.remove('hidden');
+            document.getElementById('payment-spinner').classList.add('hidden');
+            if (voucherCode) {
+                document.getElementById('voucher-code').textContent = voucherCode;
+                document.getElementById('voucher-panel').classList.remove('hidden');
+            }
+            document.getElementById('payment-message').textContent = 'Your access is active. Connecting to Wi-Fi now…';
+            setTimeout(() => window.location.assign(url), 5000);
+        }
+
+        async function activatePaidVoucher(payment) {
+            const response = await fetch(paymentActivationUrl, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+                cache: 'no-store',
+            });
+            const activation = await response.json();
+
+            if (!response.ok || activation.status !== 'activated') {
+                throw new Error(activation.message || 'Voucher activation failed.');
+            }
+
+            document.getElementById('page-title').textContent = 'Voucher Activated!';
+            connectToWifi(activation.mikrotik_url || payment.mikrotik_url, activation.voucher_code || payment.voucher_code);
+        }
+
+        async function checkPaymentStatus() {
+            try {
+                const response = await fetch(paymentStatusUrl, {
+                    headers: { Accept: 'application/json' },
+                    cache: 'no-store',
+                });
+                const payment = await response.json();
+
+                if (payment.status === 'completed') {
+                    try {
+                        await activatePaidVoucher(payment);
+                    } catch (error) {
+                        document.getElementById('payment-message').textContent =
+                            (error instanceof Error ? error.message : 'Voucher activation failed.') + ' Retry activation below.';
+                        document.getElementById('payment-spinner').classList.add('hidden');
+                        document.getElementById('activation-retry').classList.remove('hidden');
+                    }
+                    return;
+                }
+
+                if (payment.status === 'failed' || payment.status === 'not_found') {
+                    document.getElementById('page-title').textContent = 'Payment not completed';
+                    document.getElementById('payment-message').textContent = 'No successful payment was confirmed. Return to the portal and try again if you were not charged.';
+                    document.getElementById('payment-spinner').classList.add('hidden');
+                    return;
+                }
+            } catch (error) {
+                document.getElementById('payment-message').textContent = 'Checking payment status… Keep this page open.';
+            }
+
+            setTimeout(checkPaymentStatus, 2000);
+        }
+
+        if (paymentStatusUrl) {
+            checkPaymentStatus();
+        } else if (initialMikrotikUrl) {
+            connectToWifi(initialMikrotikUrl);
+        }
+
+        function retryActivation() {
+            document.getElementById('activation-retry').classList.add('hidden');
+            checkPaymentStatus();
+        }
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
@@ -33,26 +108,33 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
             </svg>
         </div>
-        <h1 class="text-2xl font-bold text-gray-900 mb-1">Payment Successful!</h1>
-        <p class="text-sm text-gray-500 mb-5">Your Wi-Fi access is now activated.</p>
+        <h1 id="page-title" class="text-2xl font-bold text-gray-900 mb-1">
+            {{ $paymentStatusUrl ? 'Waiting for payment…' : 'Payment Successful!' }}
+        </h1>
+        <p id="payment-message" class="text-sm text-gray-500 mb-5">
+            {{ $paymentStatusUrl ? 'Approve the payment prompt on your phone. This page will connect you once the payment is confirmed.' : 'Your Wi-Fi access is now activated.' }}
+        </p>
 
-        @if(!empty($voucherCode))
-            <div class="mb-5 bg-blue-50 border border-blue-200 rounded-2xl p-4">
+        <div id="voucher-panel" class="mb-5 bg-blue-50 border border-blue-200 rounded-2xl p-4 {{ $voucherCode ? '' : 'hidden' }}">
                 <span class="text-xs uppercase font-semibold text-blue-700 tracking-wider">Your Voucher Code</span>
-                <div class="text-2xl font-extrabold text-blue-900 tracking-widest mt-1 select-all font-mono">
-                    {{ $voucherCode }}
+                <div id="voucher-code" class="text-2xl font-extrabold text-blue-900 tracking-widest mt-1 select-all font-mono">
+                    {{ $voucherCode ?? '' }}
                 </div>
                 <p class="text-[11px] text-blue-600 mt-1">Keep this code handy in case your device reconnects.</p>
-            </div>
-        @endif
+        </div>
         
-        <div class="mb-5 flex items-center justify-center space-x-2 text-xs text-gray-400">
+        <div id="payment-spinner" class="mb-5 flex items-center justify-center space-x-2 text-xs text-gray-400 {{ $paymentStatusUrl ? '' : 'hidden' }}">
             <div class="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
-            <span>Connecting to Wi-Fi gateway…</span>
+            <span>Waiting for payment confirmation…</span>
         </div>
 
-        <a href="{{ $mikrotikUrl }}" class="inline-block w-full bg-primary text-white font-bold py-3.5 px-6 rounded-xl shadow-md hover:bg-primary-dark transition-all duration-150 text-sm">
-            Connect Immediately
+        <button id="activation-retry" type="button" onclick="retryActivation()"
+                class="hidden mb-4 w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700">
+            Retry activation
+        </button>
+
+        <a id="mikrotik-link" href="{{ $mikrotikUrl ?? '#' }}" class="{{ $mikrotikUrl ? '' : 'hidden' }} inline-block w-full bg-primary text-white font-bold py-3.5 px-6 rounded-xl shadow-md hover:bg-primary-dark transition-all duration-150 text-sm">
+            Connect now
         </a>
     </div>
 </body>

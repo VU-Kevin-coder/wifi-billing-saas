@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
+use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class RouterController extends Controller
@@ -82,7 +82,7 @@ class RouterController extends Controller
     }
 
     /**
-     * Show the 3-step provisioning wizard.
+     * Show the 3-step router onboarding wizard.
      */
     public function create(TenantContext $context)
     {
@@ -91,29 +91,9 @@ class RouterController extends Controller
         abort_unless($tenant, 404, 'Tenant not found');
         $nextNumber = Router::where('tenant_id', $tenantId)->count() + 1;
         $defaultName = "MikroTik-{$nextNumber}";
-        $apiPassword = Str::random(16);
         $sites = Site::where('tenant_id', $tenantId)->orderBy('name')->get(['id', 'name']);
 
-        // Unique provisioning token simulated for zero-touch provisioning script
-        $provisionToken = base64_encode(json_encode([
-            'tenant' => $tenant->slug,
-            'name' => $defaultName,
-            'expires' => now()->addDays(7)->timestamp,
-            'secret' => Str::random(24),
-        ]));
-
-        $provisionUrl = "https://{$tenant->slug}.sopraent.com/provision/{$provisionToken}";
-        $provisionCommand = "/tool fetch mode=https url=\"{$provisionUrl}\"";
-
-        return view('operator.routers.create', compact(
-            'tenant',
-            'defaultName',
-            'apiPassword',
-            'provisionToken',
-            'provisionUrl',
-            'provisionCommand',
-            'sites',
-        ));
+        return view('operator.routers.create', compact('tenant', 'defaultName', 'sites'));
     }
 
     /**
@@ -133,9 +113,10 @@ class RouterController extends Controller
                 Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
             ],
             'hardware_model' => ['nullable', 'string', 'max:255'],
-            'management_ip' => ['nullable', 'string', 'max:45'],
-            'api_username' => ['nullable', 'string', 'max:255'],
-            'api_password' => ['required', 'string', 'min:6'],
+            'management_ip' => ['required', 'string', 'max:255'],
+            'api_port' => ['required', 'integer', 'between:1,65535'],
+            'api_username' => ['required', 'string', 'max:255'],
+            'api_password' => ['required', 'string', 'min:1'],
             'has_wireless' => ['nullable', 'boolean'],
             'ethernet_ports' => ['nullable', 'array'],
             'enable_hotspot' => ['nullable', 'boolean'],
@@ -155,15 +136,15 @@ class RouterController extends Controller
             'name' => $validated['name'],
             'site' => $site?->name ?? ($validated['site'] ?? null),
             'hardware_model' => $validated['hardware_model'] ?? 'hEX / RB750Gr3',
-            'management_ip' => $validated['management_ip'] ?? '10.20.'.rand(1, 254).'.1',
+            'management_ip' => $validated['management_ip'],
             'status' => 'provisioning',
             'cpu_usage' => 0,
             'memory_usage' => 0,
             'active_users' => 0,
             'last_seen_at' => null,
-            'api_username' => $validated['api_username'] ?? 'sopraent_user',
+            'api_username' => $validated['api_username'],
             'api_password' => $validated['api_password'],
-            'api_port' => 8728,
+            'api_port' => $validated['api_port'],
             'has_wireless' => $request->boolean('has_wireless'),
             'enable_hotspot' => $request->boolean('enable_hotspot', true),
             'hotspot_config' => [
@@ -176,33 +157,26 @@ class RouterController extends Controller
         ]);
 
         return redirect()->route('operator.routers.show', $router)
-            ->with('status', "Router '{$router->name}' created successfully. Follow the on-screen instructions to execute the provisioning command.");
+            ->with('status', "Router '{$router->name}' added successfully. Use Test LAN API to verify the connection.");
     }
 
     /**
      * Display the specified router detail page (telemetry, RADIUS, hardware, uptime).
      */
-    public function show(Request $request, ...$args)
+    public function show(Request $request, RouterConnectionService $connectionService, ...$args)
     {
         $context = app(TenantContext::class);
         $tenant = $context->getTenant();
         $router = $this->resolveTenantRouter($args, $context);
+        abort_unless($tenant, 404, 'Tenant not found');
         $assignedSite = $router->site_id
             ? Site::withoutGlobalScopes()
                 ->where('tenant_id', $router->tenant_id)
                 ->find($router->site_id)
             : null;
+        $liveData = $connectionService->liveStatus($router);
 
-        // 30 days dummy uptime blocks
-        $uptimeDays = collect(range(1, 30))->map(function ($day) use ($router) {
-            if ($router->status === 'offline') {
-                return $day > 25 ? 'down' : 'up';
-            }
-
-            return 'up';
-        });
-
-        return view('operator.routers.show', compact('tenant', 'router', 'assignedSite', 'uptimeDays'));
+        return view('operator.routers.show', compact('tenant', 'router', 'assignedSite', 'liveData'));
     }
 
     /**
@@ -255,6 +229,14 @@ class RouterController extends Controller
         }
 
         return back()->with('status', $message);
+    }
+
+    public function testConnection(Request $request, RouterConnectionService $connectionService, ...$args)
+    {
+        $context = app(TenantContext::class);
+        $router = $this->resolveTenantRouter($args, $context);
+
+        return response()->json($connectionService->test($router));
     }
 
     /**

@@ -83,16 +83,6 @@
     border: 2px solid var(--line); border-radius: 10px; background: #fff;
   }
   input[type=tel]:focus, input[type=text]:focus { outline: none; border-color: var(--brand); }
-  .networks { display: flex; gap: 10px; }
-  .network { flex: 1; position: relative; }
-  .network input { position: absolute; opacity: 0; }
-  .network label {
-    display: block; text-align: center; padding: 11px 6px; font-weight: 600;
-    border: 2px solid var(--line); border-radius: 10px; cursor: pointer; font-size: .9rem;
-  }
-  .network input:checked + label { border-color: var(--brand); background: #e8f4ef; }
-  .network input:focus-visible + label { outline: 3px solid var(--accent); }
-
   button {
     width: 100%; margin-top: 16px; padding: 14px;
     font-size: 1rem; font-weight: 700; color: #fff; background: var(--brand);
@@ -163,18 +153,9 @@
       <!-- BLADE: @endforeach -->
     </div>
 
-    <h2 style="margin-top:20px">2. Pay with Mobile Money</h2>
+    <h2 style="margin-top:20px">2. Pay with Flutterwave</h2>
 
-    <div class="networks">
-      <div class="network">
-        <input type="radio" name="network" id="n1" value="mtn" checked>
-        <label for="n1">MTN MoMo</label>
-      </div>
-      <div class="network">
-        <input type="radio" name="network" id="n2" value="airtel">
-        <label for="n2">Airtel Money</label>
-      </div>
-    </div>
+    <p class="hint">Pay securely with supported Uganda mobile money networks. The network is selected from your phone number.</p>
 
     <label class="field" for="phone">Mobile Money number</label>
     <input type="tel" id="phone" name="phone" inputmode="numeric" placeholder="07XXXXXXXX" autocomplete="tel">
@@ -238,4 +219,3 @@
 </script>
 </body>
 </html>
-

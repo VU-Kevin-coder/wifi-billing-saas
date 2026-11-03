@@ -19,14 +19,17 @@ class Transaction extends Model
         'net_amount',
         'status',
         'reference',
+        'provider_reference',
         'phone',
         'description',
+        'meta',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'platform_fee' => 'decimal:2',
         'net_amount' => 'decimal:2',
+        'meta' => 'array',
     ];
 
     public function tenant(): BelongsTo
@@ -34,4 +37,3 @@ class Transaction extends Model
         return $this->belongsTo(Tenant::class);
     }
 }
-

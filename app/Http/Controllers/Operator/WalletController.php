@@ -24,11 +24,8 @@ class WalletController extends Controller
 
         $transactionsQuery = Transaction::where('tenant_id', $tenant->id);
 
-        // 1. Total Online Gross from Transactions
+        // 1. Total Online Gross from completed transactions
         $onlineGross = (clone $transactionsQuery)->where('type', 'voucher_sale')->where('status', 'completed')->sum('amount');
-        if ($onlineGross == 0) {
-            $onlineGross = (clone $transactionsQuery)->where('type', 'voucher_sale')->sum('amount');
-        }
 
         // 2. Total Redeemed Vouchers Gross (Cash / Walk-in / Online)
         $voucherGross = (float) Voucher::where('vouchers.tenant_id', $tenant->id)
@@ -39,9 +36,11 @@ class WalletController extends Controller
         // Total Gross is the highest of actual voucher revenue or transaction records
         $totalGross = max($onlineGross, $voucherGross);
 
-        // 3. Platform Fees: Either recorded on transactions or calculated from commission rate
-        $recordedFees = (float) (clone $transactionsQuery)->where('type', 'voucher_sale')->sum('platform_fee');
-        $totalFees = $recordedFees > 0 ? $recordedFees : round($totalGross * ($commissionRate / 100), 2);
+        // 3. Platform Fees are only recognized for completed transactions
+        $totalFees = (float) (clone $transactionsQuery)
+            ->where('type', 'voucher_sale')
+            ->where('status', 'completed')
+            ->sum('platform_fee');
 
         // 4. Payouts
         $totalWithdrawn = (float) (clone $transactionsQuery)->where('type', 'withdrawal')->where('status', 'completed')->sum('amount');
@@ -71,5 +70,4 @@ class WalletController extends Controller
         ));
     }
 }
-
 

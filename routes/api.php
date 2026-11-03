@@ -1,6 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\MomoWebhookController;
+use App\Http\Controllers\Api\FlutterwaveWebhookController;
+use App\Http\Controllers\PortalController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -10,6 +11,14 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('webhooks')->group(function () {
-    Route::post('/mtn', [MomoWebhookController::class, 'handle'])->name('api.webhooks.mtn');
+    Route::post('/flutterwave', [FlutterwaveWebhookController::class, 'handle'])
+        ->name('api.webhooks.flutterwave');
 });
 
+Route::get('/payments/{token}', [PortalController::class, 'paymentStatus'])
+    ->middleware('throttle:30,1')
+    ->name('api.payments.status');
+
+Route::post('/payments/{token}/activate', [PortalController::class, 'activatePayment'])
+    ->middleware('throttle:10,1')
+    ->name('api.payments.activate');

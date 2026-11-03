@@ -340,6 +340,9 @@
                                             </p>
                                             <p class="text-[11px] {{ $typeColor }} font-medium">
                                                 {{ $sessionType }}
+                                                @if($session->voucher)
+                                                    · <span class="font-mono text-gray-400">{{ $session->voucher->code }}</span>
+                                                @endif
                                                 @if($session->mac_address)
                                                     · <span class="font-mono text-gray-400">{{ $session->mac_address }}</span>
                                                 @endif

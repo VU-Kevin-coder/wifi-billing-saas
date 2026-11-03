@@ -28,20 +28,32 @@ class ConfigurationController extends Controller
             'enforce_2fa' => PlatformSetting::get('enforce_2fa', false),
             'session_timeout' => PlatformSetting::get('session_timeout', 30),
 
-            // MTN
-            'mtn_api_user' => PlatformSetting::get('mtn_api_user'),
-            'mtn_api_key' => PlatformSetting::get('mtn_api_key'),
-            'mtn_subscription_key' => PlatformSetting::get('mtn_subscription_key'),
-            'mtn_environment' => PlatformSetting::get('mtn_environment', 'sandbox'),
-            'mtn_status' => PlatformSetting::get('mtn_status', 'Not Connected'),
-            'mtn_callback_url' => PlatformSetting::get('mtn_callback_url', url('/api/webhooks/mtn')),
-
-            // Airtel
-            'airtel_client_id' => PlatformSetting::get('airtel_client_id'),
-            'airtel_client_secret' => PlatformSetting::get('airtel_client_secret'),
-            'airtel_environment' => PlatformSetting::get('airtel_environment', 'sandbox'),
-            'airtel_status' => PlatformSetting::get('airtel_status', 'Not Connected'),
-            'airtel_callback_url' => PlatformSetting::get('airtel_callback_url', url('/api/webhooks/airtel')),
+            // Flutterwave
+            'flutterwave_public_key' => PlatformSetting::get(
+                'flutterwave_public_key',
+                config('services.flutterwave.public_key')
+            ),
+            'flutterwave_public_key_configured' => (bool) PlatformSetting::get(
+                'flutterwave_public_key',
+                config('services.flutterwave.public_key')
+            ),
+            'flutterwave_secret_key_configured' => (bool) PlatformSetting::getSecret(
+                'flutterwave_secret_key',
+                config('services.flutterwave.secret_key')
+            ),
+            'flutterwave_encryption_key_configured' => (bool) PlatformSetting::getSecret(
+                'flutterwave_encryption_key',
+                config('services.flutterwave.encryption_key')
+            ),
+            'flutterwave_webhook_secret_configured' => (bool) PlatformSetting::getSecret(
+                'flutterwave_webhook_secret',
+                config('services.flutterwave.webhook_secret')
+            ),
+            'flutterwave_environment' => PlatformSetting::get(
+                'flutterwave_environment',
+                config('services.flutterwave.environment', 'sandbox')
+            ),
+            'flutterwave_status' => PlatformSetting::get('flutterwave_status', 'Not Configured'),
 
             // Email (SMTP)
             'smtp_host' => PlatformSetting::get('smtp_host'),
@@ -96,41 +108,39 @@ class ConfigurationController extends Controller
             ->with('status', 'Security settings updated successfully.');
     }
 
-    public function updateMtn(Request $request)
+    public function updateFlutterwave(Request $request)
     {
         $validated = $request->validate([
-            'mtn_api_user' => 'nullable|string',
-            'mtn_api_key' => 'nullable|string',
-            'mtn_subscription_key' => 'nullable|string',
-            'mtn_environment' => 'required|in:sandbox,production',
-            'mtn_callback_url' => 'required|url',
+            'flutterwave_public_key' => 'nullable|string|max:255',
+            'flutterwave_secret_key' => 'nullable|string|max:255',
+            'flutterwave_encryption_key' => 'nullable|string|max:255',
+            'flutterwave_webhook_secret' => 'nullable|string|max:255',
+            'flutterwave_environment' => 'required|in:sandbox,production',
         ]);
 
-        foreach ($validated as $key => $value) {
-            PlatformSetting::set($key, $value);
+        if ($request->filled('flutterwave_public_key')) {
+            PlatformSetting::set('flutterwave_public_key', $validated['flutterwave_public_key']);
         }
-        PlatformSetting::set('mtn_status', 'Connected');
+
+        foreach ([
+            'flutterwave_secret_key',
+            'flutterwave_encryption_key',
+            'flutterwave_webhook_secret',
+        ] as $key) {
+            if ($request->filled($key)) {
+                PlatformSetting::setSecret($key, $validated[$key]);
+            }
+        }
+
+        PlatformSetting::set('flutterwave_environment', $validated['flutterwave_environment']);
+        $configured = PlatformSetting::getSecret(
+            'flutterwave_secret_key',
+            config('services.flutterwave.secret_key')
+        );
+        PlatformSetting::set('flutterwave_status', $configured ? 'Configured (Untested)' : 'Not Configured');
 
         return redirect()->route('platform.configuration.index')
-            ->with('status', 'MTN MoMo configuration saved.');
-    }
-
-    public function updateAirtel(Request $request)
-    {
-        $validated = $request->validate([
-            'airtel_client_id' => 'nullable|string',
-            'airtel_client_secret' => 'nullable|string',
-            'airtel_environment' => 'required|in:sandbox,production',
-            'airtel_callback_url' => 'required|url',
-        ]);
-
-        foreach ($validated as $key => $value) {
-            PlatformSetting::set($key, $value);
-        }
-        PlatformSetting::set('airtel_status', 'Connected');
-
-        return redirect()->route('platform.configuration.index')
-            ->with('status', 'Airtel Money configuration saved.');
+            ->with('status', 'Flutterwave configuration saved.');
     }
 
     public function updateEmail(Request $request)
@@ -149,7 +159,7 @@ class ConfigurationController extends Controller
             PlatformSetting::set($key, $value);
         }
 
-        if (!empty($validated['smtp_host'])) {
+        if (! empty($validated['smtp_host'])) {
             PlatformSetting::set('email_status', 'Configured (Untested)');
         }
 
@@ -205,7 +215,7 @@ class ConfigurationController extends Controller
             PlatformSetting::set($key, $value);
         }
 
-        if (!empty($validated['sms_api_key'])) {
+        if (! empty($validated['sms_api_key'])) {
             PlatformSetting::set('sms_status', 'Configured (Untested)');
         }
 

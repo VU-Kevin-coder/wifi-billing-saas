@@ -507,6 +507,37 @@
                                                     </button>
                                                 </form>
 
+                                                <button type="button"
+                                                        x-data="{ testing: false, result: null }"
+                                                        @click="
+                                                            testing = true;
+                                                            result = null;
+                                                            fetch('{{ route('operator.routers.test', $router) }}', {
+                                                                method: 'POST',
+                                                                headers: {
+                                                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                                                    'Accept': 'application/json'
+                                                                }
+                                                            })
+                                                            .then(response => response.json())
+                                                            .then(data => {
+                                                                result = data;
+                                                                alert((data.ok ? '✅ ' : '❌ ') + data.message);
+                                                            })
+                                                            .catch(() => {
+                                                                result = { ok: false, message: 'Network Error' };
+                                                                alert('Network Error');
+                                                            })
+                                                            .finally(() => testing = false);
+                                                        "
+                                                        :disabled="testing"
+                                                        class="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-blue-600 hover:bg-blue-50 text-left disabled:opacity-50">
+                                                    <span x-show="!testing && !result">Test LAN API</span>
+                                                    <span x-show="testing">Testing...</span>
+                                                    <span x-show="result" x-text="result && result.message"
+                                                          :class="result && result.ok ? 'text-emerald-700' : 'text-red-600'"></span>
+                                                </button>
+
                                                 <button type="button" 
                                                         @click="navigator.clipboard.writeText('/tool fetch mode=https url=\'https://{{ $tenant->slug }}.sopraent.com/provision/demo\''); open = false; alert('Provisioning script copied to clipboard!');" 
                                                         class="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 text-left">

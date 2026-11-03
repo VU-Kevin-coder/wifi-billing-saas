@@ -223,6 +223,7 @@
                                                 <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Amount ({{ $currency }})</label>
                                                 <input type="number" 
                                                        x-model="amount" 
+                                                       step="1"
                                                        :min="minWithdrawal"
                                                        max="{{ (float) ($tenant->wallet_balance ?? 0) }}"
                                                        class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-xl font-bold font-mono">
@@ -237,7 +238,7 @@
                                                        x-model="phone" 
                                                        placeholder="+256700000000"
                                                        class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
-                                                <p class="text-xs text-gray-500 mt-1">Supported: MTN MoMo and Airtel Money.</p>
+                                                <p class="text-xs text-gray-500 mt-1">Enter a whole UGX amount. Payouts are sent through Flutterwave to the detected mobile money network.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -307,4 +308,3 @@
 
     </div>
 </x-app-layout>
-

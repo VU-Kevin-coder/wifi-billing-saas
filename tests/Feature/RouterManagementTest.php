@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
@@ -61,6 +62,7 @@ class RouterManagementTest extends TestCase
         $response->assertSee('Offline');
         $response->assertSee('Average CPU load');
         $response->assertSee('Central Office');
+        $response->assertSee('Test LAN API');
     }
 
     public function test_router_provisioning_wizard_can_be_rendered(): void
@@ -71,14 +73,15 @@ class RouterManagementTest extends TestCase
             ->get("http://acme.localhost/operator/routers/create");
 
         $response->assertStatus(200);
-        $response->assertSee('Add Mikrotik Device');
-        $response->assertSee('MikroTik Identity');
-        $response->assertSee('Operating Site');
+        $response->assertSee('Add MikroTik Router');
+        $response->assertSee('API Access');
+        $response->assertSee('Management IP / Host');
+        $response->assertSee('API username');
+        $response->assertSee('API password');
+        $response->assertSee('Operating site');
         $response->assertSee('Central Office');
         $response->assertSee('value="'.$site->id.'"', false);
-        $response->assertSee('Provisioning Command');
-        $response->assertSee('/tool fetch mode=https');
-        $response->assertSee('Service Setup');
+        $response->assertSee('Service setup');
     }
 
     public function test_operator_can_create_new_router(): void
@@ -86,6 +89,9 @@ class RouterManagementTest extends TestCase
         $response = $this->actingAs($this->acmeUser)
             ->post("http://acme.localhost/operator/routers", [
                 'name' => 'TEST-ROUTER-01',
+                'management_ip' => '10.20.1.10',
+                'api_port' => 8729,
+                'api_username' => 'router-api',
                 'site' => 'Kampala Central',
                 'hardware_model' => 'CCR2004',
                 'api_password' => 'supersecretpass123',
@@ -105,6 +111,9 @@ class RouterManagementTest extends TestCase
         $this->assertEquals($this->acme->id, $router->tenant_id);
         $this->assertEquals('provisioning', $router->status);
         $this->assertEquals('CCR2004', $router->hardware_model);
+        $this->assertEquals('10.20.1.10', $router->management_ip);
+        $this->assertEquals(8729, $router->api_port);
+        $this->assertEquals('router-api', $router->api_username);
         $this->assertTrue($router->has_wireless);
         $this->assertEquals('supersecretpass123', $router->api_password);
     }
@@ -130,18 +139,68 @@ class RouterManagementTest extends TestCase
 
         $this->assertSame($site->name, $router->assignedSite()->firstOrFail()->name);
 
+        $this->mock(RouterConnectionService::class, function ($mock) use ($router): void {
+            $mock->shouldReceive('liveStatus')
+                ->once()
+                ->withArgs(fn (Router $testedRouter): bool => $testedRouter->is($router))
+                ->andReturn([
+                    'ok' => true,
+                    'message' => 'Router API responded successfully.',
+                    'cpu_load' => 24,
+                    'memory_usage' => 45,
+                    'uptime' => '3d12h',
+                    'active_users' => 7,
+                ]);
+        });
+
         $response = $this->actingAs($this->acmeUser)
             ->get("http://acme.localhost/operator/routers/{$router->id}");
 
         $response->assertStatus(200);
         $response->assertSee('CORE-MKT-01');
-        $response->assertSee('System Information');
-        $response->assertSee('General Information');
-        $response->assertSee('Operating Site');
+        $response->assertSee('CPU Load');
+        $response->assertSee('24%');
+        $response->assertSee('Memory Usage');
+        $response->assertSee('45%');
+        $response->assertSee('3d12h');
+        $response->assertSee('7');
+        $response->assertSee('Router Details');
         $response->assertSee('Ntinda Hub');
-        $response->assertSee('RADIUS Configuration');
-        $response->assertSee('Device Information');
-        $response->assertSee('Connection Health');
+        $response->assertSee('Connection Status');
+        $response->assertSee('Test LAN API');
+        $response->assertDontSee('pass123456');
+    }
+
+    public function test_router_detail_page_renders_zero_metrics_when_live_connection_fails(): void
+    {
+        $router = app(TenantContext::class)->runAs($this->acme, function () {
+            return Router::create([
+                'name' => 'UNREACHABLE-ROUTER',
+                'management_ip' => '10.20.1.99',
+                'status' => 'offline',
+            ]);
+        });
+
+        $this->mock(RouterConnectionService::class, function ($mock): void {
+            $mock->shouldReceive('liveStatus')
+                ->once()
+                ->andReturn([
+                    'ok' => false,
+                    'message' => 'Add a host/IP, API username and API password before testing.',
+                    'cpu_load' => 0,
+                    'memory_usage' => 0,
+                    'uptime' => 'N/A',
+                    'active_users' => 0,
+                ]);
+        });
+
+        $response = $this->actingAs($this->acmeUser)
+            ->get("http://acme.localhost/operator/routers/{$router->id}");
+
+        $response->assertOk()
+            ->assertSee('0%')
+            ->assertSee('N/A')
+            ->assertSee('Add a host/IP, API username and API password before testing.');
     }
 
     public function test_operator_can_delete_router(): void
@@ -211,6 +270,31 @@ class RouterManagementTest extends TestCase
         $router->refresh();
         $this->assertEquals('online', $router->status);
         $this->assertNotNull($router->last_seen_at);
+    }
+
+    public function test_operator_can_test_router_lan_api(): void
+    {
+        $router = app(TenantContext::class)->runAs($this->acme, function () {
+            return Router::create([
+                'name' => 'LAN-API-TEST-ROUTER',
+                'api_password' => 'secret123',
+            ]);
+        });
+
+        $this->mock(RouterConnectionService::class, function ($mock) use ($router): void {
+            $mock->shouldReceive('test')
+                ->once()
+                ->withArgs(fn (Router $testedRouter): bool => $testedRouter->is($router))
+                ->andReturn(['ok' => true, 'message' => 'Router API responded successfully.']);
+        });
+
+        $this->actingAs($this->acmeUser)
+            ->postJson("http://acme.localhost/operator/routers/{$router->id}/test")
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'message' => 'Router API responded successfully.',
+            ]);
     }
 
     public function test_operator_can_reboot_router(): void
@@ -316,6 +400,10 @@ class RouterManagementTest extends TestCase
 
         $this->actingAs($this->acmeUser)
             ->post("http://acme.localhost/operator/routers/{$betaRouter->id}/sync")
+            ->assertStatus(404);
+
+        $this->actingAs($this->acmeUser)
+            ->postJson("http://acme.localhost/operator/routers/{$betaRouter->id}/test")
             ->assertStatus(404);
 
         $this->actingAs($this->acmeUser)

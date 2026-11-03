@@ -12,12 +12,19 @@ Route::get('/', function () {
 });
 
 // ─── Public Captive Portal (Direct / IP / Ngrok / Path Access) ─
-Route::prefix('portal')->name('portal.direct.')->group(function () {
-    Route::get('/{tenant?}', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
-    Route::post('/{tenant?}/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])->name('redeem');
-    Route::post('/{tenant?}/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])->name('purchase');
-    Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
-});
+Route::prefix('portal')
+    ->name('portal.direct.')
+    ->middleware('throttle:20,1')
+    ->group(function () {
+        Route::get('/{tenant?}', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
+        Route::post('/{tenant?}/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])
+            ->middleware('throttle:5,1')
+            ->name('redeem');
+        Route::post('/{tenant?}/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])
+            ->middleware('throttle:3,1')
+            ->name('purchase');
+        Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+    });
 
 // ─── Platform Administration (Main Domain) ─────────────────
 Route::middleware(['auth', 'role:platform_admin'])
@@ -39,8 +46,7 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/configuration', [\App\Http\Controllers\Platform\ConfigurationController::class, 'index'])->name('configuration.index');
         Route::put('/configuration/general', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
-        Route::put('/configuration/mtn', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateMtn'])->name('configuration.mtn.update');
-        Route::put('/configuration/airtel', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateAirtel'])->name('configuration.airtel.update');
+        Route::put('/configuration/flutterwave', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateFlutterwave'])->name('configuration.flutterwave.update');
         Route::put('/configuration/email', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
         Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
         Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
@@ -56,10 +62,15 @@ Route::domain('{tenant}.localhost')
         // ─── Public Captive Portal (No Auth Required) ─────────────
         Route::prefix('portal')
             ->name('portal.')
+            ->middleware('throttle:20,1')
             ->group(function () {
                 Route::get('/', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
-                Route::post('/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])->name('redeem');
-                Route::post('/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])->name('purchase');
+                Route::post('/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])
+                    ->middleware('throttle:5,1')
+                    ->name('redeem');
+                Route::post('/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])
+                    ->middleware('throttle:3,1')
+                    ->name('purchase');
                 Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
             });
 
@@ -82,6 +93,7 @@ Route::domain('{tenant}.localhost')
                 Route::post('routers/{router}/ping', [\App\Http\Controllers\Operator\RouterController::class, 'ping'])->name('routers.ping');
                 Route::post('routers/{router}/reboot', [\App\Http\Controllers\Operator\RouterController::class, 'reboot'])->name('routers.reboot');
                 Route::post('routers/{router}/sync', [\App\Http\Controllers\Operator\RouterController::class, 'sync'])->name('routers.sync');
+                Route::post('routers/{router}/test', [\App\Http\Controllers\Operator\RouterController::class, 'testConnection'])->name('routers.test');
                 Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
 
                 // Live Sessions

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
+use App\Services\FlutterwaveWithdrawalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -18,7 +19,9 @@ class RevenueController extends Controller
 
         // 1. Platform KPIs
         // Total Commissions Earned
-        $totalCommissions = (float) Transaction::where('type', 'voucher_sale')->sum('platform_fee');
+        $totalCommissions = (float) Transaction::where('type', 'voucher_sale')
+            ->where('status', 'completed')
+            ->sum('platform_fee');
         
         // Subscription Revenue
         $subscriptionRevenue = (float) Tenant::where('subscription_status', 'active')->sum('plan_fee');
@@ -44,20 +47,14 @@ class RevenueController extends Controller
         ));
     }
 
-    public function approveWithdrawal(Transaction $transaction)
+    public function approveWithdrawal(Transaction $transaction, FlutterwaveWithdrawalService $withdrawals)
     {
-        if ($transaction->status !== 'pending') {
-            return back()->withErrors(['error' => 'This transaction is no longer pending.']);
+        $result = $withdrawals->approve($transaction);
+        if (! $result['ok']) {
+            return back()->withErrors(['error' => $result['message']]);
         }
 
-        DB::transaction(function () use ($transaction) {
-            // Mark as completed
-            $transaction->update(['status' => 'completed']);
-            
-            // In a live integration, the MTN B2C disbursement is triggered here
-        });
-
-        return back()->with('status', 'Withdrawal approved and funds released.');
+        return back()->with('status', $result['message']);
     }
 
     public function rejectWithdrawal(Transaction $transaction)
@@ -66,14 +63,26 @@ class RevenueController extends Controller
             return back()->withErrors(['error' => 'This transaction is no longer pending.']);
         }
 
-        DB::transaction(function () use ($transaction) {
-            // 1. Mark as rejected
-            $transaction->update(['status' => 'rejected']);
-            
-            // 2. Refund the money back to the operator's wallet
-            $tenant = $transaction->tenant;
-            $tenant->increment('wallet_balance', $transaction->amount);
+        $rejected = DB::transaction(function () use ($transaction) {
+            $locked = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+            if ($locked->status !== 'pending') {
+                return 'The withdrawal is no longer pending.';
+            }
+
+            if (! empty($locked->meta['flutterwave_transfer_id'])
+                || in_array($locked->meta['flutterwave_transfer_submission'] ?? null, ['submitting', 'submitted', 'unknown'], true)) {
+                return 'A Flutterwave transfer has been submitted or may be in progress. Reconcile it before rejecting the withdrawal.';
+            }
+
+            $locked->update(['status' => 'rejected']);
+            Tenant::query()->whereKey($locked->tenant_id)->increment('wallet_balance', $locked->amount);
+
+            return null;
         });
+
+        if ($rejected) {
+            return back()->withErrors(['error' => $rejected]);
+        }
 
         return back()->with('status', 'Withdrawal rejected. Funds returned to operator wallet.');
     }
@@ -105,4 +114,3 @@ class RevenueController extends Controller
         return back()->with('status', 'Operator balance adjusted successfully.');
     }
 }
-

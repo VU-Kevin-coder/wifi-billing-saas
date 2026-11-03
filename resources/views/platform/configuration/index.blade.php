@@ -183,22 +183,13 @@
                 @php
                     $integrationItems = [
                         [
-                            'key' => 'mtn',
-                            'name' => 'MTN MoMo',
-                            'desc' => 'Platform subscription billing & tenant voucher collections',
-                            'label' => 'MTN',
-                            'bg' => 'bg-amber-500/10',
-                            'text' => 'text-amber-600',
-                            'status' => $settings['mtn_status'],
-                        ],
-                        [
-                            'key' => 'airtel',
-                            'name' => 'Airtel Money',
-                            'desc' => 'Platform subscription billing & tenant voucher collections',
-                            'label' => 'AIR',
-                            'bg' => 'bg-red-500/10',
-                            'text' => 'text-red-600',
-                            'status' => $settings['airtel_status'],
+                            'key' => 'flutterwave',
+                            'name' => 'Flutterwave',
+                            'desc' => 'Uganda mobile money collections and operator payouts through Flutterwave',
+                            'label' => 'FLW',
+                            'bg' => 'bg-blue-500/10',
+                            'text' => 'text-blue-600',
+                            'status' => $settings['flutterwave_status'],
                         ],
                         [
                             'key' => 'email',
@@ -347,154 +338,74 @@
 
         </div>
 
-        <!-- ─── MTN OVERLAY ─── -->
-        <div x-show="activeOverlay === 'mtn'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
-            <div x-show="activeOverlay === 'mtn'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
+        <!-- Flutterwave settings overlay -->
+        <div x-show="activeOverlay === 'flutterwave'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
+            <div x-show="activeOverlay === 'flutterwave'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
             <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
-                <div x-show="activeOverlay === 'mtn'" x-transition:enter="transform transition ease-in-out duration-500" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transform transition ease-in-out duration-300" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full" class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+                <div x-show="activeOverlay === 'flutterwave'" x-transition:enter="transform transition ease-in-out duration-500" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transform transition ease-in-out duration-300" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full" class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
                     <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
                         <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-600 font-bold text-xs">MTN</div>
+                            <div class="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-600 font-bold text-xs">FLW</div>
                             <div>
-                                <h2 class="text-sm font-bold text-gray-900">MTN MoMo configuration</h2>
-                                <p class="text-[11px] text-gray-500">Collection API credentials & webhooks</p>
+                                <h2 class="text-sm font-bold text-gray-900">Flutterwave configuration</h2>
+                                <p class="text-[11px] text-gray-500">Uganda mobile money collections and transfers</p>
                             </div>
                         </div>
-                        <button @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
+                        <button type="button" @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" aria-label="Close configuration">Close</button>
                     </div>
-                    
-                    <form method="POST" action="{{ route('platform.configuration.mtn.update') }}" class="flex flex-col h-full overflow-y-auto">
+
+                    <form method="POST" action="{{ route('platform.configuration.flutterwave.update') }}" class="flex flex-col h-full overflow-y-auto">
                         @csrf
                         @method('PUT')
-                        <div class="flex-1 p-6 space-y-6">
+                        <div class="flex-1 p-6 space-y-5">
                             <div class="bg-blue-50 border border-blue-200/80 p-3.5 rounded-xl text-xs text-blue-800 leading-relaxed">
-                                <p class="font-bold">Sandbox draft &bull; {{ $settings['mtn_status'] }}</p>
-                                <p class="mt-1">Illustrative credentials only. Operator merchant accounts and customer hotspot payments are not affected.</p>
+                                <p class="font-bold">Status: {{ $settings['flutterwave_status'] }}</p>
+                                <p class="mt-1">Saved secret values are encrypted and never sent back to this page. Leave a secret blank to keep its current value.</p>
                             </div>
 
                             <div>
-                                <h3 class="text-xs font-bold text-gray-900 mb-3">Collection settings</h3>
+                                <label for="flutterwave_environment" class="block text-[11px] font-semibold text-gray-700 mb-1">Environment</label>
+                                <select id="flutterwave_environment" name="flutterwave_environment" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white">
+                                    <option value="sandbox" {{ $settings['flutterwave_environment'] === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
+                                    <option value="production" {{ $settings['flutterwave_environment'] === 'production' ? 'selected' : '' }}>Production</option>
+                                </select>
+                            </div>
+
+                            <div class="space-y-3">
                                 <div>
-                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Environment</label>
-                                    <select name="mtn_environment" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white">
-                                        <option value="sandbox" {{ $settings['mtn_environment'] === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
-                                        <option value="production" {{ $settings['mtn_environment'] === 'production' ? 'selected' : '' }}>Production</option>
-                                    </select>
+                                    <label for="flutterwave_public_key" class="block text-[11px] font-semibold text-gray-700 mb-1">Public key</label>
+                                    <input id="flutterwave_public_key" type="text" name="flutterwave_public_key" value="{{ $settings['flutterwave_public_key'] }}" autocomplete="off" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                                <div>
+                                    <label for="flutterwave_secret_key" class="block text-[11px] font-semibold text-gray-700 mb-1">Secret key</label>
+                                    <input id="flutterwave_secret_key" type="password" name="flutterwave_secret_key" autocomplete="new-password" placeholder="{{ $settings['flutterwave_secret_key_configured'] ? 'Saved - leave blank to keep current value' : 'Not configured' }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                                <div>
+                                    <label for="flutterwave_encryption_key" class="block text-[11px] font-semibold text-gray-700 mb-1">Encryption key</label>
+                                    <input id="flutterwave_encryption_key" type="password" name="flutterwave_encryption_key" autocomplete="new-password" placeholder="{{ $settings['flutterwave_encryption_key_configured'] ? 'Saved - leave blank to keep current value' : 'Not configured' }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                                <div>
+                                    <label for="flutterwave_webhook_secret" class="block text-[11px] font-semibold text-gray-700 mb-1">Webhook secret hash</label>
+                                    <input id="flutterwave_webhook_secret" type="password" name="flutterwave_webhook_secret" autocomplete="new-password" placeholder="{{ $settings['flutterwave_webhook_secret_configured'] ? 'Saved - leave blank to keep current value' : 'Not configured' }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                    <p class="mt-1 text-[10px] text-gray-500">This must match the secret hash configured in the Flutterwave dashboard.</p>
                                 </div>
                             </div>
 
-                            <div>
-                                <h3 class="text-xs font-bold text-gray-900 mb-3">API credentials</h3>
-                                <div class="space-y-3">
-                                    <div>
-                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">API user ID</label>
-                                        <input type="password" name="mtn_api_user" value="{{ $settings['mtn_api_user'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">API key</label>
-                                        <input type="password" name="mtn_api_key" value="{{ $settings['mtn_api_key'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Collection subscription key</label>
-                                        <input type="password" name="mtn_subscription_key" value="{{ $settings['mtn_subscription_key'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h3 class="text-xs font-bold text-gray-900 mb-3">Callback & validation</h3>
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Collection callback URL</label>
-                                    <input type="text" name="mtn_callback_url" value="{{ $settings['mtn_callback_url'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                            <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                                <label class="block text-xs font-semibold text-gray-900 mb-1">Webhook URL</label>
+                                <p class="text-[10px] text-gray-500 mb-2">Configure this URL in Flutterwave to receive charge and transfer events.</p>
+                                <div class="flex rounded-md shadow-sm">
+                                    <input id="flutterwave-webhook-url" type="text" readonly value="{{ url('/api/webhooks/flutterwave') }}" class="min-w-0 flex-1 rounded-l-md border-gray-300 bg-white text-gray-600 font-mono text-[10px]">
+                                    <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('flutterwave-webhook-url').value)" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-100 text-gray-600 text-xs hover:bg-gray-200 font-medium">Copy</button>
                                 </div>
                             </div>
                         </div>
 
                         <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-                            <p class="text-[10px] text-gray-500 flex items-center gap-1">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                                Secrets encrypted at rest
-                            </p>
+                            <p class="text-[10px] text-gray-500">Secrets encrypted at rest</p>
                             <div class="flex gap-2">
-                                <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
-                                <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors">Save configuration</button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── AIRTEL OVERLAY ─── -->
-        <div x-show="activeOverlay === 'airtel'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
-            <div x-show="activeOverlay === 'airtel'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
-            <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
-                <div x-show="activeOverlay === 'airtel'" x-transition:enter="transform transition ease-in-out duration-500" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transform transition ease-in-out duration-300" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full" class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
-                    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 bg-red-500/10 rounded-xl flex items-center justify-center text-red-600 font-bold text-xs">AIR</div>
-                            <div>
-                                <h2 class="text-sm font-bold text-gray-900">Airtel Money configuration</h2>
-                                <p class="text-[11px] text-gray-500">Merchant API credentials & webhooks</p>
-                            </div>
-                        </div>
-                        <button @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
-                    </div>
-                    
-                    <form method="POST" action="{{ route('platform.configuration.airtel.update') }}" class="flex flex-col h-full overflow-y-auto">
-                        @csrf
-                        @method('PUT')
-                        <div class="flex-1 p-6 space-y-6">
-                            <div class="bg-blue-50 border border-blue-200/80 p-3.5 rounded-xl text-xs text-blue-800 leading-relaxed">
-                                <p class="font-bold">Sandbox draft &bull; {{ $settings['airtel_status'] }}</p>
-                            </div>
-
-                            <div>
-                                <h3 class="text-xs font-bold text-gray-900 mb-3">Merchant application</h3>
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Environment</label>
-                                    <select name="airtel_environment" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white">
-                                        <option value="sandbox" {{ $settings['airtel_environment'] === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
-                                        <option value="production" {{ $settings['airtel_environment'] === 'production' ? 'selected' : '' }}>Production</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h3 class="text-xs font-bold text-gray-900 mb-3">Access & collection key</h3>
-                                <div class="space-y-3">
-                                    <div>
-                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Client ID</label>
-                                        <input type="password" name="airtel_client_id" value="{{ $settings['airtel_client_id'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[11px] font-semibold text-gray-700 mb-1">Client secret</label>
-                                        <input type="password" name="airtel_client_secret" value="{{ $settings['airtel_client_secret'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h3 class="text-xs font-bold text-gray-900 mb-3">Callback & validation</h3>
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-gray-700 mb-1">Payment callback URL</label>
-                                    <input type="text" name="airtel_callback_url" value="{{ $settings['airtel_callback_url'] }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-                            <p class="text-[10px] text-gray-500 flex items-center gap-1">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                                Secrets encrypted at rest
-                            </p>
-                            <div class="flex gap-2">
-                                <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
-                                <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors">Save configuration</button>
+                                <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50">Cancel</button>
+                                <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700">Save configuration</button>
                             </div>
                         </div>
                     </form>

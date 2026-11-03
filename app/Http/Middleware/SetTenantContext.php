@@ -20,15 +20,13 @@ class SetTenantContext
         $tenantFromHost = $this->context->resolveFromHost($host);
 
         if ($tenantFromHost) {
-            $this->context->setTenant($tenantFromHost);
-            
-            // Ensure the logged-in user actually belongs to this tenant!
+            // Strict tenant boundary — ensure the logged-in user actually belongs to this tenant!
             // (Unless they are a platform admin impersonating)
             if ($request->user() && $request->user()->tenant_id !== $tenantFromHost->id && ! $request->user()->hasRole('platform_admin')) {
-                auth()->logout();
-                return redirect()->route('login')->withErrors(['email' => 'You do not belong to this workspace.']);
+                abort(403, 'You do not have access to this workspace.');
             }
 
+            $this->context->setTenant($tenantFromHost);
             return $next($request);
         }
 
