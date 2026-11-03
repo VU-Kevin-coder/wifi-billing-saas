@@ -24,10 +24,20 @@ class PaymentService
         $amount = $package->price;
         $secretKey = PlatformSetting::get('flutterwave_secret_key');
 
-        // ✅ SIMULATION MODE: If no secret key exists, complete immediately
+        // Simulation is an explicit non-production-only escape hatch.
         if (empty($secretKey)) {
-            $voucher = $this->handleSuccessfulPackagePayment($tenant, $package, $phone, $transaction);
-            return ['status' => 'simulated_success', 'voucher' => $voucher];
+            if (config('payments.simulation_enabled', false) && ! app()->environment('production')) {
+                $voucher = $this->handleSuccessfulPackagePayment($tenant, $package, $phone, $transaction);
+
+                return ['status' => 'simulated_success', 'voucher' => $voucher];
+            }
+
+            $transaction->update(['status' => 'failed']);
+
+            return [
+                'status' => 'failed',
+                'error' => 'Flutterwave is not configured. Payment could not be initiated.',
+            ];
         }
 
         // Detect network from phone prefix
