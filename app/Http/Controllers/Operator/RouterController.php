@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
+use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -227,34 +228,33 @@ class RouterController extends Controller
     }
 
     /**
-     * Ping / Test connectivity for a specific router.
+     * Test the saved router's RouterOS API with a single read-only query.
      */
-    public function ping(Request $request, ...$args)
+    public function ping(Request $request, RouterConnectionService $connectionService, ...$args)
     {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
+        $result = $connectionService->test($router);
 
-        $latency = rand(8, 26);
-        $router->update([
-            'status' => 'online',
-            'last_seen_at' => now(),
-            'cpu_usage' => rand(18, 38),
-            'memory_usage' => rand(25, 48),
-        ]);
-
-        $message = "Router '{$router->name}' ({$router->management_ip}) is online. ICMP ping: {$latency}ms, RouterOS API reachable.";
-
-        if ($request->wantsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => $message,
+        if ($result['ok']) {
+            $router->update([
                 'status' => 'online',
-                'latency' => $latency,
-                'last_seen' => 'Just now',
+                'last_seen_at' => now(),
             ]);
         }
 
-        return back()->with('status', $message);
+        $payload = [
+            'success' => $result['ok'],
+            'message' => $result['message'],
+            'status' => $result['ok'] ? 'online' : $router->status,
+            'last_seen' => $result['ok'] ? 'Just now' : null,
+        ];
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json($payload, $result['ok'] ? 200 : 422);
+        }
+
+        return back()->with($result['ok'] ? 'status' : 'error', $result['message']);
     }
 
     /**
