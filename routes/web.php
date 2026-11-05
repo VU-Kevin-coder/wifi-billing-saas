@@ -24,6 +24,12 @@ Route::prefix('portal')
             ->middleware('throttle:3,1')
             ->name('purchase');
         Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+        Route::get('/{tenant}/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
+            ->whereNumber('transaction')
+            ->name('pending');
+        Route::get('/{tenant}/check/{transaction}', [\App\Http\Controllers\PortalController::class, 'check'])
+            ->whereNumber('transaction')
+            ->name('check');
     });
 
 // ─── Platform Administration (Main Domain) ─────────────────
@@ -47,6 +53,8 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::put('/configuration/general', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
         Route::put('/configuration/flutterwave', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateFlutterwave'])->name('configuration.flutterwave.update');
+        Route::put('/configuration/mtn', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateMtn'])->name('configuration.mtn.update');
+        Route::put('/configuration/airtel', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateAirtel'])->name('configuration.airtel.update');
         Route::put('/configuration/email', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
         Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
         Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
@@ -72,6 +80,12 @@ Route::domain('{tenant}.localhost')
                     ->middleware('throttle:3,1')
                     ->name('purchase');
                 Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+                Route::get('/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
+                    ->whereNumber('transaction')
+                    ->name('pending');
+                Route::get('/check/{transaction}', [\App\Http\Controllers\PortalController::class, 'check'])
+                    ->whereNumber('transaction')
+                    ->name('check');
             });
 
         // Secure single-use SSO transfer for cross-domain login
@@ -172,3 +186,49 @@ Route::middleware('auth')->group(function () {
 });
 
 require __DIR__.'/auth.php';
+
+// TEMPORARY: Simulate MTN Payment Success for Sandbox Testing
+Route::get('/simulate-momo-success/{reference}', function ($reference) {
+    abort_unless(in_array(config('app.env'), ['local', 'testing'], true), 404);
+
+    $transaction = \App\Models\Transaction::withoutGlobalScopes()
+        ->where('type', 'voucher_sale')
+        ->where('reference', $reference)
+        ->firstOrFail();
+    $tenant = \App\Models\Tenant::query()->findOrFail($transaction->tenant_id);
+
+    if ($transaction->status === 'pending') {
+        $packageId = $transaction->meta['package_id'] ?? null;
+        $phone = $transaction->phone ?? $transaction->meta['phone'] ?? null;
+        $package = $packageId
+            ? \App\Models\Package::withoutGlobalScopes()
+                ->where('tenant_id', $tenant->id)
+                ->find($packageId)
+            : null;
+
+        abort_unless($package && is_string($phone) && $phone !== '', 422, 'Missing package or phone in transaction.');
+        app(\App\Services\PaymentService::class)->handleSuccessfulPackagePayment(
+            $tenant,
+            $package,
+            $phone,
+            $transaction
+        );
+        $transaction->refresh();
+    }
+
+    abort_unless($transaction->status === 'completed', 409, 'Transaction was not completed successfully.');
+
+    $voucherId = $transaction->meta['voucher_id'] ?? null;
+    $voucher = $voucherId
+        ? \App\Models\Voucher::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->find($voucherId)
+        : null;
+    abort_unless($voucher, 404, 'Completed payment voucher not found.');
+
+    session()->forget('payment_token');
+
+    return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug])
+        ->with('voucher_code', $voucher->code)
+        ->with('mikrotik_url', 'http://10.5.50.1/login?username='.rawurlencode($voucher->code));
+})->middleware('web');

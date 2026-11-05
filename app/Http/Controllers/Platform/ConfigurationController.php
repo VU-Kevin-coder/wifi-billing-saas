@@ -55,6 +55,19 @@ class ConfigurationController extends Controller
             ),
             'flutterwave_status' => PlatformSetting::get('flutterwave_status', 'Not Configured'),
 
+            // Mobile money collections
+            'mtn_subscription_key_configured' => (bool) PlatformSetting::getSecret('mtn_subscription_key'),
+            'mtn_api_user_configured' => (bool) PlatformSetting::getSecret('mtn_api_user'),
+            'mtn_api_key_configured' => (bool) PlatformSetting::getSecret('mtn_api_key'),
+            'mtn_environment' => PlatformSetting::get('mtn_environment', 'sandbox'),
+            'mtn_webhook_url' => config('services.mtn_momo.webhook_url') ?: route('api.webhooks.mtn'),
+            'mtn_status' => PlatformSetting::get('mtn_status', 'Not Configured'),
+            'airtel_client_id_configured' => (bool) PlatformSetting::getSecret('airtel_client_id'),
+            'airtel_client_secret_configured' => (bool) PlatformSetting::getSecret('airtel_client_secret'),
+            'airtel_environment' => PlatformSetting::get('airtel_environment', 'sandbox'),
+            'airtel_webhook_url' => config('services.airtel_money.webhook_url') ?: route('api.webhooks.airtel'),
+            'airtel_status' => PlatformSetting::get('airtel_status', 'Not Configured'),
+
             // Email (SMTP)
             'smtp_host' => PlatformSetting::get('smtp_host'),
             'smtp_port' => PlatformSetting::get('smtp_port', 587),
@@ -141,6 +154,54 @@ class ConfigurationController extends Controller
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Flutterwave configuration saved.');
+    }
+
+    public function updateMtn(Request $request)
+    {
+        $validated = $request->validate([
+            'mtn_subscription_key' => 'nullable|string|max:255',
+            'mtn_api_user' => 'nullable|string|max:255',
+            'mtn_api_key' => 'nullable|string|max:255',
+            'mtn_environment' => 'required|in:sandbox,production',
+        ]);
+
+        foreach (['mtn_subscription_key', 'mtn_api_user', 'mtn_api_key'] as $key) {
+            if ($request->filled($key)) {
+                PlatformSetting::setSecret($key, $validated[$key]);
+            }
+        }
+
+        PlatformSetting::set('mtn_environment', $validated['mtn_environment']);
+        $configured = PlatformSetting::getSecret('mtn_subscription_key')
+            && PlatformSetting::getSecret('mtn_api_user')
+            && PlatformSetting::getSecret('mtn_api_key');
+        PlatformSetting::set('mtn_status', $configured ? 'Configured (Untested)' : 'Not Configured');
+
+        return redirect()->route('platform.configuration.index')
+            ->with('status', 'MTN MoMo configuration saved.');
+    }
+
+    public function updateAirtel(Request $request)
+    {
+        $validated = $request->validate([
+            'airtel_client_id' => 'nullable|string|max:255',
+            'airtel_client_secret' => 'nullable|string|max:255',
+            'airtel_environment' => 'required|in:sandbox,production',
+        ]);
+
+        foreach (['airtel_client_id', 'airtel_client_secret'] as $key) {
+            if ($request->filled($key)) {
+                PlatformSetting::setSecret($key, $validated[$key]);
+            }
+        }
+
+        PlatformSetting::set('airtel_environment', $validated['airtel_environment']);
+        $configured = PlatformSetting::getSecret('airtel_client_id')
+            && PlatformSetting::getSecret('airtel_client_secret');
+        PlatformSetting::set('airtel_status', $configured ? 'Configured (Untested)' : 'Not Configured');
+
+        return redirect()->route('platform.configuration.index')
+            ->with('status', 'Airtel Money configuration saved.');
     }
 
     public function updateEmail(Request $request)

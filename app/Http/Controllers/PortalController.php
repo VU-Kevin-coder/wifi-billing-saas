@@ -133,7 +133,7 @@ class PortalController extends Controller
             $request->input('phone'),
             $transaction,
             $request->input('email'),
-            route('portal.success', ['tenant' => $tenantModel->slug])
+            $this->portalUrl($request, 'success', $tenantModel)
         );
 
         if (in_array($result['status'], ['simulated_success', 'pending'], true)) {
@@ -143,13 +143,65 @@ class PortalController extends Controller
                 return redirect()->away($result['authorization_url']);
             }
 
-            return redirect()->route('portal.success', ['tenant' => $tenantModel->slug])
-                ->with('payment_token', $paymentToken);
+            if ($result['status'] === 'simulated_success') {
+                return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
+                    ->with('voucher_code', $result['voucher']->code);
+            }
+
+            return redirect()->to($this->portalUrl($request, 'pending', $tenantModel, $transaction));
         }
 
         return back()->withErrors([
             'phone' => 'Payment failed: '.($result['error'] ?? 'Please try again.'),
         ]);
+    }
+
+    public function pending(
+        Request $request,
+        TenantContext $context
+    ) {
+        $tenantModel = $this->resolvePortalTenant($request, $context);
+
+        $payment = $this->findSessionPayment((int) $request->route('transaction'), $tenantModel);
+
+        return view('portal.pending', [
+            'tenant' => $tenantModel,
+            'transaction' => $payment,
+            'checkUrl' => $this->portalUrl($request, 'check', $tenantModel, $payment),
+            'successUrl' => $this->portalUrl($request, 'success', $tenantModel),
+            'portalUrl' => $this->portalUrl($request, 'index', $tenantModel),
+        ]);
+    }
+
+    public function check(
+        Request $request,
+        TenantContext $context,
+        PaymentService $paymentService
+    ): JsonResponse {
+        $tenantModel = $this->resolvePortalTenant($request, $context);
+
+        $payment = $this->findSessionPayment((int) $request->route('transaction'), $tenantModel);
+        if ($payment->status === 'pending') {
+            $paymentService->reconcilePendingPayment($payment);
+            $payment->refresh();
+        }
+
+        if ($payment->status === 'completed') {
+            return response()->json([
+                'status' => 'completed',
+                'redirect_url' => $this->portalUrl($request, 'success', $tenantModel),
+            ])->header('Cache-Control', 'no-store');
+        }
+
+        if ($payment->status === 'failed') {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Payment failed. Please return to the portal and try again.',
+            ])->header('Cache-Control', 'no-store');
+        }
+
+        return response()->json(['status' => 'pending'])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function success(Request $request, TenantContext $context, ?string $tenant = null)
@@ -158,8 +210,26 @@ class PortalController extends Controller
         abort_unless($tenantModel, 404);
 
         $mikrotikUrl = session('mikrotik_url');
-        $voucherCode = session('voucher_code');
+        $voucherCode = $request->query('voucher') ?? session('voucher_code');
         $paymentToken = session('payment_token');
+
+        if ($request->query->has('voucher')) {
+            $transaction = $paymentToken
+                ? Transaction::query()
+                    ->where('tenant_id', $tenantModel->id)
+                    ->where('type', 'voucher_sale')
+                    ->where('meta->payment_token_hash', hash('sha256', $paymentToken))
+                    ->where('status', 'completed')
+                    ->first()
+                : null;
+            $voucherId = $transaction?->meta['voucher_id'] ?? null;
+            $voucher = $voucherId
+                ? Voucher::where('tenant_id', $tenantModel->id)->find($voucherId)
+                : null;
+
+            abort_unless($voucher && hash_equals($voucher->code, (string) $voucherCode), 404);
+            $voucherCode = $voucher->code;
+        }
 
         if (! $mikrotikUrl && ! $paymentToken) {
             return redirect()->route('portal.index', ['tenant' => $tenantModel->slug]);
@@ -176,6 +246,57 @@ class PortalController extends Controller
                 ? route('api.payments.activate', ['token' => $paymentToken], false)
                 : null,
         ]);
+    }
+
+    private function findSessionPayment(int $transactionId, Tenant $tenant): Transaction
+    {
+        $payment = Transaction::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('type', 'voucher_sale')
+            ->findOrFail($transactionId);
+        $token = session('payment_token');
+        $tokenHash = $payment->meta['payment_token_hash'] ?? null;
+
+        abort_unless(
+            is_string($token)
+                && is_string($tokenHash)
+                && hash_equals($tokenHash, hash('sha256', $token)),
+            404
+        );
+
+        return $payment;
+    }
+
+    private function resolvePortalTenant(Request $request, TenantContext $context): Tenant
+    {
+        $routeTenant = $request->route('tenant');
+        $tenant = is_string($routeTenant)
+            ? Tenant::where('slug', $routeTenant)->first()
+            : $context->getTenant();
+
+        abort_unless(
+            $tenant && (! $context->getTenant() || $context->getTenant()->is($tenant)),
+            404
+        );
+
+        return $tenant;
+    }
+
+    private function portalUrl(
+        Request $request,
+        string $page,
+        Tenant $tenant,
+        ?Transaction $transaction = null
+    ): string {
+        $directPortal = $request->routeIs('portal.direct.*');
+        $routeName = $directPortal ? 'portal.direct.'.$page : 'portal.'.$page;
+        $parameters = ['tenant' => $tenant->slug];
+
+        if ($transaction) {
+            $parameters['transaction'] = $transaction->id;
+        }
+
+        return route($routeName, $parameters);
     }
 
     public function activatePayment(
@@ -227,7 +348,7 @@ class PortalController extends Controller
         ]);
     }
 
-    public function paymentStatus(string $token): JsonResponse
+    public function paymentStatus(string $token, PaymentService $paymentService): JsonResponse
     {
         $transaction = Transaction::query()
             ->where('type', 'voucher_sale')
@@ -236,6 +357,11 @@ class PortalController extends Controller
 
         if (! $transaction) {
             return response()->json(['status' => 'not_found'], 404);
+        }
+
+        if ($transaction->status === 'pending' && ! empty($transaction->provider_reference)) {
+            $paymentService->reconcilePendingPayment($transaction);
+            $transaction->refresh();
         }
 
         if ($transaction->status === 'pending') {

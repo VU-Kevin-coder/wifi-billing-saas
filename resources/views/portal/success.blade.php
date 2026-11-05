@@ -24,7 +24,17 @@
         const paymentActivationUrl = @json($paymentActivationUrl);
         const initialMikrotikUrl = @json($mikrotikUrl);
 
+        let connectionCountdown;
+
         function connectToWifi(url, voucherCode = null) {
+            if (!url) {
+                document.getElementById('payment-message').textContent =
+                    'Your voucher is ready, but the Wi-Fi login link is unavailable. Use the voucher code to connect.';
+                document.getElementById('payment-spinner').classList.add('hidden');
+                return;
+            }
+
+            window.clearInterval(connectionCountdown);
             document.getElementById('mikrotik-link').href = url;
             document.getElementById('mikrotik-link').classList.remove('hidden');
             document.getElementById('payment-spinner').classList.add('hidden');
@@ -32,8 +42,18 @@
                 document.getElementById('voucher-code').textContent = voucherCode;
                 document.getElementById('voucher-panel').classList.remove('hidden');
             }
-            document.getElementById('payment-message').textContent = 'Your access is active. Connecting to Wi-Fi now…';
-            setTimeout(() => window.location.assign(url), 5000);
+            document.getElementById('payment-message').innerHTML =
+                'Your access is active. Connecting in <span id="countdown">3</span>s…';
+
+            let seconds = 3;
+            connectionCountdown = window.setInterval(() => {
+                seconds--;
+                document.getElementById('countdown').textContent = seconds;
+                if (seconds <= 0) {
+                    window.clearInterval(connectionCountdown);
+                    window.location.assign(url);
+                }
+            }, 1000);
         }
 
         async function activatePaidVoucher(payment) {

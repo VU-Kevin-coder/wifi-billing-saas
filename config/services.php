@@ -43,4 +43,16 @@ return [
         'environment' => env('FLUTTERWAVE_ENVIRONMENT', 'sandbox'),
     ],
 
+    'mtn_momo' => [
+        'sandbox_url' => env('MTN_MOMO_SANDBOX_URL', 'https://sandbox.momodeveloper.mtn.com'),
+        'production_url' => env('MTN_MOMO_PRODUCTION_URL', 'https://proxy.momoapi.mtn.com'),
+        'webhook_url' => env('MTN_MOMO_WEBHOOK_URL'),
+    ],
+
+    'airtel_money' => [
+        'sandbox_url' => env('AIRTEL_MONEY_SANDBOX_URL', 'https://openapiuat.airtel.africa'),
+        'production_url' => env('AIRTEL_MONEY_PRODUCTION_URL', 'https://openapi.airtel.africa'),
+        'webhook_url' => env('AIRTEL_MONEY_WEBHOOK_URL'),
+    ],
+
 ];
