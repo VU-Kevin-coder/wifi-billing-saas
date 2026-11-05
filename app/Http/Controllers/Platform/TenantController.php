@@ -10,7 +10,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class TenantController extends Controller
 {
@@ -18,10 +18,10 @@ class TenantController extends Controller
     {
         // 1. Global KPIs
         $totalOperators    = Tenant::count();
-        $managedRouters    = Router::withoutGlobalScopes()->count();
-        $onlineRouters     = Router::withoutGlobalScopes()->where('status', 'online')->count();
+        $managedRouters    = Router::withoutTenancy()->count();
+        $onlineRouters     = Router::withoutTenancy()->where('status', 'online')->count();
         $offlineRouters    = $managedRouters - $onlineRouters;
-        $endCustomers      = Customer::withoutGlobalScopes()->count();
+        $endCustomers      = Customer::withoutTenancy()->count();
         $trialsInProgress  = Tenant::where('created_at', '>=', now()->subDays(14))->count();
         $activeOperators   = Tenant::where('status', 'active')->count();
         $suspendedOperators = Tenant::where('status', 'suspended')->count();
@@ -41,14 +41,14 @@ class TenantController extends Controller
         // 3. Attach additional metrics to each tenant
         foreach ($tenants as $tenant) {
             // Package usage
-            $packageCount  = Package::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count();
-            $customerCount = Customer::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count();
+            $packageCount  = Package::withoutTenancy()->where('tenant_id', $tenant->id)->count();
+            $customerCount = Customer::withoutTenancy()->where('tenant_id', $tenant->id)->count();
 
             $tenant->package_usage      = "{$customerCount} / {$packageCount}";
             $tenant->package_percentage = $packageCount > 0 ? round(($customerCount / $packageCount) * 100) : 0;
 
             // Router health
-            $tenantOnline         = Router::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
+            $tenantOnline         = Router::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
             $tenant->router_health  = "{$tenantOnline} / {$tenant->router_count}";
             $tenant->router_healthy = ($tenant->router_count === 0) || ($tenantOnline === $tenant->router_count);
 
@@ -68,16 +68,16 @@ class TenantController extends Controller
         $tenant->load('plan');
 
         // 1. KPI Metrics
-        $customerCount = Customer::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count();
-        $packageCount  = Package::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count();
-        $routerCount   = Router::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count();
-        $onlineRouters = Router::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
+        $customerCount = Customer::withoutTenancy()->where('tenant_id', $tenant->id)->count();
+        $packageCount  = Package::withoutTenancy()->where('tenant_id', $tenant->id)->count();
+        $routerCount   = Router::withoutTenancy()->where('tenant_id', $tenant->id)->count();
+        $onlineRouters = Router::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
 
         // 2. Staff list
-        $staff = User::withoutGlobalScopes()->where('tenant_id', $tenant->id)->with('roles')->get();
+        $staff = User::withoutTenancy()->where('tenant_id', $tenant->id)->with('roles')->get();
 
         // 3. Recent sessions (live activity)
-        $recentActivity = \App\Models\Session::withoutGlobalScopes()
+        $recentActivity = \App\Models\Session::withoutTenancy()
             ->where('tenant_id', $tenant->id)
             ->with(['customer', 'package'])
             ->latest('started_at')
@@ -94,13 +94,16 @@ class TenantController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'slug' => 'required|string|max:100|unique:tenants,slug|alpha_dash',
+            'slug' => [
+                'required', 'string', 'max:100', 'unique:tenants,slug', 'alpha_dash',
+                Rule::notIn(Tenant::reservedSlugs()),
+            ],
             'platform_plan_id' => 'nullable|exists:platform_plans,id',
             'plan' => 'nullable|string',
             'status' => 'required|string|in:trial,active,suspended',
             'owner_name' => 'required|string|max:255',
             'owner_email' => 'required|email|max:255|unique:users,email',
-            'owner_password' => 'nullable|string|min:6',
+            'owner_password' => 'required|string|min:8',
         ]);
 
         // Resolve plan dynamically from DB
@@ -133,7 +136,7 @@ class TenantController extends Controller
             'tenant_id' => $tenant->id,
             'name' => $validated['owner_name'],
             'email' => $validated['owner_email'],
-            'password' => Hash::make($validated['owner_password'] ?: 'password'),
+            'password' => Hash::make($validated['owner_password']),
         ]);
         $user->email_verified_at = now();
         $user->save();
@@ -144,4 +147,3 @@ class TenantController extends Controller
             ->with('success', "Operator tenant '{$tenant->name}' created successfully with owner {$user->email}.");
     }
 }
-

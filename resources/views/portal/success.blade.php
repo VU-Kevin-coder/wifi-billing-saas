@@ -102,6 +102,12 @@
                     document.getElementById('payment-spinner').classList.add('hidden');
                     return;
                 }
+
+                if (payment.status === 'provisioning' || payment.status === 'activation_pending') {
+                    document.getElementById('page-title').textContent = 'Activating your Wi-Fi access…';
+                    document.getElementById('payment-message').textContent =
+                        'Payment confirmed. Waiting for the site router to activate your access.';
+                }
             } catch (error) {
                 document.getElementById('payment-message').textContent = 'Checking payment status… Keep this page open.';
             }

@@ -81,7 +81,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
             }
 
             $reference = rawurldecode(basename($request->url()));
-            $transaction = Transaction::query()
+            $transaction = Transaction::withoutTenancy()
                 ->where('provider_reference', $reference)
                 ->firstOrFail();
 
@@ -99,7 +99,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
             'phone' => '0771234567',
         ]);
 
-        $transaction = Transaction::query()
+        $transaction = Transaction::withoutTenancy()
             ->where('tenant_id', $tenant->id)
             ->whereNotNull('provider_reference')
             ->firstOrFail();
@@ -174,6 +174,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
 
     public function test_local_momo_simulator_redirects_to_success_and_can_be_replayed_without_duplicate_fulfillment(): void
     {
+        config(['payments.simulation_enabled' => true]);
         [$tenant, , $transaction] = $this->createPendingPayment();
         $successUrl = route('portal.direct.success', ['tenant' => $tenant->slug]);
 
@@ -244,14 +245,14 @@ class MobileMoneyPaymentFlowTest extends TestCase
         ])->assertRedirect(
             route('portal.pending', [
                 'tenant' => $tenant->slug,
-                'transaction' => Transaction::query()
+                'transaction' => Transaction::withoutTenancy()
                     ->where('tenant_id', $tenant->id)
                     ->whereNotNull('provider_reference')
                     ->value('id'),
             ])
         );
 
-        $transaction = Transaction::query()
+        $transaction = Transaction::withoutTenancy()
             ->where('tenant_id', $tenant->id)
             ->whereNotNull('provider_reference')
             ->firstOrFail();
@@ -372,6 +373,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
 
         $this->assertSame('pending', $result['status']);
         $this->assertSame('airtel-payment-id', $transaction->fresh()->provider_reference);
+        $this->assertSame('AIRTEL', $transaction->fresh()->meta['payment_provider'] ?? null);
         Http::assertSent(function (ClientRequest $request): bool {
             return $request->url() === self::AIRTEL_URL.'/merchant/v1/payments/'
                 && $request['subscriber']['msisdn'] === '256701234567'
@@ -379,8 +381,9 @@ class MobileMoneyPaymentFlowTest extends TestCase
                 && $request->hasHeader('X-Country', 'UG');
         });
 
-        $this->getJson('/api/payments/'.self::PAYMENT_STATUS_TOKEN)
-            ->assertOk()
+        $statusResponse = $this->getJson('/api/payments/'.self::PAYMENT_STATUS_TOKEN);
+        Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), '/standard/v1/payments/'));
+        $statusResponse->assertOk()
             ->assertJsonPath('status', 'completed');
         $this->assertSame('completed', $transaction->fresh()->status);
         $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
@@ -487,11 +490,11 @@ class MobileMoneyPaymentFlowTest extends TestCase
             'status' => 'pending',
             'reference' => 'ONL-TEST-001',
             'phone' => '0771234567',
+            'payment_token_hash' => hash('sha256', self::PAYMENT_STATUS_TOKEN),
             'description' => 'Online Purchase: One hour',
             'meta' => [
                 'package_id' => $package->id,
                 'phone' => '0771234567',
-                'payment_token_hash' => hash('sha256', self::PAYMENT_STATUS_TOKEN),
             ],
         ]);
 

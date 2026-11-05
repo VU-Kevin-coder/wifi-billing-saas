@@ -56,7 +56,7 @@ class FlutterwaveWebhookController extends Controller
             return response()->json(['status' => 'missing_transaction_details'], 400);
         }
 
-        $transaction = Transaction::query()
+        $transaction = Transaction::withoutTenancy()
             ->where('type', 'voucher_sale')
             ->where('reference', $reference)
             ->first();
@@ -98,7 +98,10 @@ class FlutterwaveWebhookController extends Controller
         $verifiedStatus = strtolower((string) ($verified['status'] ?? ''));
         if ($verifiedStatus === 'failed') {
             DB::transaction(function () use ($transaction): void {
-                $locked = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+                $locked = Transaction::withoutTenancy()
+                    ->where('tenant_id', $transaction->tenant_id)
+                    ->lockForUpdate()
+                    ->findOrFail($transaction->id);
                 if ($locked->status === 'pending') {
                     $locked->update(['status' => 'failed']);
                 }
@@ -114,7 +117,7 @@ class FlutterwaveWebhookController extends Controller
         $tenant = Tenant::query()->find($transaction->tenant_id);
         $packageId = $transaction->meta['package_id'] ?? null;
         $package = $packageId
-            ? Package::withoutGlobalScopes()
+            ? Package::withoutTenancy()
                 ->where('tenant_id', $transaction->tenant_id)
                 ->find($packageId)
             : null;

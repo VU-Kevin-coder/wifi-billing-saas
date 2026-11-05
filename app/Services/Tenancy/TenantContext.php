@@ -82,17 +82,24 @@ class TenantContext
     public function resolveFromHost(string $host): ?Tenant
     {
         // Strip the port if present (e.g., "acme.localhost:8000" -> "acme.localhost")
-        $hostWithoutPort = explode(':', $host)[0];
-        
-        // Split by dots
-        $parts = explode('.', $hostWithoutPort);
+        $host = strtolower(explode(':', $host)[0]);
+        $baseDomain = strtolower((string) config('tenancy.base_domain', 'localhost'));
 
-        // If it's just "localhost" or "127.0.0.1", there is no subdomain
-        if (count($parts) < 2 || $parts[0] === 'localhost' || $parts[0] === '127') {
+        if ($host === '' || $host === $baseDomain) {
             return null;
         }
 
-        $slug = $parts[0]; // "acme" from "acme.localhost"
+        $suffix = '.'.$baseDomain;
+        if (! str_ends_with($host, $suffix)) {
+            return null;
+        }
+
+        $slug = substr($host, 0, -strlen($suffix));
+
+        // Only a single label is allowed (no nested subdomains).
+        if ($slug === '' || str_contains($slug, '.')) {
+            return null;
+        }
 
         return Tenant::where('slug', $slug)->first();
     }

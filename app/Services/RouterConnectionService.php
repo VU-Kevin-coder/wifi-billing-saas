@@ -17,6 +17,13 @@ class RouterConnectionService
 {
     public function test(Router $router): array
     {
+        if (config('site_agent.required')) {
+            return [
+                'ok' => false,
+                'message' => 'Direct router connections are disabled. Use the paired site agent.',
+            ];
+        }
+
         if (blank($router->management_ip) || blank($router->api_username) || blank($router->api_password)) {
             return [
                 'ok' => false,
@@ -107,6 +114,10 @@ class RouterConnectionService
 
     public function disconnectUser(Router $router, string $voucherCode): bool
     {
+        if (config('site_agent.required')) {
+            throw new RuntimeException('Direct router connections are disabled. Use the paired site agent.');
+        }
+
         if (blank($router->management_ip) || blank($router->api_username) || blank($router->api_password)) {
             throw new RuntimeException("Router {$router->getKey()} is missing API connection details.");
         }

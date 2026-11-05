@@ -113,10 +113,7 @@ class RouterController extends Controller
                 Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
             ],
             'hardware_model' => ['nullable', 'string', 'max:255'],
-            'management_ip' => ['required', 'string', 'max:255'],
-            'api_port' => ['required', 'integer', 'between:1,65535'],
-            'api_username' => ['required', 'string', 'max:255'],
-            'api_password' => ['required', 'string', 'min:1'],
+            'api_port' => ['nullable', 'integer', 'between:1,65535'],
             'has_wireless' => ['nullable', 'boolean'],
             'ethernet_ports' => ['nullable', 'array'],
             'enable_hotspot' => ['nullable', 'boolean'],
@@ -136,15 +133,15 @@ class RouterController extends Controller
             'name' => $validated['name'],
             'site' => $site?->name ?? ($validated['site'] ?? null),
             'hardware_model' => $validated['hardware_model'] ?? 'hEX / RB750Gr3',
-            'management_ip' => $validated['management_ip'],
+            'management_ip' => null,
             'status' => 'provisioning',
             'cpu_usage' => 0,
             'memory_usage' => 0,
             'active_users' => 0,
             'last_seen_at' => null,
-            'api_username' => $validated['api_username'],
-            'api_password' => $validated['api_password'],
-            'api_port' => $validated['api_port'],
+            'api_username' => null,
+            'api_password' => null,
+            'api_port' => $validated['api_port'] ?? 8728,
             'has_wireless' => $request->boolean('has_wireless'),
             'enable_hotspot' => $request->boolean('enable_hotspot', true),
             'hotspot_config' => [
@@ -157,7 +154,7 @@ class RouterController extends Controller
         ]);
 
         return redirect()->route('operator.routers.show', $router)
-            ->with('status', "Router '{$router->name}' added successfully. Use Test LAN API to verify the connection.");
+            ->with('status', "Router '{$router->name}' added. Configure its credentials in the local site-agent router map.");
     }
 
     /**
@@ -170,7 +167,7 @@ class RouterController extends Controller
         $router = $this->resolveTenantRouter($args, $context);
         abort_unless($tenant, 404, 'Tenant not found');
         $assignedSite = $router->site_id
-            ? Site::withoutGlobalScopes()
+            ? Site::withoutTenancy()
                 ->where('tenant_id', $router->tenant_id)
                 ->find($router->site_id)
             : null;
@@ -186,14 +183,17 @@ class RouterController extends Controller
     {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
+        $hasActiveSessions = Session::where('router_id', $router->id)
+            ->where('status', 'active')
+            ->exists();
+
+        if ($hasActiveSessions) {
+            return back()->withErrors([
+                'router' => 'Disconnect or expire active sessions before removing this router.',
+            ]);
+        }
 
         $name = $router->name;
-        Session::where('router_id', $router->id)
-            ->where('status', 'active')
-            ->update([
-                'status' => 'disconnected',
-                'expires_at' => now(),
-            ]);
         $router->delete();
 
         return redirect()->route('operator.routers.index')
@@ -203,32 +203,32 @@ class RouterController extends Controller
     /**
      * Ping / Test connectivity for a specific router.
      */
-    public function ping(Request $request, ...$args)
+    public function ping(Request $request, RouterConnectionService $connectionService, ...$args)
     {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
 
-        $latency = rand(8, 26);
-        $router->update([
-            'status' => 'online',
-            'last_seen_at' => now(),
-            'cpu_usage' => rand(18, 38),
-            'memory_usage' => rand(25, 48),
-        ]);
-
-        $message = "Router '{$router->name}' ({$router->management_ip}) is online. ICMP ping: {$latency}ms, RouterOS API reachable.";
+        $startedAt = microtime(true);
+        $result = $connectionService->test($router);
+        $latency = (int) round((microtime(true) - $startedAt) * 1000);
+        if ($result['ok']) {
+            $router->update(['status' => 'online', 'last_seen_at' => now()]);
+        }
+        $message = $result['ok']
+            ? "Router '{$router->name}' responded to the RouterOS API check."
+            : "Router '{$router->name}' could not be checked: {$result['message']}";
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
-                'success' => true,
+                'success' => $result['ok'],
                 'message' => $message,
-                'status' => 'online',
-                'latency' => $latency,
-                'last_seen' => 'Just now',
-            ]);
+                'status' => $result['ok'] ? 'online' : $router->status,
+                'latency' => $result['ok'] ? $latency : null,
+                'last_seen' => $result['ok'] ? 'Just now' : null,
+            ], $result['ok'] ? 200 : 503);
         }
 
-        return back()->with('status', $message);
+        return back()->with($result['ok'] ? 'status' : 'error', $message);
     }
 
     public function testConnection(Request $request, RouterConnectionService $connectionService, ...$args)
@@ -244,23 +244,9 @@ class RouterController extends Controller
      */
     public function reboot(Request $request, ...$args)
     {
-        $context = app(TenantContext::class);
-        $router = $this->resolveTenantRouter($args, $context);
+        $this->resolveTenantRouter($args, app(TenantContext::class));
 
-        $router->update([
-            'last_seen_at' => now(),
-        ]);
-
-        $message = "Reboot command sent to '{$router->name}'. System will restart and re-establish connection.";
-
-        if ($request->wantsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => $message,
-            ]);
-        }
-
-        return back()->with('status', $message);
+        return $this->unsupportedRouterOperation($request, 'Reboot is unavailable until the site agent supports reboot commands.');
     }
 
     /**
@@ -268,44 +254,29 @@ class RouterController extends Controller
      */
     public function sync(Request $request, ...$args)
     {
-        $context = app(TenantContext::class);
-        $router = $this->resolveTenantRouter($args, $context);
+        $this->resolveTenantRouter($args, app(TenantContext::class));
 
-        $router->update([
-            'status' => 'online',
-            'last_seen_at' => now(),
-        ]);
-
-        $message = "Hotspot configuration, user profiles and RADIUS secrets synced with '{$router->name}'.";
-
-        if ($request->wantsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => $message,
-            ]);
-        }
-
-        return back()->with('status', $message);
+        return $this->unsupportedRouterOperation($request, 'Router synchronization is unavailable until the site agent supports sync commands.');
     }
 
     /**
      * Ping / Refresh health check for all routers of the current tenant.
      */
-    public function pingAll(Request $request, TenantContext $context)
+    public function pingAll(Request $request, TenantContext $context, RouterConnectionService $connectionService)
     {
         $tenantId = $context->getTenantId();
         $routers = Router::where('tenant_id', $tenantId)->get();
+        $responded = 0;
 
-        foreach ($routers as $r) {
-            if ($r->status !== 'offline') {
-                $r->update([
-                    'last_seen_at' => now(),
-                    'cpu_usage' => rand(15, 36),
-                ]);
+        foreach ($routers as $router) {
+            $result = $connectionService->test($router);
+            if ($result['ok']) {
+                $router->update(['status' => 'online', 'last_seen_at' => now()]);
+                $responded++;
             }
         }
 
-        $message = 'Health check completed across all '.$routers->count().' router(s) in your workspace.';
+        $message = "Router API health check completed: {$responded} of {$routers->count()} router(s) responded.";
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
@@ -344,32 +315,23 @@ class RouterController extends Controller
 
         switch ($action) {
             case 'ping':
-                foreach ($routers as $r) {
-                    $r->update(['last_seen_at' => now(), 'status' => 'online']);
-                }
-                $message = "Ping health check dispatched to {$count} router(s).";
-                break;
-
             case 'reboot':
-                $message = "Reboot command dispatched to {$count} router(s).";
-                break;
-
             case 'sync':
-                foreach ($routers as $r) {
-                    $r->update(['last_seen_at' => now()]);
-                }
-                $message = "Hotspot and RADIUS profile configuration synced to {$count} router(s).";
-                break;
+                return back()->withErrors([
+                    'bulk' => "Bulk {$action} is unavailable until the site agent supports this operation.",
+                ]);
 
             case 'delete':
-                foreach ($routers as $r) {
-                    Session::where('router_id', $r->id)
-                        ->where('status', 'active')
-                        ->update([
-                            'status' => 'disconnected',
-                            'expires_at' => now(),
-                        ]);
-                    $r->delete();
+                $hasActiveSessions = Session::whereIn('router_id', $routers->modelKeys())
+                    ->where('status', 'active')
+                    ->exists();
+                if ($hasActiveSessions) {
+                    return back()->withErrors([
+                        'bulk' => 'Disconnect or expire active sessions before removing routers.',
+                    ]);
+                }
+                foreach ($routers as $router) {
+                    $router->delete();
                 }
                 $message = "Successfully removed {$count} router(s) from your workspace.";
                 break;
@@ -397,5 +359,14 @@ class RouterController extends Controller
         }
 
         return $router;
+    }
+
+    private function unsupportedRouterOperation(Request $request, string $message)
+    {
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json(['success' => false, 'message' => $message], 501);
+        }
+
+        return back()->withErrors(['router' => $message]);
     }
 }

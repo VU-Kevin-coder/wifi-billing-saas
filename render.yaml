@@ -8,7 +8,7 @@ services:
     dockerfilePath: ./Dockerfile.render
     plan: free
     # Render injects PORT; our Nginx listens on 8080
-    healthCheckPath: /
+    healthCheckPath: /up
     envVars:
       - key: APP_NAME
         value: "Hamnet Wi-Fi Billing System"
@@ -20,8 +20,10 @@ services:
         generateValue: true       # Render auto-generates a secure key
       - key: APP_URL
         value: https://hamnet-app.onrender.com  # update after first deploy
+      - key: TRUSTED_PROXIES
+        value: "*"
       - key: DB_CONNECTION
-        value: mysql
+        value: pgsql
       - key: DB_HOST
         fromDatabase:
           name: hamnet-db
@@ -56,4 +58,3 @@ databases:
     plan: free          # Render free PostgreSQL (use DB_CONNECTION=pgsql above if switching)
     databaseName: hamnet
     user: hamnet
-

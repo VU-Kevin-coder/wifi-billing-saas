@@ -88,12 +88,17 @@ class DemoDataSeeder extends Seeder
             $beta->save();
         }
 
+        $seedPassword = (string) env('SEED_ADMIN_PASSWORD', '');
+        if ($seedPassword === '') {
+            $seedPassword = \Illuminate\Support\Str::password(24);
+        }
+
         // ─── Platform Admin (no tenant) ─────────────────────
         $platformAdmin = User::firstOrCreate(
             ['email' => 'platform@wifi-billing.test'],
             [
                 'name' => 'Platform Admin',
-                'password' => Hash::make('password'),
+                'password' => Hash::make($seedPassword),
                 'tenant_id' => null,
                 'email_verified_at' => now(),
             ]
@@ -105,7 +110,7 @@ class DemoDataSeeder extends Seeder
             ['email' => 'admin@acme.test'],
             [
                 'name' => 'Acme Owner',
-                'password' => Hash::make('password'),
+                'password' => Hash::make($seedPassword),
                 'tenant_id' => $acme->id,
                 'email_verified_at' => now(),
             ]
@@ -116,7 +121,7 @@ class DemoDataSeeder extends Seeder
             ['email' => 'finance@acme.test'],
             [
                 'name' => 'Acme Finance',
-                'password' => Hash::make('password'),
+                'password' => Hash::make($seedPassword),
                 'tenant_id' => $acme->id,
                 'email_verified_at' => now(),
             ]
@@ -128,7 +133,7 @@ class DemoDataSeeder extends Seeder
             ['email' => 'admin@beta.test'],
             [
                 'name' => 'Beta Owner',
-                'password' => Hash::make('password'),
+                'password' => Hash::make($seedPassword),
                 'tenant_id' => $beta->id,
                 'email_verified_at' => now(),
             ]

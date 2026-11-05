@@ -55,9 +55,10 @@ class TenantIsolationTest extends TestCase
             $this->assertEquals(['Bob Beta'], Customer::pluck('name')->toArray());
         });
 
-        // Without a context (platform admin), we see ALL 3
+        // Without tenant context, tenant-owned data fails closed.
         $context->forget();
-        $this->assertCount(3, Customer::all());
+        $this->assertCount(0, Customer::all());
+        $this->assertCount(3, Customer::withoutTenancy()->get());
     }
 
     public function test_tenant_id_is_auto_populated_on_create(): void

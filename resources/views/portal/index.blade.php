@@ -32,11 +32,17 @@
         <!-- Header Banner -->
         <div class="bg-primary pt-10 pb-6 px-6 text-center rounded-b-3xl shadow-sm relative overflow-hidden"
              style="background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-white/20 rounded-full mb-4 backdrop-blur-sm shadow-inner">
-                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
-                </svg>
-            </div>
+            @if(!empty($tenant->settings['logo_path']))
+                <img src="{{ asset('storage/'.$tenant->settings['logo_path']) }}"
+                     alt="{{ $tenant->settings['brand_name'] ?? $tenant->name }} logo"
+                     class="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white/90 object-contain p-2 mb-4 shadow-inner">
+            @else
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-white/20 rounded-full mb-4 backdrop-blur-sm shadow-inner">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                    </svg>
+                </div>
+            @endif
             <h1 class="text-2xl font-bold text-white tracking-tight">{{ strtolower($tenant->settings['portal_title'] ?? $tenant->name) }}</h1>
             <p class="text-white/80 text-xs font-medium mt-1">{{ $tenant->settings['portal_subtitle'] ?? 'Connect to the internet' }}</p>
         </div>

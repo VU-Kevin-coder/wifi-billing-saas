@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Tenant;
+use App\Models\SsoNonce;
 use App\Models\User;
 use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -177,8 +178,10 @@ class TwoFactorAuthenticationTest extends TestCase
         ]);
         $verification->assertRedirect();
         $ssoUrl = $verification->headers->get('Location');
-        $this->assertStringContainsString('mfa_verified=1', $ssoUrl);
         $this->assertTrue(URL::hasValidSignature(request()->create($ssoUrl)));
+        parse_str((string) parse_url($ssoUrl, PHP_URL_QUERY), $query);
+        $nonce = SsoNonce::query()->where('token_hash', hash('sha256', $query['token']))->firstOrFail();
+        $this->assertTrue($nonce->mfa_verified);
 
         $this->get($ssoUrl)
             ->assertRedirect('http://acme.localhost:8000/operator/dashboard');

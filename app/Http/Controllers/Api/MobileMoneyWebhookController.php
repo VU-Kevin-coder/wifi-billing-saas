@@ -34,7 +34,7 @@ class MobileMoneyWebhookController extends Controller
             return response()->json(['status' => 'missing_reference'], 400);
         }
 
-        $transaction = Transaction::query()
+        $transaction = Transaction::withoutTenancy()
             ->where('type', 'voucher_sale')
             ->where('provider_reference', $reference)
             ->where('meta->payment_provider', $provider)

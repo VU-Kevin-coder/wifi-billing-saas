@@ -46,7 +46,7 @@ class Tenant extends Model
             'support_phone' => '+256700000000',
             'support_email' => '',
             'whatsapp_number' => '',
-            'domain' => $this->slug.'.localhost:8000',
+            'domain' => $this->host(),
             'show_packages' => true,
             'customer_id_prefix' => 'KL',
             'voucher_prefix' => 'KL',
@@ -98,6 +98,39 @@ class Tenant extends Model
     }
 
     /**
+     * The hostname used to reach this tenant's workspace.
+     */
+    public function host(): string
+    {
+        $host = $this->slug.'.'.config('tenancy.base_domain', 'localhost');
+        $port = parse_url((string) config('app.url'), PHP_URL_PORT);
+
+        return $port && ! in_array($port, [80, 443], true) ? $host.':'.$port : $host;
+    }
+
+    /**
+     * Build an absolute URL for a path on this tenant's workspace domain.
+     */
+    public function url(string $path = '/'): string
+    {
+        $scheme = parse_url((string) config('app.url'), PHP_URL_SCHEME) ?: 'https';
+
+        if (app()->environment(['local', 'testing'])) {
+            $scheme = 'http';
+        }
+
+        return $scheme.'://'.$this->host().'/'.ltrim($path, '/');
+    }
+
+    /**
+     * Slugs that may never be used as tenant subdomains.
+     */
+    public static function reservedSlugs(): array
+    {
+        return config('tenancy.reserved_slugs', []);
+    }
+
+    /**
      * All users (staff) belonging to this tenant.
      */
     public function users(): HasMany
@@ -117,9 +150,10 @@ class Tenant extends Model
 
     public function getPlanAttribute($value)
     {
-        if ($this->relationLoaded('plan') && $this->getRelation('plan')) {
+        if ($this->relationLoaded('plan')) {
             return $this->getRelation('plan');
         }
+
         return $value;
     }
 

@@ -63,7 +63,11 @@ class PaymentService
             return ['status' => 'failed', 'error' => 'Mobile money payments require a valid whole-number package price.'];
         }
 
-        if (config('payments.simulation_enabled', false)) {
+        // Simulation must be explicitly enabled AND only run in non-production
+        // environments. Both gates are required so a stray config value can
+        // never issue vouchers without a real payment in production.
+        if (config('payments.simulation_enabled', false)
+            && app()->environment(['local', 'testing'])) {
             $voucher = $this->handleSuccessfulPackagePayment($tenant, $package, $phone, $transaction);
 
             return ['status' => 'simulated_success', 'voucher' => $voucher];
@@ -105,7 +109,7 @@ class PaymentService
 
             $transaction->update([
                 'provider_reference' => $providerReference,
-                'meta' => array_merge($transaction->fresh()->meta ?? [], [
+                'meta' => array_merge($transaction->meta ?? [], [
                     'provider_submission' => $accepted ? 'submitted' : ($rejected ? 'failed' : 'unknown'),
                 ]),
             ]);
@@ -131,7 +135,7 @@ class PaymentService
             return ['status' => 'pending'];
         } catch (\Throwable $exception) {
             $transaction->update([
-                'meta' => array_merge($transaction->fresh()->meta ?? [], [
+                'meta' => array_merge($transaction->meta ?? [], [
                     'provider_submission' => 'unknown',
                 ]),
             ]);
@@ -193,7 +197,7 @@ class PaymentService
             $tenant = Tenant::query()->find($transaction->tenant_id);
             $packageId = $transaction->meta['package_id'] ?? null;
             $package = $packageId
-                ? Package::withoutGlobalScopes()
+                ? Package::withoutTenancy()
                     ->where('tenant_id', $transaction->tenant_id)
                     ->find($packageId)
                 : null;
@@ -296,14 +300,14 @@ class PaymentService
      */
     public function handleSuccessfulPackagePayment(Tenant $tenant, Package $package, string $phone, Transaction $transaction): Voucher
     {
-        return DB::transaction(function () use ($tenant, $package, $phone, $transaction) {
+        return app(TenantContext::class)->runAs($tenant, fn () => DB::transaction(function () use ($tenant, $package, $phone, $transaction) {
             $transaction = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
 
             if ($transaction->status !== 'pending') {
                 $voucherId = $transaction->meta['voucher_id'] ?? null;
 
                 if ($voucherId) {
-                    return Voucher::withoutGlobalScopes()->findOrFail($voucherId);
+                    return Voucher::withoutTenancy()->findOrFail($voucherId);
                 }
 
                 throw new \LogicException("Transaction {$transaction->id} has already been processed.");
@@ -323,7 +327,7 @@ class PaymentService
             $tenant->increment('wallet_balance', $net);
 
             $batchCode = 'ONLINE-'.$tenant->id.'-'.$package->id;
-            $batch = VoucherBatch::withoutGlobalScopes()
+            $batch = VoucherBatch::withoutTenancy()
                 ->where('batch_code', $batchCode)
                 ->first()
                 ?? VoucherBatch::create([
@@ -359,6 +363,6 @@ class PaymentService
             ));
 
             return $voucher;
-        });
+        }));
     }
 }

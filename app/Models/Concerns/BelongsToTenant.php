@@ -5,6 +5,7 @@ namespace App\Models\Concerns;
 use App\Models\Scopes\TenantScope;
 use App\Models\Tenant;
 use App\Services\Tenancy\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 trait BelongsToTenant
@@ -33,5 +34,13 @@ trait BelongsToTenant
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    /**
+     * Explicitly remove only the tenant boundary for platform-level queries.
+     */
+    public function scopeWithoutTenancy(Builder $query): Builder
+    {
+        return $query->withoutGlobalScope(TenantScope::class);
     }
 }

@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Router;
+use App\Models\Session;
+use App\Models\Site;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\RouterConnectionService;
@@ -74,10 +76,8 @@ class RouterManagementTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('Add MikroTik Router');
-        $response->assertSee('API Access');
-        $response->assertSee('Management IP / Host');
-        $response->assertSee('API username');
-        $response->assertSee('API password');
+        $response->assertSee('Site agent');
+        $response->assertSee('credentials stay on the site computer');
         $response->assertSee('Operating site');
         $response->assertSee('Central Office');
         $response->assertSee('value="'.$site->id.'"', false);
@@ -111,11 +111,11 @@ class RouterManagementTest extends TestCase
         $this->assertEquals($this->acme->id, $router->tenant_id);
         $this->assertEquals('provisioning', $router->status);
         $this->assertEquals('CCR2004', $router->hardware_model);
-        $this->assertEquals('10.20.1.10', $router->management_ip);
+        $this->assertNull($router->management_ip);
         $this->assertEquals(8729, $router->api_port);
-        $this->assertEquals('router-api', $router->api_username);
+        $this->assertNull($router->api_username);
         $this->assertTrue($router->has_wireless);
-        $this->assertEquals('supersecretpass123', $router->api_password);
+        $this->assertNull($router->api_password);
     }
 
     public function test_router_detail_page_can_be_rendered(): void
@@ -137,7 +137,7 @@ class RouterManagementTest extends TestCase
             ]);
         });
 
-        $this->assertSame($site->name, $router->assignedSite()->firstOrFail()->name);
+        $this->assertSame($site->name, Site::withoutTenancy()->findOrFail($site->id)->name);
 
         $this->mock(RouterConnectionService::class, function ($mock) use ($router): void {
             $mock->shouldReceive('liveStatus')
@@ -218,7 +218,27 @@ class RouterManagementTest extends TestCase
             ->delete("http://acme.localhost/operator/routers/{$router->id}");
 
         $response->assertRedirect("http://acme.localhost/operator/routers");
-        $this->assertDatabaseMissing('routers', ['id' => $router->id]);
+    }
+
+    public function test_router_with_active_sessions_cannot_be_deleted(): void
+    {
+        $context = app(TenantContext::class);
+        $router = $context->runAs($this->acme, function () {
+            return Router::create(['name' => 'ACTIVE-SESSION-ROUTER']);
+        });
+        Session::create([
+            'tenant_id' => $this->acme->id,
+            'router_id' => $router->id,
+            'status' => 'active',
+            'started_at' => now(),
+        ]);
+
+        $this->actingAs($this->acmeUser)
+            ->delete("http://acme.localhost/operator/routers/{$router->id}")
+            ->assertRedirect()
+            ->assertSessionHasErrors('router');
+
+        $this->assertDatabaseHas('routers', ['id' => $router->id]);
     }
 
     public function test_routers_are_isolated_between_tenants(): void
@@ -261,6 +281,13 @@ class RouterManagementTest extends TestCase
             ]);
         });
 
+        $this->mock(RouterConnectionService::class, function ($mock) use ($router): void {
+            $mock->shouldReceive('test')
+                ->once()
+                ->withArgs(fn (Router $testedRouter): bool => $testedRouter->is($router))
+                ->andReturn(['ok' => true, 'message' => 'Router API responded successfully.']);
+        });
+
         $response = $this->actingAs($this->acmeUser)
             ->post("http://acme.localhost/operator/routers/{$router->id}/ping");
 
@@ -297,7 +324,7 @@ class RouterManagementTest extends TestCase
             ]);
     }
 
-    public function test_operator_can_reboot_router(): void
+    public function test_operator_reboot_is_not_reported_as_success_without_agent_support(): void
     {
         $context = app(TenantContext::class);
         $router = $context->runAs($this->acme, function () {
@@ -312,10 +339,10 @@ class RouterManagementTest extends TestCase
             ->post("http://acme.localhost/operator/routers/{$router->id}/reboot");
 
         $response->assertRedirect();
-        $response->assertSessionHas('status');
+        $response->assertSessionHasErrors('router');
     }
 
-    public function test_operator_can_sync_router(): void
+    public function test_operator_sync_is_not_reported_as_success_without_agent_support(): void
     {
         $context = app(TenantContext::class);
         $router = $context->runAs($this->acme, function () {
@@ -330,10 +357,10 @@ class RouterManagementTest extends TestCase
             ->post("http://acme.localhost/operator/routers/{$router->id}/sync");
 
         $response->assertRedirect();
-        $response->assertSessionHas('status');
+        $response->assertSessionHasErrors('router');
 
         $router->refresh();
-        $this->assertEquals('online', $router->status);
+        $this->assertEquals('provisioning', $router->status);
     }
 
     public function test_operator_can_ping_all_routers(): void
@@ -343,6 +370,11 @@ class RouterManagementTest extends TestCase
             Router::create(['name' => 'ROUTER-A', 'status' => 'online', 'api_password' => 'p1']);
             Router::create(['name' => 'ROUTER-B', 'status' => 'online', 'api_password' => 'p2']);
         });
+        $this->mock(RouterConnectionService::class, function ($mock): void {
+            $mock->shouldReceive('test')
+                ->twice()
+                ->andReturn(['ok' => false, 'message' => 'No site agent paired.']);
+        });
 
         $response = $this->actingAs($this->acmeUser)
             ->post("http://acme.localhost/operator/routers/ping-all");
@@ -351,7 +383,7 @@ class RouterManagementTest extends TestCase
         $response->assertSessionHas('status');
     }
 
-    public function test_operator_can_perform_bulk_actions(): void
+    public function test_bulk_ping_is_not_reported_as_success_without_agent_support(): void
     {
         $context = app(TenantContext::class);
         $routerIds = $context->runAs($this->acme, function () {
@@ -367,10 +399,10 @@ class RouterManagementTest extends TestCase
             ]);
 
         $response->assertRedirect();
-        $response->assertSessionHas('status');
+        $response->assertSessionHasErrors('bulk');
 
         $r1 = Router::find($routerIds[0]);
-        $this->assertEquals('online', $r1->status);
+        $this->assertEquals('offline', $r1->status);
     }
 
     public function test_cross_tenant_actions_are_strictly_forbidden(): void

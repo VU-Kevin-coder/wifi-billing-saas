@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Render-optimised Dockerfile for Hamnet Wi-Fi Billing System
 # Uses a single container that runs Nginx + PHP-FPM via supervisord.
-# Render provides the MySQL-compatible database (or use their PostgreSQL free tier).
+# Render provides PostgreSQL for the production deployment.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM php:8.3-fpm-alpine AS base
 
@@ -72,4 +72,3 @@ RUN chmod +x /usr/local/bin/deploy.sh
 EXPOSE 8080
 
 CMD ["/bin/sh", "-c", "/usr/local/bin/deploy.sh && supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
-

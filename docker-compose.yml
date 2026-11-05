@@ -22,6 +22,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-change_me_in_local_env}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-local_dev_redis_password_change_me}
       REDIS_CLIENT: phpredis
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
@@ -35,7 +36,7 @@ services:
       - wifi-net
 
   # ─────────────────────────────────────────────────────────
-  # Laravel scheduler (voucher/session expiry)
+  # Laravel scheduler (session expiry and payment reconciliation)
   # ─────────────────────────────────────────────────────────
   scheduler:
     build:
@@ -58,6 +59,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-change_me_in_local_env}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-local_dev_redis_password_change_me}
       REDIS_CLIENT: phpredis
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
@@ -95,7 +97,7 @@ services:
     container_name: wifi-billing-db
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-wifi_billing}
       MYSQL_USER: ${DB_USERNAME:-wifi_app}
@@ -120,12 +122,14 @@ services:
     container_name: wifi-billing-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-local_dev_redis_password_change_me}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -139,8 +143,8 @@ services:
     image: evilfreelancer/docker-routeros:latest
     container_name: hamnet-chr
     ports:
-      - "8728:8728"   # RouterOS API
-      - "2222:22"     # SSH (optional, for manual testing)
+      - "127.0.0.1:8728:8728"   # RouterOS API
+      - "127.0.0.1:2222:22"     # SSH (optional, for manual testing)
     cap_add:
       - NET_ADMIN
     devices:

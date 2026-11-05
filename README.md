@@ -459,11 +459,48 @@ docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate
 ```
 
-Seeders are only run when implemented and documented:
+Seed demo data only in local development:
 
 ```bash
 docker compose exec app php artisan db:seed
 ```
+
+For production, do not seed demo tenants or accounts. Create the first platform
+administrator interactively instead:
+
+```bash
+docker compose exec app php artisan platform-admin:create
+```
+
+Set a unique `REDIS_PASSWORD` in `.env`; the example value is for local
+development only. Database, Redis, and test-router ports are bound to loopback.
+
+### Site-local MikroTik agent
+
+The SaaS does not need inbound access to a customer router. Create a site, pair
+its agent from the application host, and copy the one-time token to the site
+computer:
+
+```bash
+docker compose exec app php artisan site-agent:issue-token <site-id>
+```
+
+Run the agent on a trusted computer that can reach the site's routers. Configure
+`SITE_AGENT_URL` (HTTPS), `SITE_AGENT_TOKEN`, and `SITE_AGENT_ROUTERS` there.
+`SITE_AGENT_ROUTERS` is a JSON object keyed by SaaS router ID; each value
+contains the local `host`, `username`, `password`, and optional `port`. These
+credentials stay on the site computer. Do not configure this router map on the
+SaaS host.
+
+Start the worker with `php artisan site-agent:work`. In production, leave
+`SITE_AGENT_REQUIRED` enabled (its default) so activations fail closed when a
+router has no paired agent. A voucher stays in provisioning state until the
+agent acknowledges that the hotspot user was created. Expiry likewise remains
+pending until the agent disables the user and disconnects any active host.
+The application scheduler must run `schedule:work` (or `schedule:run` from a
+cron service) so session expiry and `payments:reconcile` run every minute.
+Payment reconciliation checks provider status for mobile-money charges that
+remain pending; it does not trust webhook status alone.
 
 ### Step 7: Run the tests
 

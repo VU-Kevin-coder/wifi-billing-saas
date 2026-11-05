@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\FlutterwaveWebhookController;
 use App\Http\Controllers\Api\MobileMoneyWebhookController;
+use App\Http\Controllers\Api\SiteAgentController;
 use App\Http\Controllers\PortalController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,3 +30,12 @@ Route::get('/payments/{token}', [PortalController::class, 'paymentStatus'])
 Route::post('/payments/{token}/activate', [PortalController::class, 'activatePayment'])
     ->middleware('throttle:10,1')
     ->name('api.payments.activate');
+
+Route::prefix('site-agent')
+    ->middleware(['site-agent', 'throttle:120,1'])
+    ->group(function (): void {
+        Route::get('/commands', [SiteAgentController::class, 'poll'])->name('api.site-agent.commands');
+        Route::post('/commands/{command}/complete', [SiteAgentController::class, 'complete'])
+            ->whereNumber('command')
+            ->name('api.site-agent.commands.complete');
+    });

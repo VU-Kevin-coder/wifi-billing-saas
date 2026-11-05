@@ -31,4 +31,9 @@ class Site extends Model
     {
         return $this->hasMany(Voucher::class);
     }
+
+    public function agent(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(SiteAgent::class);
+    }
 }

@@ -18,7 +18,10 @@ class FlutterwaveWithdrawalService
     public function approve(Transaction $transaction): array
     {
         $claim = DB::transaction(function () use ($transaction): array {
-            $locked = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+            $locked = Transaction::withoutTenancy()
+                ->where('tenant_id', $transaction->tenant_id)
+                ->lockForUpdate()
+                ->findOrFail($transaction->id);
             if ($locked->type !== 'withdrawal' || $locked->status !== 'pending') {
                 return ['transaction' => null, 'message' => 'This withdrawal is no longer pending.'];
             }
@@ -165,7 +168,7 @@ class FlutterwaveWithdrawalService
             return ['ok' => false, 'message' => 'Transfer reference or ID is missing.'];
         }
 
-        $transaction = Transaction::query()
+        $transaction = Transaction::withoutTenancy()
             ->where('type', 'withdrawal')
             ->where('reference', $reference)
             ->first();
@@ -218,7 +221,10 @@ class FlutterwaveWithdrawalService
         }
 
         return DB::transaction(function () use ($transaction, $transferId, $status): array {
-            $locked = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+            $locked = Transaction::withoutTenancy()
+                ->where('tenant_id', $transaction->tenant_id)
+                ->lockForUpdate()
+                ->findOrFail($transaction->id);
             if ($locked->status !== 'pending'
                 || ($locked->meta['flutterwave_transfer_id'] ?? null) !== $transferId) {
                 return ['ok' => true, 'message' => 'Withdrawal has already been processed.'];
@@ -246,7 +252,10 @@ class FlutterwaveWithdrawalService
     private function recordTransfer(Transaction $transaction, string $transferId, string $status): void
     {
         DB::transaction(function () use ($transaction, $transferId, $status): void {
-            $locked = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+            $locked = Transaction::withoutTenancy()
+                ->where('tenant_id', $transaction->tenant_id)
+                ->lockForUpdate()
+                ->findOrFail($transaction->id);
             $locked->update([
                 'meta' => array_merge($locked->meta ?? [], [
                     'flutterwave_transfer_id' => $transferId,
@@ -260,7 +269,10 @@ class FlutterwaveWithdrawalService
     private function updateSubmissionState(Transaction $transaction, string $state): void
     {
         DB::transaction(function () use ($transaction, $state): void {
-            $locked = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+            $locked = Transaction::withoutTenancy()
+                ->where('tenant_id', $transaction->tenant_id)
+                ->lockForUpdate()
+                ->findOrFail($transaction->id);
             $locked->update([
                 'meta' => array_merge($locked->meta ?? [], ['flutterwave_transfer_submission' => $state]),
             ]);

@@ -57,7 +57,10 @@
                 @if(session()->has('impersonate_tenant'))
                     <div class="bg-amber-500 text-white text-center py-2 px-4 text-xs font-bold shrink-0 flex items-center justify-center gap-2">
                         <span>⚠️ You are impersonating this operator workspace as a Platform Admin.</span>
-                        <a href="{{ route('platform.stop-impersonate') }}" class="underline bg-amber-600 px-2 py-0.5 rounded hover:bg-amber-700 transition-colors">Exit</a>
+                        <form method="POST" action="{{ route('platform.stop-impersonate') }}" class="inline">
+                            @csrf
+                            <button type="submit" class="underline bg-amber-600 px-2 py-0.5 rounded hover:bg-amber-700 transition-colors">Exit</button>
+                        </form>
                     </div>
                 @endif
 

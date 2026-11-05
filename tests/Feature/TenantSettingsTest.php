@@ -72,7 +72,7 @@ class TenantSettingsTest extends TestCase
                 'support_email' => 'help@acme.test',
                 'whatsapp_number' => '+256700333444',
                 'domain' => 'acme.localhost:8000',
-                'logo' => UploadedFile::fake()->image('logo.png'),
+                'logo' => UploadedFile::fake()->create('logo.png', 100, 'image/png'),
             ])
             ->assertRedirect(route('operator.settings.index', ['tenant' => $tenant->slug]));
 

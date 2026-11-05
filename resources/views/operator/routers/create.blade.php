@@ -1,7 +1,7 @@
 <x-app-layout>
     <div class="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 lg:px-8"
          x-data="{
-             step: {{ $errors->hasAny(['management_ip', 'api_port', 'api_username', 'api_password']) ? 2 : ($errors->hasAny(['hotspot_network', 'gateway_ip', 'dns_servers', 'hotspot_domain']) ? 3 : 1) }},
+             step: {{ $errors->hasAny(['hotspot_network', 'gateway_ip', 'dns_servers', 'hotspot_domain']) ? 3 : 1 }},
              hasWireless: @js((bool) old('has_wireless', false)),
              enableHotspot: @js((bool) old('enable_hotspot', true)),
              next(section, nextStep) {
@@ -17,7 +17,7 @@
             <div class="mb-8">
                 <a href="{{ route('operator.routers.index') }}" class="text-sm font-medium text-gray-500 hover:text-gray-800">Routers</a>
                 <h1 class="mt-2 text-2xl font-bold text-gray-900">Add MikroTik Router</h1>
-                <p class="mt-1 text-sm text-gray-600">Connect a router using its management address and API credentials.</p>
+                <p class="mt-1 text-sm text-gray-600">Add a router to a site. Router credentials stay on the site computer running the agent.</p>
             </div>
 
             @if ($errors->any())
@@ -27,7 +27,7 @@
             @endif
 
             <div class="mb-6 grid grid-cols-3 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                @foreach (['Connection', 'API Access', 'Service Setup'] as $stepNumber => $stepLabel)
+                @foreach (['Router details', 'Site agent', 'Service Setup'] as $stepNumber => $stepLabel)
                     @php($stepIndex = $stepNumber + 1)
                     <div class="flex items-center gap-2 sm:gap-3">
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold"
@@ -97,46 +97,11 @@
                 </section>
 
                 <section x-show="step === 2" x-ref="apiAccess" class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-                    <h2 class="text-lg font-semibold text-gray-900">API connection details</h2>
-                    <p class="mt-1 text-sm text-gray-500">Enter the address and credentials the application will use to reach the router.</p>
-
-                    <div class="mt-6 grid gap-5 sm:grid-cols-2">
-                        <div>
-                            <label for="management_ip" class="mb-1 block text-sm font-medium text-gray-700">Management IP / Host</label>
-                            <input id="management_ip" name="management_ip" type="text" required maxlength="255"
-                                   value="{{ old('management_ip') }}" placeholder="192.168.88.1 or router hostname"
-                                   autocomplete="off"
-                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            @error('management_ip') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div>
-                            <label for="api_port" class="mb-1 block text-sm font-medium text-gray-700">API port</label>
-                            <input id="api_port" name="api_port" type="number" required min="1" max="65535" step="1"
-                                   value="{{ old('api_port', 8728) }}"
-                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            @error('api_port') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div>
-                            <label for="api_username" class="mb-1 block text-sm font-medium text-gray-700">API username</label>
-                            <input id="api_username" name="api_username" type="text" required maxlength="255"
-                                   value="{{ old('api_username') }}" autocomplete="username"
-                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            @error('api_username') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div>
-                            <label for="api_password" class="mb-1 block text-sm font-medium text-gray-700">API password</label>
-                            <input id="api_password" name="api_password" type="password" required
-                                   autocomplete="new-password"
-                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            @error('api_password') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                    </div>
+                    <h2 class="text-lg font-semibold text-gray-900">Pair a site-local agent</h2>
+                    <p class="mt-1 text-sm text-gray-500">The SaaS never connects to this router or stores its API password. Add the router first, then pair an agent for this site and add the router's credentials to the agent's local router map.</p>
 
                     <div class="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                        Use a dedicated MikroTik API account with only the permissions needed by your operations. The password is encrypted before it is stored.
+                        The site agent initiates an outbound HTTPS connection and maps local router credentials by the router ID shown after setup. See the Site-local MikroTik agent setup in the README.
                     </div>
 
                     <div class="mt-8 flex justify-between">
@@ -144,7 +109,7 @@
                                 class="rounded-lg bg-gray-100 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200">
                             Back
                         </button>
-                        <button type="button" @click="next('apiAccess', 3)"
+                        <button type="button" @click="step = 3"
                                 class="rounded-lg bg-orange-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-orange-600">
                             Next
                         </button>

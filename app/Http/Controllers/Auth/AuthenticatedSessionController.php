@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\AuditLog;
+use App\Models\SsoNonce;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Tenancy\TenantContext;
@@ -54,28 +56,35 @@ class AuthenticatedSessionController extends Controller
         }
 
         // 2. If user is an operator, route to their specific tenant subdomain
-        $tenantSlug = $user->tenant?->slug;
-        if ($tenantSlug) {
-            $currentHost = explode(':', $request->getHost())[0];
-            $targetHost = "{$tenantSlug}.localhost";
+        $tenant = $user->tenant;
+        if ($tenant) {
+            $currentHost = strtolower(explode(':', $request->getHost())[0]);
+            $targetHost = strtolower(explode(':', $tenant->host())[0]);
 
             // If already on this subdomain, go directly to the operator dashboard
             if ($currentHost === $targetHost) {
                 return redirect()->intended(route('operator.dashboard'));
             }
 
-            // If logged in from main domain (or another domain), transfer authentication via signed SSO
-            $parameters = ['tenant' => $tenantSlug, 'user' => $user->id];
-            if ($mfaVerified) {
-                $parameters['mfa_verified'] = 1;
-            }
-
-            $redirectUrl = URL::temporarySignedRoute('operator.sso.verify', now()->addMinutes(2), $parameters);
-
-            return redirect()->to($redirectUrl);
+            // Transfer authentication with a signed, single-use server-side nonce.
+            return redirect()->to($this->ssoUrl($user, $tenant, $mfaVerified));
         }
 
         return redirect()->intended(route('operator.dashboard'));
+    }
+
+    /**
+     * Build a short-lived signed SSO URL backed by a one-time nonce.
+     */
+    public function ssoUrl(User $user, Tenant $tenant, bool $mfaVerified = false, bool $impersonation = false): string
+    {
+        $token = SsoNonce::issue($user, $tenant, $mfaVerified, $impersonation);
+
+        return URL::temporarySignedRoute('operator.sso.verify', now()->addMinutes(2), [
+            'tenant' => $tenant->slug,
+            'user' => $user->id,
+            'token' => $token,
+        ]);
     }
 
     /**
@@ -87,27 +96,38 @@ class AuthenticatedSessionController extends Controller
             abort(403, 'Invalid or expired authentication transfer link.');
         }
 
-        $userId = $request->query('user');
-        $user = User::withoutGlobalScopes()->findOrFail($userId);
-
         $tenant = $context->getTenant();
         if (! $tenant) {
-            $slug = $request->route('tenant');
-            $tenant = Tenant::where('slug', $slug)->firstOrFail();
+            $tenant = Tenant::where('slug', (string) $request->route('tenant'))->firstOrFail();
             $context->setTenant($tenant);
         }
 
-        // Validate user belongs to this tenant, or is a platform admin impersonating
+        $user = User::withoutTenancy()->findOrFail($request->integer('user'));
+
+        // Validate user belongs to this tenant, or is a platform admin.
         if ($user->tenant_id !== $tenant->id && ! $user->hasRole('platform_admin')) {
             abort(403, 'You do not belong to this workspace.');
         }
 
-        $mfaVerified = $request->boolean('mfa_verified') && $user->hasEnabledTwoFactorAuthentication();
-
-        // If impersonation was requested by platform admin
-        if ($request->query('impersonate') && $user->hasRole('platform_admin')) {
-            session(['impersonate_tenant' => $tenant->id]);
+        // The nonce is bound to the user and tenant and may only be used once,
+        // even if the signed URL itself is replayed.
+        $nonce = SsoNonce::consume((string) $request->query('token'), $user, $tenant);
+        if (! $nonce) {
+            abort(403, 'Invalid or expired authentication transfer link.');
         }
+
+        if ($nonce->impersonation) {
+            if (! $user->hasRole('platform_admin')) {
+                abort(403, 'You are not allowed to impersonate this workspace.');
+            }
+
+            session(['impersonate_tenant' => $tenant->id]);
+            AuditLog::record('tenant.impersonation.started', $tenant, [
+                'platform_user_id' => $user->id,
+            ], $user, $tenant);
+        }
+
+        $mfaVerified = $nonce->mfa_verified && $user->hasEnabledTwoFactorAuthentication();
 
         Auth::login($user);
         $request->session()->regenerate();

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Package;
+use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
@@ -20,8 +21,7 @@ class PortalController extends Controller
     {
         return $context->getTenant()
             ?? ($tenant ? Tenant::where('slug', $tenant)->first() : null)
-            ?? ($request->query('tenant') ? Tenant::where('slug', $request->query('tenant'))->first() : null)
-            ?? Tenant::first();
+            ?? ($request->query('tenant') ? Tenant::where('slug', $request->query('tenant'))->first() : null);
     }
 
     public function index(Request $request, TenantContext $context, ?string $tenant = null)
@@ -61,7 +61,7 @@ class PortalController extends Controller
             'router' => ['nullable', 'string', 'max:255'],
         ]);
         $code = strtoupper(trim($request->input('voucher_code')));
-        $voucher = Voucher::where('tenant_id', $tenantModel->id)->where('code', $code)->first();
+        $voucher = Voucher::withoutTenancy()->where('tenant_id', $tenantModel->id)->where('code', $code)->first();
 
         if (! $voucher) {
             return back()->withErrors(['voucher_code' => 'Invalid voucher code.']);
@@ -104,7 +104,9 @@ class PortalController extends Controller
             'router' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $package = Package::where('tenant_id', $tenantModel->id)->findOrFail($request->integer('package_id'));
+        $package = Package::withoutTenancy()
+            ->where('tenant_id', $tenantModel->id)
+            ->findOrFail($request->integer('package_id'));
         $paymentToken = Str::random(64);
 
         $transaction = Transaction::create([
@@ -114,11 +116,11 @@ class PortalController extends Controller
             'status' => 'pending',
             'reference' => 'ONL-'.strtoupper(Str::random(8)),
             'phone' => $request->input('phone'),
+            'payment_token_hash' => hash('sha256', $paymentToken),
             'description' => "Online Purchase: {$package->name}",
             'meta' => [
                 'package_id' => $package->id,
                 'phone' => $request->input('phone'),
-                'payment_token_hash' => hash('sha256', $paymentToken),
                 'router_id' => $request->input('router_id'),
                 'router' => $request->input('router'),
                 'ip' => $request->ip(),
@@ -215,16 +217,16 @@ class PortalController extends Controller
 
         if ($request->query->has('voucher')) {
             $transaction = $paymentToken
-                ? Transaction::query()
+                ? Transaction::withoutTenancy()
                     ->where('tenant_id', $tenantModel->id)
                     ->where('type', 'voucher_sale')
-                    ->where('meta->payment_token_hash', hash('sha256', $paymentToken))
+                    ->where('payment_token_hash', hash('sha256', $paymentToken))
                     ->where('status', 'completed')
                     ->first()
                 : null;
             $voucherId = $transaction?->meta['voucher_id'] ?? null;
             $voucher = $voucherId
-                ? Voucher::where('tenant_id', $tenantModel->id)->find($voucherId)
+                ? Voucher::withoutTenancy()->where('tenant_id', $tenantModel->id)->find($voucherId)
                 : null;
 
             abort_unless($voucher && hash_equals($voucher->code, (string) $voucherCode), 404);
@@ -250,12 +252,12 @@ class PortalController extends Controller
 
     private function findSessionPayment(int $transactionId, Tenant $tenant): Transaction
     {
-        $payment = Transaction::query()
+        $payment = Transaction::withoutTenancy()
             ->where('tenant_id', $tenant->id)
             ->where('type', 'voucher_sale')
             ->findOrFail($transactionId);
         $token = session('payment_token');
-        $tokenHash = $payment->meta['payment_token_hash'] ?? null;
+        $tokenHash = $payment->payment_token_hash;
 
         abort_unless(
             is_string($token)
@@ -304,9 +306,9 @@ class PortalController extends Controller
         Request $request,
         VoucherActivationService $activationService
     ): JsonResponse {
-        $transaction = Transaction::query()
+        $transaction = Transaction::withoutTenancy()
             ->where('type', 'voucher_sale')
-            ->where('meta->payment_token_hash', hash('sha256', $token))
+            ->where('payment_token_hash', hash('sha256', $token))
             ->first();
 
         if (! $transaction) {
@@ -319,7 +321,7 @@ class PortalController extends Controller
 
         $voucherId = $transaction->meta['voucher_id'] ?? null;
         $voucher = $voucherId
-            ? Voucher::where('tenant_id', $transaction->tenant_id)->find($voucherId)
+            ? Voucher::withoutTenancy()->where('tenant_id', $transaction->tenant_id)->find($voucherId)
             : null;
 
         if (! $voucher) {
@@ -327,18 +329,29 @@ class PortalController extends Controller
         }
 
         try {
-            $activationService->activate(
-                Tenant::query()->findOrFail($transaction->tenant_id),
-                $voucher,
-                $request,
-                $transaction->phone,
-                $transaction->meta ?? [],
+            $tenant = Tenant::query()->findOrFail($transaction->tenant_id);
+            $session = app(\App\Services\Tenancy\TenantContext::class)->runAs(
+                $tenant,
+                fn () => $activationService->activate(
+                    $tenant,
+                    $voucher,
+                    $request,
+                    $transaction->phone,
+                    $transaction->meta ?? [],
+                )
             );
         } catch (\LogicException $exception) {
             return response()->json([
                 'status' => 'activation_failed',
                 'message' => $exception->getMessage(),
             ], 409);
+        }
+
+        if ($session->status === 'provisioning') {
+            return response()->json([
+                'status' => 'provisioning',
+                'message' => 'Payment confirmed. Waiting for the site router to activate access.',
+            ], 202);
         }
 
         return response()->json([
@@ -350,9 +363,9 @@ class PortalController extends Controller
 
     public function paymentStatus(string $token, PaymentService $paymentService): JsonResponse
     {
-        $transaction = Transaction::query()
+        $transaction = Transaction::withoutTenancy()
             ->where('type', 'voucher_sale')
-            ->where('meta->payment_token_hash', hash('sha256', $token))
+            ->where('payment_token_hash', hash('sha256', $token))
             ->first();
 
         if (! $transaction) {
@@ -374,11 +387,26 @@ class PortalController extends Controller
 
         $voucherId = $transaction->meta['voucher_id'] ?? null;
         $voucher = $voucherId
-            ? Voucher::where('tenant_id', $transaction->tenant_id)->find($voucherId)
+            ? Voucher::withoutTenancy()->where('tenant_id', $transaction->tenant_id)->find($voucherId)
             : null;
 
         if (! $voucher) {
             return response()->json(['status' => 'fulfillment_pending'], 202);
+        }
+
+        $session = Session::withoutTenancy()
+            ->where('tenant_id', $transaction->tenant_id)
+            ->where('voucher_id', $voucher->id)
+            ->first();
+
+        if ($session?->status === 'provisioning') {
+            return response()->json(['status' => 'provisioning'], 202)
+                ->header('Cache-Control', 'no-store');
+        }
+
+        if (! $session || $session->status !== 'active') {
+            return response()->json(['status' => 'activation_pending'], 202)
+                ->header('Cache-Control', 'no-store');
         }
 
         return response()->json([

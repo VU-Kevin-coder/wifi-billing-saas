@@ -209,12 +209,15 @@
                                 <td class="px-4 py-4 whitespace-nowrap text-right">
                                     <div class="flex items-center justify-end gap-2" x-data="{ open: false }">
                                         <!-- Switch into button -->
-                                        <a href="{{ route('platform.impersonate', $tenant) }}"
-                                           class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                                           title="Access operator workspace">
-                                            <span>Switch into</span>
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                                        </a>
+                                        <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="inline">
+                                            @csrf
+                                            <button type="submit"
+                                               class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                               title="Access operator workspace">
+                                                <span>Switch into</span>
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                                            </button>
+                                        </form>
                                         <!-- More actions dropdown -->
                                         <div class="relative">
                                             <button @click="open = !open" @click.outside="open = false"
@@ -229,11 +232,14 @@
                                                  x-transition:leave-start="opacity-100 scale-100"
                                                  x-transition:leave-end="opacity-0 scale-95"
                                                  class="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 text-left">
-                                                <a href="{{ route('platform.impersonate', $tenant) }}"
-                                                   class="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">
-                                                    <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                                    Switch into workspace
-                                                </a>
+                                                <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="w-full">
+                                                    @csrf
+                                                    <button type="submit"
+                                                       class="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">
+                                                        <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                        Switch into workspace
+                                                    </button>
+                                                </form>
                                                 <div class="border-t border-gray-100 my-1"></div>
                                                 <button class="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">
                                                     <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
@@ -460,7 +466,7 @@
                                                     <!-- Password -->
                                                     <div>
                                                         <label for="owner_password" class="block font-medium text-gray-700 mb-1">Initial Password</label>
-                                                        <input type="text" id="owner_password" name="owner_password" x-model="owner_password" placeholder="Default: password (can leave blank)"
+                                                        <input type="password" id="owner_password" name="owner_password" x-model="owner_password" placeholder="Minimum 8 characters" required
                                                                class="block w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
                                                         @error('owner_password')
                                                             <p class="text-red-500 text-xs mt-1">{{ $message }}</p>

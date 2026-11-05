@@ -321,7 +321,10 @@
                 </div>
                 <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50">Profile Settings</a>
                 @if($user?->hasRole('platform_admin') && session()->has('impersonate_tenant'))
-                    <a href="{{ route('platform.stop-impersonate') }}" class="block px-4 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50">Exit Impersonation</a>
+                    <form method="POST" action="{{ route('platform.stop-impersonate') }}">
+                        @csrf
+                        <button type="submit" class="w-full text-left px-4 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50">Exit Impersonation</button>
+                    </form>
                 @endif
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf

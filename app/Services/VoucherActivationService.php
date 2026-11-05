@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Package;
 use App\Models\Router;
 use App\Models\Session;
+use App\Models\SiteAgent;
 use App\Models\Site;
 use App\Models\Tenant;
 use App\Models\Voucher;
@@ -35,7 +36,8 @@ class VoucherActivationService
                 ->first();
 
             if ($session) {
-                if ($session->status !== 'active' || $session->expires_at?->isPast()) {
+                if (! in_array($session->status, ['active', 'provisioning'], true)
+                    || $session->expires_at?->isPast()) {
                     throw new LogicException('This voucher session has already expired or disconnected.');
                 }
 
@@ -52,6 +54,20 @@ class VoucherActivationService
                 throw new LogicException('The voucher package is no longer available.');
             }
 
+            $router = $this->resolveRouter($tenant, $voucher, $request, $sessionContext);
+            $site = $this->resolveSite($tenant, $voucher, $router);
+            $siteAgent = $router?->site_id
+                ? SiteAgent::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('site_id', $router->site_id)
+                    ->whereNull('revoked_at')
+                    ->first()
+                : null;
+
+            if (config('site_agent.required') && (! $router || ! $siteAgent)) {
+                throw new LogicException('This site is not connected to a paired site agent. Access was not activated.');
+            }
+
             $phone = $customerPhone ?: $voucher->redeemed_by ?: 'Walk-in';
             $customer = Customer::firstOrCreate(
                 [
@@ -65,8 +81,6 @@ class VoucherActivationService
                 ]
             );
 
-            $router = $this->resolveRouter($tenant, $voucher, $request, $sessionContext);
-            $site = $this->resolveSite($tenant, $voucher, $router);
             $voucher->update([
                 'status' => 'redeemed',
                 'redeemed_at' => $startedAt,
@@ -79,23 +93,25 @@ class VoucherActivationService
                 ?? $request->input('mac')
                 ?? $request->header('X-Client-Mac');
 
-            return Session::create([
+            $session = Session::create([
                 'tenant_id' => $tenant->id,
                 'site_id' => $site?->id,
                 'customer_id' => $customer->id,
                 'voucher_id' => $voucher->id,
                 'package_id' => $package->id,
                 'router_id' => $router?->id,
-                'status' => 'active',
+                'status' => $siteAgent ? 'provisioning' : 'active',
                 'started_at' => $startedAt,
                 'expires_at' => $package->expiresAt($startedAt),
-                'ip_address' => $clientIp ?: '10.50.1.'.random_int(10, 250),
+                'ip_address' => $clientIp,
                 'mac_address' => $clientMac,
-                'bytes_in' => 1024 * 128,
-                'bytes_out' => 1024 * 512,
-                'rate_in' => 1024 * 64,
-                'rate_out' => 1024 * 256,
             ]);
+
+            if ($siteAgent) {
+                app(SiteAgentCommandService::class)->provision($router, $session, $voucher);
+            }
+
+            return $session;
         });
     }
 

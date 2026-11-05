@@ -40,10 +40,13 @@
                     <a href="{{ route('platform.tenants.index') }}" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors">
                         ← Back to list
                     </a>
-                    <a href="{{ route('platform.impersonate', $tenant) }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center gap-2 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                        Switch into workspace
-                    </a>
+                    <form method="POST" action="{{ route('platform.impersonate', $tenant) }}">
+                        @csrf
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center gap-2 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            Switch into workspace
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -216,7 +219,10 @@
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-base font-bold text-gray-900">Infrastructure health</h3>
-                        <a href="{{ route('platform.impersonate', $tenant) }}" class="text-blue-600 text-sm font-medium hover:underline">View routers</a>
+                        <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="inline">
+                            @csrf
+                            <button type="submit" class="text-blue-600 text-sm font-medium hover:underline">View routers</button>
+                        </form>
                     </div>
                     <p class="text-xs text-gray-500 mb-4">Network and router health from the operator workspace.</p>
 
@@ -287,7 +293,10 @@
                         <h3 class="text-base font-bold text-gray-900">Recent sessions</h3>
                         <p class="text-xs text-gray-500">Latest hotspot sessions from this operator's network.</p>
                     </div>
-                    <a href="{{ route('platform.impersonate', $tenant) }}" class="text-blue-600 text-sm font-medium hover:underline">View all sessions &rarr;</a>
+                    <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="inline">
+                        @csrf
+                        <button type="submit" class="text-blue-600 text-sm font-medium hover:underline">View all sessions &rarr;</button>
+                    </form>
                 </div>
 
                 @if($recentActivity->isEmpty())

@@ -59,13 +59,13 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
         Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
         Route::post('/configuration/sms/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
-        Route::get('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->name('impersonate');
-        Route::get('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
+        Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->name('impersonate');
+        Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
 
 // ─── Operator Workspace (Tenant Subdomains) ────────────────
 // If they visit acme.localhost:8000/operator/dashboard, it routes here.
-Route::domain('{tenant}.localhost')
+Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
     ->group(function () {
         // ─── Public Captive Portal (No Auth Required) ─────────────
         Route::prefix('portal')
@@ -97,27 +97,32 @@ Route::domain('{tenant}.localhost')
             ->name('operator.')
             ->group(function () {
                 Route::get('/dashboard', OperatorDashboard::class)->name('dashboard');
-                Route::resource('customers', \App\Http\Controllers\Operator\CustomerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
 
-                Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
-                Route::resource('vouchers', \App\Http\Controllers\Operator\VoucherController::class)->only(['index', 'store']);
-                // Router Management & Actions
-                Route::post('routers/ping-all', [\App\Http\Controllers\Operator\RouterController::class, 'pingAll'])->name('routers.ping-all');
-                Route::post('routers/bulk-action', [\App\Http\Controllers\Operator\RouterController::class, 'bulkAction'])->name('routers.bulk-action');
-                Route::post('routers/{router}/ping', [\App\Http\Controllers\Operator\RouterController::class, 'ping'])->name('routers.ping');
-                Route::post('routers/{router}/reboot', [\App\Http\Controllers\Operator\RouterController::class, 'reboot'])->name('routers.reboot');
-                Route::post('routers/{router}/sync', [\App\Http\Controllers\Operator\RouterController::class, 'sync'])->name('routers.sync');
-                Route::post('routers/{router}/test', [\App\Http\Controllers\Operator\RouterController::class, 'testConnection'])->name('routers.test');
-                Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
+                Route::middleware('role:operator_admin|operator_support')->group(function () {
+                    Route::resource('customers', \App\Http\Controllers\Operator\CustomerController::class)
+                        ->only(['index', 'show', 'store', 'update', 'destroy']);
+                });
 
-                // Live Sessions
+                Route::middleware('role:operator_admin')->group(function () {
+                    Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
+                    Route::resource('vouchers', \App\Http\Controllers\Operator\VoucherController::class)->only(['index', 'store']);
+                });
+
+                Route::middleware('role:operator_admin|operator_network')->group(function () {
+                    Route::post('routers/ping-all', [\App\Http\Controllers\Operator\RouterController::class, 'pingAll'])->name('routers.ping-all');
+                    Route::post('routers/bulk-action', [\App\Http\Controllers\Operator\RouterController::class, 'bulkAction'])->name('routers.bulk-action');
+                    Route::post('routers/{router}/ping', [\App\Http\Controllers\Operator\RouterController::class, 'ping'])->name('routers.ping');
+                    Route::post('routers/{router}/reboot', [\App\Http\Controllers\Operator\RouterController::class, 'reboot'])->name('routers.reboot');
+                    Route::post('routers/{router}/sync', [\App\Http\Controllers\Operator\RouterController::class, 'sync'])->name('routers.sync');
+                    Route::post('routers/{router}/test', [\App\Http\Controllers\Operator\RouterController::class, 'testConnection'])->name('routers.test');
+                    Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
+                    Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
+                    Route::post('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'store'])->name('sites.store');
+                });
+
                 Route::get('/sessions', [\App\Http\Controllers\Operator\LiveSessionController::class, 'index'])->name('sessions.index');
-                Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
                 Route::get('/sites/export', [\App\Http\Controllers\Operator\SiteController::class, 'export'])->name('sites.export');
                 Route::get('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'index'])->name('sites.index');
-                Route::post('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'store'])
-                    ->middleware('role:operator_admin|operator_network')
-                    ->name('sites.store');
                 Route::get('/billing', [\App\Http\Controllers\Operator\BillingController::class, 'index'])
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('billing.index');
@@ -130,25 +135,25 @@ Route::domain('{tenant}.localhost')
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('wallet.withdraw');
 
-                // General Settings
-                Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');
-                Route::put('/settings/general', [\App\Http\Controllers\Operator\SettingsController::class, 'updateGeneral'])->name('settings.general.update');
-                Route::put('/settings/hotspot', [\App\Http\Controllers\Operator\SettingsController::class, 'updateHotspot'])->name('settings.hotspot.update');
-                Route::put('/settings/sms', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSms'])->name('settings.sms.update');
-                Route::put('/settings/whatsapp', [\App\Http\Controllers\Operator\SettingsController::class, 'updateWhatsapp'])->name('settings.whatsapp.update');
-                Route::put('/settings/notifications', [\App\Http\Controllers\Operator\SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
-                Route::put('/settings/security', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSecurity'])->name('settings.security.update');
+                Route::middleware('role:operator_admin')->group(function () {
+                    Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');
+                    Route::put('/settings/general', [\App\Http\Controllers\Operator\SettingsController::class, 'updateGeneral'])->name('settings.general.update');
+                    Route::put('/settings/hotspot', [\App\Http\Controllers\Operator\SettingsController::class, 'updateHotspot'])->name('settings.hotspot.update');
+                    Route::put('/settings/sms', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSms'])->name('settings.sms.update');
+                    Route::put('/settings/whatsapp', [\App\Http\Controllers\Operator\SettingsController::class, 'updateWhatsapp'])->name('settings.whatsapp.update');
+                    Route::put('/settings/notifications', [\App\Http\Controllers\Operator\SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
+                    Route::put('/settings/security', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSecurity'])->name('settings.security.update');
+                    Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');
+                    Route::put('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'update'])->name('settings.portal.update');
+                });
 
-                // Captive Portal Settings
-                Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');
-                Route::put('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'update'])->name('settings.portal.update');
-
-                // MikroTik Router Settings
-                Route::get('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'edit'])->name('settings.router');
-                Route::put('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'update'])->name('settings.router.update');
-                Route::post('/settings/router/test', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'testConnection'])->name('settings.router.test');
-                Route::post('/settings/router/sync-all', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'syncAll'])->name('settings.router.sync-all');
-                Route::post('/settings/router/disconnect', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'disconnect'])->name('settings.router.disconnect');
+                Route::middleware('role:operator_admin|operator_network')->group(function () {
+                    Route::get('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'edit'])->name('settings.router');
+                    Route::put('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'update'])->name('settings.router.update');
+                    Route::post('/settings/router/test', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'testConnection'])->name('settings.router.test');
+                    Route::post('/settings/router/sync-all', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'syncAll'])->name('settings.router.sync-all');
+                    Route::post('/settings/router/disconnect', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'disconnect'])->name('settings.router.disconnect');
+                });
 
                 // Staff Management is strictly for operator_admin
                 Route::middleware('role:operator_admin')->group(function () {
@@ -163,9 +168,9 @@ Route::get('/dashboard', function () {
     if (auth()->user()->hasRole('platform_admin')) {
         return redirect()->route('platform.tenants.index');
     }
-    $slug = auth()->user()->tenant?->slug;
-    if ($slug) {
-        return redirect()->to("http://{$slug}.localhost:8000/operator/dashboard");
+    $tenant = auth()->user()->tenant;
+    if ($tenant) {
+        return redirect()->to($tenant->url('operator/dashboard'));
     }
     return redirect()->route('login');
 })->middleware(['auth'])->name('dashboard');
@@ -189,7 +194,11 @@ require __DIR__.'/auth.php';
 
 // TEMPORARY: Simulate MTN Payment Success for Sandbox Testing
 Route::get('/simulate-momo-success/{reference}', function ($reference) {
-    abort_unless(in_array(config('app.env'), ['local', 'testing'], true), 404);
+    abort_unless(
+        config('payments.simulation_enabled', false)
+            && app()->environment(['local', 'testing']),
+        404
+    );
 
     $transaction = \App\Models\Transaction::withoutGlobalScopes()
         ->where('type', 'voucher_sale')

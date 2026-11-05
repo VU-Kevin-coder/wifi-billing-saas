@@ -66,9 +66,8 @@ class TeamAndBillingTest extends TestCase
         $response = $this->actingAs($this->finance)->get(route('operator.billing.index'));
 
         $response->assertOk()
-            ->assertSee('Subscription billing is not connected yet.')
-            ->assertSee('Continue to checkout (unavailable)')
-            ->assertSee('No payment will be submitted or collected.');
+            ->assertSee('Subscription checkout is not connected yet.')
+            ->assertSee('Self-serve plan changes coming soon');
     }
 
     public function test_support_user_cannot_view_billing_page(): void

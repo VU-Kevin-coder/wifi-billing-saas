@@ -136,12 +136,12 @@ class StaffAndImpersonationTest extends TestCase
     {
         // 1. Platform admin switches into Acme
         $response = $this->actingAs($this->platformAdmin)
-            ->get(route('platform.impersonate', $this->acme));
+            ->post(route('platform.impersonate', $this->acme));
 
         $response->assertRedirect();
         $targetUrl = $response->headers->get('Location');
         $this->assertStringContainsString('http://acme.localhost:8000/sso/verify', $targetUrl);
-        $this->assertStringContainsString('impersonate=1', $targetUrl);
+        $this->assertStringContainsString('token=', $targetUrl);
 
         // 2. Following the SSO transfer establishes impersonation session on the tenant subdomain
         $ssoResponse = $this->get($targetUrl);
@@ -160,7 +160,7 @@ class StaffAndImpersonationTest extends TestCase
         // 3. Stop impersonating
         $exitResponse = $this->actingAs($this->platformAdmin)
             ->withSession(['impersonate_tenant' => $this->acme->id])
-            ->get(route('platform.stop-impersonate'));
+            ->post(route('platform.stop-impersonate'));
 
         $exitResponse->assertRedirect(route('platform.dashboard'));
         $exitResponse->assertSessionMissing('impersonate_tenant');

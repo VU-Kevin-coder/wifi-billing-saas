@@ -18,6 +18,7 @@ class ExpireSessionsTest extends TestCase
 
     public function test_expired_session_is_disconnected_and_marked_expired(): void
     {
+        config(['site_agent.required' => false]);
         [$router, $voucher, $session] = $this->createExpiredSession();
 
         $this->mock(RouterConnectionService::class, function ($mock) use ($router, $voucher): void {
@@ -29,11 +30,12 @@ class ExpireSessionsTest extends TestCase
 
         $this->artisan('sessions:expire')->assertSuccessful();
 
-        $this->assertSame('expired', $session->fresh()->status);
+        $this->assertSame('expired', Session::withoutTenancy()->findOrFail($session->id)->status);
     }
 
     public function test_failed_router_disconnect_keeps_expired_session_pending_for_retry(): void
     {
+        config(['site_agent.required' => false]);
         [$router, $voucher, $session] = $this->createExpiredSession();
 
         $this->mock(RouterConnectionService::class, function ($mock) use ($router, $voucher): void {
@@ -45,7 +47,7 @@ class ExpireSessionsTest extends TestCase
 
         $this->artisan('sessions:expire')->assertExitCode(1);
 
-        $this->assertSame('active', $session->fresh()->status);
+        $this->assertSame('active', Session::withoutTenancy()->findOrFail($session->id)->status);
     }
 
     private function createExpiredSession(): array

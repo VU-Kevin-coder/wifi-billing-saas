@@ -11,18 +11,22 @@ class TenantScope implements Scope
 {
     /**
      * Apply the scope to a given Eloquent query builder.
-     * If a tenant context is active, filter by tenant_id.
-     * If no tenant context (platform admin), do not filter (global access).
+     * If no tenant context is active, fail closed. Platform-wide reads must
+     * explicitly remove this scope with withoutTenancy().
      */
     public function apply(Builder $builder, Model $model): void
     {
         $context = app(TenantContext::class);
 
-        if ($context->hasTenant()) {
-            $builder->where(
-                $model->getTable() . '.tenant_id',
-                $context->getTenantId()
-            );
+        if (! $context->hasTenant()) {
+            $builder->whereRaw('1 = 0');
+
+            return;
         }
+
+        $builder->where(
+            $model->getTable().'.tenant_id',
+            $context->getTenantId()
+        );
     }
 }

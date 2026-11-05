@@ -20,6 +20,7 @@ class Transaction extends Model
         'status',
         'reference',
         'provider_reference',
+        'payment_token_hash',
         'phone',
         'description',
         'meta',

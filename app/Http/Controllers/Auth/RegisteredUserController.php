@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\SsoNonce;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
 
@@ -26,7 +28,10 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'business_name' => ['required', 'string', 'max:255'],
-            'subdomain' => ['required', 'string', 'alpha_dash', 'max:50', 'unique:tenants,slug'],
+            'subdomain' => [
+                'required', 'string', 'alpha_dash', 'max:50', 'unique:tenants,slug',
+                Rule::notIn(Tenant::reservedSlugs()),
+            ],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
@@ -58,13 +63,15 @@ class RegisteredUserController extends Controller
         event(new Registered($user));
         Auth::login($user);
 
-        // Redirect to their new subdomain via signed SSO transfer
+        // Redirect to their new subdomain via a signed, single-use SSO transfer.
+        $tenant = $user->tenant;
+        $token = SsoNonce::issue($user, $tenant);
         $redirectUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
             'operator.sso.verify',
             now()->addMinutes(2),
-            ['tenant' => $user->tenant->slug, 'user' => $user->id]
+            ['tenant' => $tenant->slug, 'user' => $user->id, 'token' => $token]
         );
-        
+
         return redirect()->to($redirectUrl);
     }
 }

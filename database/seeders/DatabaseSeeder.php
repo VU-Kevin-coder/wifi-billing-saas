@@ -22,6 +22,13 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->isProduction()) {
+            $message = 'Demo data seeding is disabled in production. Create platform administrators with php artisan platform-admin:create.';
+            $this->command?->error($message);
+
+            throw new \RuntimeException($message);
+        }
+
         // ─── 1. ROLES ───────────────────────────────────────────
         $roles = ['platform_admin', 'operator_admin', 'operator_finance', 'operator_support', 'operator_network'];
         foreach ($roles as $role) {
@@ -76,9 +83,17 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // ─── 5. USERS (Platform Admin + Operators) ──────────────
+        // Never seed a known password. Set SEED_ADMIN_PASSWORD explicitly
+        // when provisioning demo accounts; otherwise a random password is
+        // generated and must be reset through the normal flow.
+        $seedPassword = (string) env('SEED_ADMIN_PASSWORD', '');
+        if ($seedPassword === '') {
+            $seedPassword = \Illuminate\Support\Str::password(24);
+        }
+
         $platformAdmin = User::firstOrCreate(['email' => 'platform@hamnet.test'], [
             'name' => 'Hamnet Platform Admin',
-            'password' => Hash::make('password'),
+            'password' => Hash::make($seedPassword),
             'tenant_id' => null,
             'email_verified_at' => now(),
         ]);
@@ -86,7 +101,7 @@ class DatabaseSeeder extends Seeder
 
         $acmeAdmin = User::firstOrCreate(['email' => 'admin@acme.test'], [
             'name' => 'Sarah Nakato',
-            'password' => Hash::make('password'),
+            'password' => Hash::make($seedPassword),
             'tenant_id' => $acme->id,
             'phone' => '+256772411883',
             'email_verified_at' => now(),
@@ -95,7 +110,7 @@ class DatabaseSeeder extends Seeder
 
         $acmeFinance = User::firstOrCreate(['email' => 'finance@acme.test'], [
             'name' => 'Acme Finance',
-            'password' => Hash::make('password'),
+            'password' => Hash::make($seedPassword),
             'tenant_id' => $acme->id,
             'email_verified_at' => now(),
         ]);
@@ -103,7 +118,7 @@ class DatabaseSeeder extends Seeder
 
         $betaAdmin = User::firstOrCreate(['email' => 'admin@beta.test'], [
             'name' => 'Peter Okello',
-            'password' => Hash::make('password'),
+            'password' => Hash::make($seedPassword),
             'tenant_id' => $beta->id,
             'email_verified_at' => now(),
         ]);
@@ -253,10 +268,7 @@ class DatabaseSeeder extends Seeder
             'bytes_out' => 1024 * 1024 * 100,
         ]);
 
-        $this->command->info('Database seeded successfully!');
-        $this->command->info('Platform Admin: platform@hamnet.test / password');
-        $this->command->info('Acme Admin: admin@acme.test / password');
-        $this->command->info('Acme Finance: finance@acme.test / password');
-        $this->command->info('Beta Admin: admin@beta.test / password');
+        $this->command->info('Database seeded successfully.');
+        $this->command->info('Seeded accounts use SEED_ADMIN_PASSWORD when set; otherwise a random password is generated.');
     }
 }

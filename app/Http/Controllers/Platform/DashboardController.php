@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Platform;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Customer;
+use App\Models\SsoNonce;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
+
 
 class DashboardController extends Controller
 {
@@ -17,16 +20,16 @@ class DashboardController extends Controller
         // ── 1. Financial KPIs ──────────────────────────────────────────
         $subscriptionRevenue = Tenant::where('subscription_status', 'active')->sum('plan_fee');
 
-        $monthlyCommission = Transaction::where('type', 'voucher_sale')
+        $monthlyCommission = Transaction::withoutTenancy()->where('type', 'voucher_sale')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->sum('platform_fee');
 
-        $weeklyCommission = Transaction::where('type', 'voucher_sale')
+        $weeklyCommission = Transaction::withoutTenancy()->where('type', 'voucher_sale')
             ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
             ->sum('platform_fee');
 
-        $ytdCommission = Transaction::where('type', 'voucher_sale')
+        $ytdCommission = Transaction::withoutTenancy()->where('type', 'voucher_sale')
             ->whereYear('created_at', now()->year)
             ->sum('platform_fee');
 
@@ -34,7 +37,7 @@ class DashboardController extends Controller
 
         // ── 2. Growth Percentages ──────────────────────────────────────
         // Last month's total revenue (subscriptions of active tenants created before last month + last month's commissions)
-        $lastMonthCommission = Transaction::where('type', 'voucher_sale')
+        $lastMonthCommission = Transaction::withoutTenancy()->where('type', 'voucher_sale')
             ->whereMonth('created_at', now()->subMonth()->month)
             ->whereYear('created_at', now()->subMonth()->year)
             ->sum('platform_fee');
@@ -59,7 +62,7 @@ class DashboardController extends Controller
             : 0;
 
         // Last week's commission
-        $lastWeekCommission = Transaction::where('type', 'voucher_sale')
+        $lastWeekCommission = Transaction::withoutTenancy()->where('type', 'voucher_sale')
             ->whereBetween('created_at', [
                 now()->subWeek()->startOfWeek(),
                 now()->subWeek()->endOfWeek(),
@@ -71,15 +74,15 @@ class DashboardController extends Controller
             : 0;
 
         // ── 3. Payouts ─────────────────────────────────────────────────
-        $totalPayouts = Transaction::where('type', 'withdrawal')
+        $totalPayouts = Transaction::withoutTenancy()->where('type', 'withdrawal')
             ->where('status', 'completed')
             ->sum('amount');
 
-        $pendingPayouts = Transaction::where('type', 'withdrawal')
+        $pendingPayouts = Transaction::withoutTenancy()->where('type', 'withdrawal')
             ->where('status', 'pending')
             ->sum('amount');
 
-        $pendingPayoutsCount = Transaction::where('type', 'withdrawal')
+        $pendingPayoutsCount = Transaction::withoutTenancy()->where('type', 'withdrawal')
             ->where('status', 'pending')
             ->count();
 
@@ -91,7 +94,7 @@ class DashboardController extends Controller
         $overdueTenants   = Tenant::where('subscription_status', 'past_due')->count();
 
         // ── 5. End Customers (across ALL tenants) ──────────────────────
-        $totalCustomers = Customer::withoutGlobalScopes()->count();
+        $totalCustomers = Customer::withoutTenancy()->count();
 
         // ── 6. Recent Signups ──────────────────────────────────────────
         $recentTenants = Tenant::with('plan')->latest()->take(5)->get();
@@ -111,7 +114,7 @@ class DashboardController extends Controller
                 })
                 ->sum('plan_fee');
 
-            $comm = Transaction::where('type', 'voucher_sale')
+            $comm = Transaction::withoutTenancy()->where('type', 'voucher_sale')
                 ->whereYear('created_at', $month->year)
                 ->whereMonth('created_at', $month->month)
                 ->sum('platform_fee');
@@ -133,30 +136,33 @@ class DashboardController extends Controller
         ));
     }
 
-    public function impersonate(Request $request, Tenant $tenant, TenantContext $context)
+    public function impersonate(Request $request, Tenant $tenant)
     {
-        // Store the impersonated tenant in the session
-        session(['impersonate_tenant' => $tenant->id]);
-        
-        // Set the context immediately for this request
-        $context->setTenant($tenant);
+        $user = $request->user();
+        $token = SsoNonce::issue($user, $tenant, impersonation: true);
 
-        // Generate signed URL to switch into the tenant subdomain as platform admin
-        $ssoUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+        // Generate a signed, single-use URL to switch into the tenant subdomain.
+        $ssoUrl = URL::temporarySignedRoute(
             'operator.sso.verify',
             now()->addMinutes(2),
             [
                 'tenant' => $tenant->slug,
-                'user' => $request->user()->id,
-                'impersonate' => 1,
+                'user' => $user->id,
+                'token' => $token,
             ]
         );
 
         return redirect()->to($ssoUrl);
     }
 
-    public function stopImpersonating(TenantContext $context)
+    public function stopImpersonating(Request $request, TenantContext $context)
     {
+        $tenant = $context->getTenant();
+
+        if ($tenant) {
+            AuditLog::record('tenant.impersonation.stopped', $tenant, [], $request->user(), $tenant);
+        }
+
         session()->forget('impersonate_tenant');
         $context->forget();
 
