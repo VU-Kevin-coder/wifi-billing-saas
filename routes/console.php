@@ -30,3 +30,9 @@ $withdrawalMinutes = max(1, (int) Policy::get('schedule.withdrawal_reconcile_min
 Schedule::command('withdrawals:reconcile')
     ->cron("*/{$withdrawalMinutes} * * * *")
     ->withoutOverlapping();
+
+// Pending adjustments expiry sweep (default: every 60 minutes)
+$adjustmentMinutes = max(1, (int) Policy::get('schedule.adjustment_expiry_minutes', 60));
+Schedule::command('adjustments:expire')
+    ->cron("*/{$adjustmentMinutes} * * * *")
+    ->withoutOverlapping();

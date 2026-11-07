@@ -87,9 +87,10 @@ class PolicySeeder extends Seeder
             'voucher.max_per_batch' => [1000, 'Maximum vouchers per generation request'],
 
             // ── Scheduling (changes require scheduler restart) ──
-            'schedule.payment_reconcile_minutes'     => [1, 'Payment reconciler frequency'],
-            'schedule.withdrawal_reconcile_minutes'  => [5, 'Withdrawal reconciler frequency'],
-            'schedule.provisioning_watchdog_minutes' => [1, 'Provisioning watchdog frequency'],
+            'schedule.payment_reconcile_minutes'     => [1,  'Payment reconciler frequency'],
+            'schedule.withdrawal_reconcile_minutes'  => [5,  'Withdrawal reconciler frequency'],
+            'schedule.provisioning_watchdog_minutes' => [1,  'Provisioning watchdog frequency'],
+            'schedule.adjustment_expiry_minutes'     => [60, 'How often to sweep expired pending adjustments'],
         ];
 
         foreach ($defaults as $key => [$value, $description]) {

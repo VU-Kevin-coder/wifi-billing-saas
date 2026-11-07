@@ -48,9 +48,12 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::post('/tenants/{tenant}/reject-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'rejectKyc'])->name('tenants.reject-kyc');
         Route::get('/billing', [\App\Http\Controllers\Platform\BillingController::class, 'index'])->name('billing.index');
         Route::get('/revenue', [\App\Http\Controllers\Platform\RevenueController::class, 'index'])->name('revenue.index');
+        Route::get('/revenue/adjustments', [\App\Http\Controllers\Platform\AdjustmentController::class, 'index'])->name('revenue.adjustments.index');
         Route::post('/revenue/withdrawals/{transaction}/approve', [\App\Http\Controllers\Platform\RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.approve');
         Route::post('/revenue/withdrawals/{transaction}/reject', [\App\Http\Controllers\Platform\RevenueController::class, 'rejectWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.reject');
-        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\RevenueController::class, 'adjustBalance'])->middleware('mfa.recent')->name('revenue.adjust');
+        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\AdjustmentController::class, 'store'])->middleware('mfa.recent')->name('revenue.adjust');
+        Route::post('/revenue/adjustments/{adjustment}/approve', [\App\Http\Controllers\Platform\AdjustmentController::class, 'approve'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.approve');
+        Route::post('/revenue/adjustments/{adjustment}/reject', [\App\Http\Controllers\Platform\AdjustmentController::class, 'reject'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.reject');
         Route::post('/plans', [\App\Http\Controllers\Platform\BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'destroyPlan'])->name('plans.destroy');

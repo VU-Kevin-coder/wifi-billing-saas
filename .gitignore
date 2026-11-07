@@ -72,3 +72,5 @@ docker-compose.override.yml
 # Composer (local lock changes by non-team tools)
 # ─────────────────────────────────────────────────────────────
 auth.json
+
+*.sql

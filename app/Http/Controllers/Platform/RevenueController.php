@@ -115,58 +115,32 @@ class RevenueController extends Controller
         return back()->with('status', 'Withdrawal rejected. Funds returned to operator wallet.');
     }
 
-    public function adjustBalance(Request $request, Tenant $tenant)
+    public function adjustBalance(Request $request, Tenant $tenant, \App\Services\Policy\AdjustmentService $service)
     {
-        $max = (float) \App\Services\Policy\Policy::get('wallet.max_adjustment', (float) config('payments.max_wallet_adjustment', 1000000));
-
         $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'between:-'.$max.','.$max],
-            'reason' => ['required', 'string', 'min:10', 'max:255'],
+            'amount' => 'required|numeric',
+            'reason' => 'required|string|min:10|max:255',
         ]);
 
-        $amount = round((float) $validated['amount'], 2);
-        if ($amount === 0.0) {
+        if ((float) $validated['amount'] === 0.0) {
             return back()->withErrors(['amount' => 'The adjustment amount cannot be zero.']);
         }
 
-        $error = DB::transaction(function () use ($request, $tenant, $validated, $amount) {
-            $locked = Tenant::query()->lockForUpdate()->findOrFail($tenant->id);
-            $before = (float) $locked->wallet_balance;
-
-            if ($before + $amount < 0) {
-                return 'This adjustment would make the wallet balance negative.';
-            }
-
-            $reference = 'ADJ-'.strtoupper(Str::random(10));
-
-            Transaction::create([
-                'tenant_id' => $locked->id,
-                'type' => 'adjustment',
-                'amount' => abs($amount),
-                'platform_fee' => 0,
-                'net_amount' => $amount, // positive or negative
-                'status' => 'completed',
-                'description' => $validated['reason'],
-                'reference' => $reference,
-            ]);
-
-            $locked->increment('wallet_balance', $amount);
-
-            AuditLog::record('wallet.adjusted', $locked, [
-                'reference' => $reference,
-                'amount' => $amount,
-                'reason' => $validated['reason'],
-                'balance_before' => $before,
-                'balance_after' => round($before + $amount, 2),
-            ], $request->user(), $locked);
-
-            return null;
-        });
-
-        if ($error) {
-            return back()->withErrors(['amount' => $error]);
+        try {
+            $result = $service->request(
+                $tenant,
+                (float) $validated['amount'],
+                $validated['reason'],
+                $request->user()
+            );
+        } catch (\DomainException $e) {
+            return back()->withErrors(['amount' => $e->getMessage()]);
         }
 
-        return back()->with('status', 'Operator balance adjusted successfully.');
+        if ($result['status'] === 'blocked') {
+            return back()->withErrors(['amount' => $result['message']]);
+        }
+
+        return back()->with('status', $result['message']);
     }
 }
