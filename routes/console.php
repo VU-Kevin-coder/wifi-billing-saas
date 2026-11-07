@@ -16,6 +16,10 @@ Schedule::command('payments:reconcile')
     ->everyMinute()
     ->withoutOverlapping();
 
+Schedule::command('provisioning:watchdog')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 Schedule::command('withdrawals:reconcile')
     ->everyFiveMinutes()
     ->withoutOverlapping();

@@ -120,6 +120,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::get('routers/{router}/provision-script', [\App\Http\Controllers\Operator\RouterController::class, 'provisionScript'])->name('routers.provision-script');
                     Route::post('routers/{router}/provision', [\App\Http\Controllers\Operator\RouterController::class, 'provision'])->name('routers.provision');
                     Route::post('routers/{router}/test', [\App\Http\Controllers\Operator\RouterController::class, 'testConnection'])->name('routers.test');
+                    Route::patch('routers/{router}/gateway', [\App\Http\Controllers\Operator\RouterController::class, 'updateGateway'])->name('routers.gateway');
                     Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
                     Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
                     Route::post('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'store'])->name('sites.store');
@@ -244,5 +245,5 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
 
     return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug])
         ->with('voucher_code', $voucher->code)
-        ->with('mikrotik_url', 'http://10.5.50.1/login?username='.rawurlencode($voucher->code));
+        ->with('mikrotik_url', \App\Support\HotspotLogin::forVoucher($voucher));
 })->middleware('web');

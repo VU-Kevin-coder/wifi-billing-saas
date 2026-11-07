@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Package;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
 {
@@ -48,7 +49,7 @@ class CustomerController extends Controller
             'name'        => ['required', 'string', 'max:255'],
             'phone'       => ['nullable', 'string', 'max:50'],
             'email'       => ['nullable', 'email', 'max:255'],
-            'package_id'  => ['nullable', 'exists:packages,id'],
+            'package_id'  => ['nullable', Rule::exists('packages', 'id')->where('tenant_id', $context->getTenant()->id)],
             'mac_address' => ['nullable', 'string', 'max:50'],
             'status'      => ['nullable', 'in:active,inactive'],
         ]);
@@ -68,7 +69,7 @@ class CustomerController extends Controller
             'name'        => ['required', 'string', 'max:255'],
             'phone'       => ['nullable', 'string', 'max:50'],
             'email'       => ['nullable', 'email', 'max:255'],
-            'package_id'  => ['nullable', 'exists:packages,id'],
+            'package_id'  => ['nullable', Rule::exists('packages', 'id')->where('tenant_id', $customer->tenant_id)],
             'mac_address' => ['nullable', 'string', 'max:50'],
             'status'      => ['nullable', 'in:active,inactive'],
         ]);

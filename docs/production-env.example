@@ -27,3 +27,13 @@ MAIL_PORT=587
 MAIL_USERNAME=
 MAIL_PASSWORD=
 MAIL_FROM_ADDRESS=
+
+# Fallback hotspot login address, used only for routers that have no valid gateway of their own.
+# Each router's gateway is set on its detail page; leave this empty unless you need a fallback.
+HOTSPOT_DEFAULT_GATEWAY=
+
+# Paid-but-not-activated sessions (see config/provisioning.php)
+PROVISIONING_ALERT_AFTER_MINUTES=10
+PROVISIONING_MAX_REQUEUES=3
+PROVISIONING_COMPENSATE_DELAY=true
+PROVISIONING_GRACE_MINUTES=2

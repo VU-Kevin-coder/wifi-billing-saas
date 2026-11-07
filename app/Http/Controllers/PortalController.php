@@ -7,6 +7,7 @@ use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
+use App\Support\HotspotLogin;
 use App\Services\PaymentService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
@@ -72,7 +73,7 @@ class PortalController extends Controller
         }
 
         $activationService->activate($tenantModel, $voucher, $request, 'Walk-in');
-        $mikrotikUrl = 'http://10.5.50.1/login?username='.rawurlencode($voucher->code);
+        $mikrotikUrl = HotspotLogin::forVoucher($voucher);
 
         return redirect()->route('portal.success', ['tenant' => $tenantModel->slug])
             ->with('mikrotik_url', $mikrotikUrl)
@@ -239,7 +240,7 @@ class PortalController extends Controller
             $voucherCode = $voucher->code;
         }
 
-        if (! $mikrotikUrl && ! $paymentToken) {
+        if (! $mikrotikUrl && ! $paymentToken && ! $voucherCode) {
             return redirect()->route('portal.index', ['tenant' => $tenantModel->slug]);
         }
 
@@ -363,7 +364,7 @@ class PortalController extends Controller
         return response()->json([
             'status' => 'activated',
             'voucher_code' => $voucher->code,
-            'mikrotik_url' => 'http://10.5.50.1/login?username='.rawurlencode($voucher->code),
+            'mikrotik_url' => HotspotLogin::forVoucher($voucher),
         ]);
     }
 
@@ -418,7 +419,7 @@ class PortalController extends Controller
         return response()->json([
             'status' => 'completed',
             'voucher_code' => $voucher->code,
-            'mikrotik_url' => 'http://10.5.50.1/login?username='.rawurlencode($voucher->code),
+            'mikrotik_url' => HotspotLogin::forVoucher($voucher),
         ]);
     }
 

@@ -27,6 +27,11 @@
         let connectionCountdown;
 
         function connectToWifi(url, voucherCode = null) {
+            if (voucherCode) {
+                document.getElementById('voucher-code').textContent = voucherCode;
+                document.getElementById('voucher-panel').classList.remove('hidden');
+            }
+
             if (!url) {
                 document.getElementById('payment-message').textContent =
                     'Your voucher is ready, but the Wi-Fi login link is unavailable. Use the voucher code to connect.';
@@ -38,10 +43,6 @@
             document.getElementById('mikrotik-link').href = url;
             document.getElementById('mikrotik-link').classList.remove('hidden');
             document.getElementById('payment-spinner').classList.add('hidden');
-            if (voucherCode) {
-                document.getElementById('voucher-code').textContent = voucherCode;
-                document.getElementById('voucher-panel').classList.remove('hidden');
-            }
             document.getElementById('payment-message').innerHTML =
                 'Your access is active. Connecting in <span id="countdown">3</span>s…';
 
