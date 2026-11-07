@@ -30,6 +30,23 @@
                 </div>
             </div>
 
+            <!-- Navigation Tabs -->
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8">
+                    <a href="{{ route('platform.configuration.index') }}"
+                       class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2
+                       {{ request()->routeIs('platform.configuration.*') ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                        General & Integrations
+                    </a>
+                    <a href="{{ route('platform.policies.index') }}"
+                       class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2
+                       {{ request()->routeIs('platform.policies.*') ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                        Policies
+                    </a>
+                </nav>
+            </div>
+
             <!-- Flash Alerts -->
             @if(session('success') || session('status'))
                 <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center justify-between shadow-sm">
@@ -199,7 +216,7 @@
                             'bg' => 'bg-red-500/10',
                             'text' => 'text-red-600',
                             'status' => $settings['airtel_status'],
-                        ],
+                        ],
                         [
                             'key' => 'pesapal',
                             'name' => 'Pesapal',
@@ -533,8 +550,8 @@
                     </form>
                 </div>
             </div>
-        </div>
-
+        </div>
+
 <!-- Flutterwave settings overlay -->
         <div x-show="activeOverlay === 'flutterwave'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
             <div x-show="activeOverlay === 'flutterwave'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>

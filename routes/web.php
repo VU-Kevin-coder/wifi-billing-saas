@@ -42,6 +42,10 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'store'])->name('tenants.store');
         Route::get('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'show'])->name('tenants.show');
+        Route::post('/tenants/{tenant}/suspend', [\App\Http\Controllers\Platform\TenantController::class, 'suspend'])->name('tenants.suspend');
+        Route::post('/tenants/{tenant}/reactivate', [\App\Http\Controllers\Platform\TenantController::class, 'reactivate'])->name('tenants.reactivate');
+        Route::post('/tenants/{tenant}/verify-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'verifyKyc'])->name('tenants.verify-kyc');
+        Route::post('/tenants/{tenant}/reject-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'rejectKyc'])->name('tenants.reject-kyc');
         Route::get('/billing', [\App\Http\Controllers\Platform\BillingController::class, 'index'])->name('billing.index');
         Route::get('/revenue', [\App\Http\Controllers\Platform\RevenueController::class, 'index'])->name('revenue.index');
         Route::post('/revenue/withdrawals/{transaction}/approve', [\App\Http\Controllers\Platform\RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.approve');
@@ -61,6 +65,9 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
         Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
         Route::post('/configuration/sms/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
+        Route::get('/configuration/policies', [\App\Http\Controllers\Platform\PolicyController::class, 'index'])->name('policies.index');
+        Route::put('/configuration/policies/lifecycle', [\App\Http\Controllers\Platform\PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
+        Route::put('/configuration/policies/approval', [\App\Http\Controllers\Platform\PolicyController::class, 'updateApproval'])->name('policies.approval.update');
         Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->middleware('mfa.recent')->name('impersonate');
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
@@ -108,7 +115,10 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
 
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
-                    Route::resource('vouchers', \App\Http\Controllers\Operator\VoucherController::class)->only(['index', 'store']);
+                    Route::get('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'index'])->name('vouchers.index');
+                    Route::post('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'store'])
+                        ->middleware('tenant.active:generate_vouchers')
+                        ->name('vouchers.store');
                 });
 
                 Route::middleware('role:operator_admin|operator_network')->group(function () {
@@ -138,7 +148,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('wallet.index');
                 Route::post('/wallet/withdraw', [\App\Http\Controllers\Operator\WithdrawalController::class, 'store'])
-                    ->middleware(['role:operator_admin|operator_finance', 'mfa.recent'])
+                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:withdraw', 'mfa.recent'])
                     ->name('wallet.withdraw');
 
                 Route::middleware('role:operator_admin')->group(function () {

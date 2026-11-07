@@ -52,6 +52,10 @@ class PortalController extends Controller
         $tenantModel = $this->resolveTenant($request, $context, $tenant);
         abort_unless($tenantModel, 404);
 
+        if (\App\Services\Policy\Policy::denies($tenantModel, 'portal_redeem')) {
+            return back()->withErrors(['error' => 'This Wi-Fi operator is not redeeming vouchers right now.']);
+        }
+
         $request->validate([
             'voucher_code' => ['required', 'string'],
             'router_id' => [
@@ -88,6 +92,10 @@ class PortalController extends Controller
     ) {
         $tenantModel = $this->resolveTenant($request, $context, $tenant);
         abort_unless($tenantModel, 404);
+
+        if (\App\Services\Policy\Policy::denies($tenantModel, 'portal_sell')) {
+            return back()->withErrors(['error' => 'This Wi-Fi operator is not accepting payments right now.']);
+        }
 
         $request->validate([
             'package_id' => [
