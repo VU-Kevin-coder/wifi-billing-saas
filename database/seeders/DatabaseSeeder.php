@@ -16,7 +16,6 @@ use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Permission\Models\Role;
 
 class DatabaseSeeder extends Seeder
 {
@@ -30,10 +29,7 @@ class DatabaseSeeder extends Seeder
         }
 
         // ─── 1. ROLES ───────────────────────────────────────────
-        $roles = ['platform_admin', 'operator_admin', 'operator_finance', 'operator_support', 'operator_network'];
-        foreach ($roles as $role) {
-            Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
-        }
+        $this->call(RoleSeeder::class);
 
         // ─── 2. PLATFORM SETTINGS ───────────────────────────────
         PlatformSetting::set('platform_name', 'Hamnet');
@@ -258,7 +254,7 @@ class DatabaseSeeder extends Seeder
 
         // Create a session for the customer
         Session::firstOrCreate(['tenant_id' => $acme->id, 'customer_id' => $customer->id], [
-            'voucher_id' => Voucher::where('tenant_id', $acme->id)->first()->id,
+            'voucher_id' => Voucher::withoutTenancy()->where('tenant_id', $acme->id)->firstOrFail()->id,
             'package_id' => $daily->id,
             'status' => 'active',
             'started_at' => now(),
@@ -267,6 +263,8 @@ class DatabaseSeeder extends Seeder
             'bytes_in' => 1024 * 1024 * 50,
             'bytes_out' => 1024 * 1024 * 100,
         ]);
+
+        $this->call(PolicySeeder::class);
 
         $this->command->info('Database seeded successfully.');
         $this->command->info('Seeded accounts use SEED_ADMIN_PASSWORD when set; otherwise a random password is generated.');

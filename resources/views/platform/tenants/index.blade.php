@@ -13,7 +13,6 @@
         status: '{{ old('status', 'trial') }}',
         owner_name: '{{ old('owner_name', '') }}',
         owner_email: '{{ old('owner_email', '') }}',
-        owner_password: '',
         updateSlug() {
             if (!this.slugManual) {
                 this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -463,16 +462,7 @@
                                                         <p class="text-[11px] text-gray-400 mt-1">Used to log in to the operator workspace.</p>
                                                     </div>
 
-                                                    <!-- Password -->
-                                                    <div>
-                                                        <label for="owner_password" class="block font-medium text-gray-700 mb-1">Initial Password</label>
-                                                        <input type="password" id="owner_password" name="owner_password" x-model="owner_password" placeholder="Minimum 8 characters" required
-                                                               class="block w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
-                                                        @error('owner_password')
-                                                            <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
-                                                        @enderror
-                                                        <p class="text-[11px] text-gray-400 mt-1">Defaults to <code class="font-bold">password</code> if left blank.</p>
-                                                    </div>
+                                                    <p class="text-[11px] text-gray-500">The admin will receive an email invitation to set their own password.</p>
                                                 </div>
                                             </div>
 
@@ -507,4 +497,3 @@
         <!-- ─── END SLIDE-OVER DRAWER ─── -->
     </div>
 </x-app-layout>
-

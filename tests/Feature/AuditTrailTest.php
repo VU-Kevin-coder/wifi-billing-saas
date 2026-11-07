@@ -10,6 +10,7 @@ use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -292,20 +293,27 @@ class AuditTrailTest extends TestCase
 
     public function test_tenant_creation_is_audited(): void
     {
+        Notification::fake();
+
         $this->actingAs($this->platformAdmin)
             ->post(route('platform.tenants.store'), [
                 'name' => 'New Co',
-                'slug' => 'newco',
+                'slug' => 'New Co',
                 'status' => 'active',
                 'owner_name' => 'Owner',
                 'owner_email' => 'owner@newco.test',
-                'owner_password' => 'a-long-password',
             ])
             ->assertSessionHasNoErrors();
 
+        $tenant = Tenant::where('slug', 'new-co')->firstOrFail();
+        $owner = User::withoutTenancy()->where('email', 'owner@newco.test')->firstOrFail();
         $log = AuditLog::where('action', 'tenant.created')->firstOrFail();
-        $this->assertSame('newco', $log->meta['slug']);
+        $this->assertSame('new-co', $log->meta['slug']);
         $this->assertSame('owner@newco.test', $log->meta['owner_email']);
+        $this->assertSame($tenant->id, $owner->tenant_id);
+        $this->assertNull($owner->email_verified_at);
+        $this->assertSame(now()->toDateString(), $tenant->created_at->toDateString());
+        Notification::assertSentTo($owner, ResetPassword::class);
     }
 
     public function test_successful_login_is_audited(): void

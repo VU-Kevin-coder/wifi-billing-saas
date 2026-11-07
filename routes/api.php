@@ -26,11 +26,11 @@ Route::prefix('webhooks')->group(function () {
 });
 
 Route::get('/payments/{token}', [PortalController::class, 'paymentStatus'])
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:payment-poll')
     ->name('api.payments.status');
 
 Route::post('/payments/{token}/activate', [PortalController::class, 'activatePayment'])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:payment-activate')
     ->name('api.payments.activate');
 
 Route::prefix('site-agent')

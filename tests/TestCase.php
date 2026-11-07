@@ -9,8 +9,9 @@ abstract class TestCase extends BaseTestCase
 {
     protected function setUp(): void
     {
-        Policy::flush();
         parent::setUp();
+
+        Policy::flush();
     }
 
     protected function tearDown(): void

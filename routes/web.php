@@ -14,22 +14,29 @@ Route::get('/', function () {
 // ─── Public Captive Portal (Direct / IP / Ngrok / Path Access) ─
 Route::prefix('portal')
     ->name('portal.direct.')
-    ->middleware('throttle:20,1')
     ->group(function () {
-        Route::get('/{tenant?}', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
+        Route::get('/{tenant?}', [\App\Http\Controllers\PortalController::class, 'index'])
+            ->middleware('throttle:portal-browse')
+            ->name('index');
         Route::post('/{tenant?}/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])
-            ->middleware('throttle:5,1')
+            ->middleware('throttle:portal-redeem')
             ->name('redeem');
         Route::post('/{tenant?}/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])
-            ->middleware('throttle:3,1')
+            ->middleware('throttle:portal-purchase')
             ->name('purchase');
-        Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
-        Route::get('/{tenant}/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])->name('pesapal.callback');
+        Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])
+            ->middleware('throttle:portal-browse')
+            ->name('success');
+        Route::get('/{tenant}/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])
+            ->middleware('throttle:portal-browse')
+            ->name('pesapal.callback');
         Route::get('/{tenant}/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
             ->whereNumber('transaction')
+            ->middleware('throttle:portal-browse')
             ->name('pending');
         Route::get('/{tenant}/check/{transaction}', [\App\Http\Controllers\PortalController::class, 'check'])
             ->whereNumber('transaction')
+            ->middleware('throttle:payment-poll')
             ->name('check');
     });
 
@@ -83,22 +90,29 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
         // ─── Public Captive Portal (No Auth Required) ─────────────
         Route::prefix('portal')
             ->name('portal.')
-            ->middleware('throttle:20,1')
             ->group(function () {
-                Route::get('/', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
+                Route::get('/', [\App\Http\Controllers\PortalController::class, 'index'])
+                    ->middleware('throttle:portal-browse')
+                    ->name('index');
                 Route::post('/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])
-                    ->middleware('throttle:5,1')
+                    ->middleware('throttle:portal-redeem')
                     ->name('redeem');
                 Route::post('/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])
-                    ->middleware('throttle:3,1')
+                    ->middleware('throttle:portal-purchase')
                     ->name('purchase');
-                Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
-                Route::get('/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])->name('pesapal.callback');
+                Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])
+                    ->middleware('throttle:portal-browse')
+                    ->name('success');
+                Route::get('/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])
+                    ->middleware('throttle:portal-browse')
+                    ->name('pesapal.callback');
                 Route::get('/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
                     ->whereNumber('transaction')
+                    ->middleware('throttle:portal-browse')
                     ->name('pending');
                 Route::get('/check/{transaction}', [\App\Http\Controllers\PortalController::class, 'check'])
                     ->whereNumber('transaction')
+                    ->middleware('throttle:payment-poll')
                     ->name('check');
             });
 

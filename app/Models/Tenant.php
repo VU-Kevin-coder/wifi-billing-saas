@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Tenant extends Model
 {
@@ -128,6 +129,11 @@ class Tenant extends Model
     public static function reservedSlugs(): array
     {
         return config('tenancy.reserved_slugs', []);
+    }
+
+    public static function normalizeSlug(mixed $slug): string
+    {
+        return Str::slug(is_string($slug) ? $slug : '');
     }
 
     /**

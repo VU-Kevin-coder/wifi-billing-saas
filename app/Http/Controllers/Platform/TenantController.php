@@ -92,18 +92,20 @@ class TenantController extends Controller
 
     public function store(Request $request)
     {
+        // Validate the exact value that will be stored.
+        $request->merge(['slug' => Tenant::normalizeSlug($request->input('slug'))]);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => [
-                'required', 'string', 'max:100', 'unique:tenants,slug', 'alpha_dash',
-                Rule::notIn(Tenant::reservedSlugs()),
+                'required', 'string', 'min:3', 'max:50', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+                'unique:tenants,slug', Rule::notIn(Tenant::reservedSlugs()),
             ],
             'platform_plan_id' => 'nullable|exists:platform_plans,id',
             'plan' => 'nullable|string',
             'status' => 'required|string|in:trial,active,suspended',
             'owner_name' => 'required|string|max:255',
             'owner_email' => 'required|email|max:255|unique:users,email',
-            'owner_password' => 'required|string|min:8',
         ]);
 
         // Resolve plan dynamically from DB
@@ -121,7 +123,7 @@ class TenantController extends Controller
 
         $tenant = Tenant::create([
             'name' => $validated['name'],
-            'slug' => strtolower($validated['slug']),
+            'slug' => $validated['slug'],
             'status' => $validated['status'] === 'trial' ? 'active' : $validated['status'],
             'platform_plan_id' => $plan?->id,
             'plan' => $plan?->name ?? $validated['plan'] ?? 'Starter',
@@ -129,19 +131,18 @@ class TenantController extends Controller
             'subscription_status' => $validated['status'] === 'trial' ? 'trial' : 'active',
             'trial_ends_at' => $validated['status'] === 'trial' ? now()->addDays($plan?->trial_days ?: 14) : null,
             'settings' => $settings,
-            'created_at' => $validated['status'] === 'trial' ? now() : now()->subDays(15),
         ]);
 
         $user = User::create([
             'tenant_id' => $tenant->id,
             'name' => $validated['owner_name'],
             'email' => $validated['owner_email'],
-            'password' => Hash::make($validated['owner_password']),
+            // The owner sets their own password through the emailed reset link.
+            'password' => Hash::make(\Illuminate\Support\Str::random(64)),
         ]);
-        $user->email_verified_at = now();
-        $user->save();
-
         $user->syncRoles(['operator_admin']);
+
+        $status = \Illuminate\Support\Facades\Password::broker()->sendResetLink(['email' => $user->email]);
 
         \App\Models\AuditLog::record('tenant.created', $tenant, [
             'slug' => $tenant->slug,
@@ -149,8 +150,12 @@ class TenantController extends Controller
             'status' => $tenant->status,
         ], null, $tenant);
 
+        $invited = $status === \Illuminate\Support\Facades\Password::RESET_LINK_SENT;
+
         return redirect()->route('platform.tenants.index')
-            ->with('success', "Operator tenant '{$tenant->name}' created successfully with owner {$user->email}.");
+            ->with('success', $invited
+                ? "Operator tenant '{$tenant->name}' created. An invitation was emailed to {$user->email} so they can set their own password."
+                : "Operator tenant '{$tenant->name}' created, but the invitation email to {$user->email} could not be sent. Ask them to use \"Forgot password\" to set a password.");
     }
 
     public function suspend(Tenant $tenant)

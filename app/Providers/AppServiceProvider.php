@@ -10,9 +10,12 @@ use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 
@@ -36,12 +39,13 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->registerAuthAuditing();
+        $this->registerRateLimiters();
 
-        \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
+        RateLimiter::for('login', function (Request $request) {
             $attempts = (int) \App\Services\Policy\Policy::get('security.login_throttle_attempts', 6);
             $decay = (int) \App\Services\Policy\Policy::get('security.login_throttle_decay', 1);
 
-            return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $attempts)
+            return Limit::perMinutes($decay, $attempts)
                 ->by($request->input('email').'|'.$request->ip());
         });
 
@@ -68,6 +72,34 @@ class AppServiceProvider extends ServiceProvider
         } catch (\Throwable $e) {
             // Ignore during early bootstrap or when database is not yet ready
         }
+    }
+
+    /**
+     * Register named limits for authentication and captive portal endpoints.
+     */
+    private function registerRateLimiters(): void
+    {
+        RateLimiter::for('auth-register', fn (Request $request) => Limit::perMinute(5)->by('register:'.$request->ip()));
+        RateLimiter::for('auth-password-email', fn (Request $request) => Limit::perMinute(5)->by('pwd-email:'.$request->ip()));
+        RateLimiter::for('auth-password-reset', fn (Request $request) => Limit::perMinute(10)->by('pwd-reset:'.$request->ip()));
+
+        RateLimiter::for('portal-browse', fn (Request $request) => Limit::perMinute(120)->by('browse:'.$request->ip()));
+        RateLimiter::for('portal-redeem', fn (Request $request) => Limit::perMinute(30)->by('redeem:'.$request->ip()));
+        RateLimiter::for('portal-purchase', fn (Request $request) => Limit::perMinute(30)->by('purchase:'.$request->ip()));
+
+        RateLimiter::for('payment-poll', function (Request $request) {
+            $payment = (string) ($request->route('token') ?? $request->route('transaction') ?? '');
+
+            return [
+                Limit::perMinute(60)->by('poll:'.hash('sha256', $payment.'|'.$request->ip())),
+                Limit::perMinute(600)->by('poll-ip:'.$request->ip()),
+            ];
+        });
+
+        RateLimiter::for('payment-activate', fn (Request $request) => [
+            Limit::perMinute(10)->by('activate:'.hash('sha256', (string) $request->route('token').'|'.$request->ip())),
+            Limit::perMinute(120)->by('activate-ip:'.$request->ip()),
+        ]);
     }
 
     /**
