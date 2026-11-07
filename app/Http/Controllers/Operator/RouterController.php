@@ -120,7 +120,7 @@ class RouterController extends Controller
             'ethernet_ports' => ['nullable', 'array'],
             'enable_hotspot' => ['nullable', 'boolean'],
             'hotspot_network' => ['nullable', 'string', 'max:50'],
-            'gateway_ip' => ['nullable', 'string', 'max:50'],
+            'gateway_ip' => ['nullable', 'ipv4'],
             'dns_servers' => ['nullable', 'string', 'max:100'],
             'hotspot_domain' => ['nullable', 'string', 'max:100'],
         ]);
@@ -403,6 +403,30 @@ class RouterController extends Controller
     /**
      * Resolve and verify that the requested router belongs strictly to the current tenant.
      */
+    /**
+     * Set the hotspot gateway customers are sent to after paying or redeeming.
+     */
+    public function updateGateway(Request $request, TenantContext $context, ...$args)
+    {
+        $router = $this->resolveTenantRouter($args, $context);
+
+        $validated = $request->validate([
+            'gateway_ip' => ['required', 'ipv4'],
+        ]);
+
+        $config = $router->hotspot_config ?? [];
+        $previous = $config['gateway'] ?? null;
+        $config['gateway'] = $validated['gateway_ip'];
+        $router->update(['hotspot_config' => $config]);
+
+        AuditLog::record('router.gateway_changed', $router, [
+            'from' => $previous,
+            'to' => $validated['gateway_ip'],
+        ]);
+
+        return back()->with('status', 'Hotspot gateway updated.');
+    }
+
     protected function resolveTenantRouter(array $args, TenantContext $context): Router
     {
         $tenantId = $context->getTenantId();

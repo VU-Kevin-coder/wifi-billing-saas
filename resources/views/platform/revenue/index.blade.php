@@ -13,6 +13,11 @@
                     <h1 class="text-2xl font-bold text-gray-900">Platform Revenue & Earnings</h1>
                     <p class="text-gray-500 text-sm mt-1">Track your SaaS revenue, commissions, and operator payouts.</p>
                 </div>
+                <div class="flex items-center gap-3">
+                    <a href="{{ route('platform.revenue.adjustments.index') }}" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50">
+                        Pending Adjustments ({{ \App\Models\PendingAdjustment::withoutTenancy()->where('status', 'pending')->count() }})
+                    </a>
+                </div>
             </div>
 
             @if(session('status'))

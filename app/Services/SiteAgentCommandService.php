@@ -40,6 +40,30 @@ class SiteAgentCommandService
         );
     }
 
+    /**
+     * Put a failed activation back in the queue with a fresh attempt budget.
+     * When delays are compensated, the router limit is the full package
+     * duration (access will be re-based on the moment activation succeeds).
+     */
+    public function requeueProvision(SiteAgentCommand $command, Session $session): SiteAgentCommand
+    {
+        $payload = $command->payload ?? [];
+        $payload['limit_uptime'] = $this->routerUptimeLimit(
+            $session,
+            fullDuration: (bool) \App\Services\Policy\Policy::get('provisioning.compensate_delay', config('provisioning.compensate_delay', true)),
+        );
+
+        $command->forceFill([
+            'payload' => $payload,
+            'status' => 'pending',
+            'attempts' => 0,
+            'claimed_at' => null,
+            'completed_at' => null,
+        ])->save();
+
+        return $command;
+    }
+
     public function expire(Router $router, Session $session, Voucher $voucher): SiteAgentCommand
     {
         $agent = $this->agentFor($router);
@@ -80,9 +104,12 @@ class SiteAgentCommandService
             ->firstOrFail();
     }
 
-    private function routerUptimeLimit(Session $session): string
+    private function routerUptimeLimit(Session $session, bool $fullDuration = false): string
     {
-        $seconds = max(1, now()->diffInSeconds($session->expires_at, false));
+        $package = $fullDuration ? $session->package : null;
+        $target = $package ? $package->expiresAt(now()) : $session->expires_at;
+
+        $seconds = max(1, (int) floor(now()->diffInSeconds($target, false)));
         $hours = intdiv($seconds, 3600);
         $minutes = intdiv($seconds % 3600, 60);
         $remainingSeconds = $seconds % 60;

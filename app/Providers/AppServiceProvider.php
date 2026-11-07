@@ -37,6 +37,30 @@ class AppServiceProvider extends ServiceProvider
 
         $this->registerAuthAuditing();
 
+        \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
+            $attempts = (int) \App\Services\Policy\Policy::get('security.login_throttle_attempts', 6);
+            $decay = (int) \App\Services\Policy\Policy::get('security.login_throttle_decay', 1);
+
+            return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $attempts)
+                ->by($request->input('email').'|'.$request->ip());
+        });
+
+        \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {
+            return url(route('password.reset', [
+                'token' => $token,
+                'email' => $user->getEmailForPasswordReset(),
+            ], false));
+        });
+
+        try {
+            if (Schema::hasTable('policy_settings')) {
+                $ttl = (int) \App\Services\Policy\Policy::get('security.password_reset_ttl', 60);
+                config(['auth.passwords.users.expire' => $ttl]);
+            }
+        } catch (\Throwable $e) {
+            // Ignore during early bootstrap
+        }
+
         try {
             if (Schema::hasTable('platform_settings')) {
                 PlatformMailService::configureMailer();

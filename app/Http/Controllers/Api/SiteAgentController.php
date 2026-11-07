@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Session;
 use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
+use App\Services\ProvisioningWatchdog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -99,12 +100,14 @@ class SiteAgentController extends Controller
                 'failure_reason' => null,
             ]);
 
-            Session::withoutTenancy()
-                ->where('tenant_id', $job->tenant_id)
-                ->whereKey($job->session_id)
-                ->update([
-                    'status' => $job->operation === 'expire_user' ? 'expired' : 'active',
-                ]);
+            if ($job->operation === 'expire_user') {
+                Session::withoutTenancy()
+                    ->where('tenant_id', $job->tenant_id)
+                    ->whereKey($job->session_id)
+                    ->update(['status' => 'expired']);
+            } elseif ($job->operation === 'provision_user') {
+                app(ProvisioningWatchdog::class)->markProvisioned($job);
+            }
 
             return ['duplicate' => false, 'status' => 'completed'];
         });

@@ -312,7 +312,7 @@ class FlutterwaveWithdrawalService
             $meta['reconcile_not_found_count'] = (int) ($meta['reconcile_not_found_count'] ?? 0) + 1;
             $meta['reconcile_checked_at'] = now()->toIso8601String();
 
-            $hours = max(1, (int) config('payments.withdrawal_manual_review_hours', 24));
+            $hours = max(1, (int) \App\Services\Policy\Policy::get('wallet.withdrawal_manual_review_hours', 24));
             if (empty($meta['needs_manual_review']) && $submittedAt->lte(now()->subHours($hours))) {
                 $meta['needs_manual_review'] = true;
                 $flagged = true;

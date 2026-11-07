@@ -14,7 +14,7 @@ class ReconcileWithdrawals extends Command
 
     public function handle(FlutterwaveWithdrawalService $withdrawals): int
     {
-        $minutes = max(0, (int) $this->option('minutes'));
+        $minutes = max(0, (int) ($this->option('minutes') ?? 10));
         $counts = [];
 
         Transaction::withoutTenancy()

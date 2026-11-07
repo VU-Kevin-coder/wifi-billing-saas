@@ -18,7 +18,10 @@ class RequireRecentMfa
     {
         $user = $request->user();
 
-        if (! $user || ! config('security.step_up_enabled', true)) {
+        $stepUpEnabled = \App\Services\Policy\Policy::get('security.step_up_enabled', true)
+            && config('security.step_up_enabled', true);
+
+        if (! $user || ! $stepUpEnabled) {
             return $next($request);
         }
 
@@ -27,7 +30,7 @@ class RequireRecentMfa
                 ->with('error', 'Enable Two-Factor Authentication to perform this action.');
         }
 
-        $window = $minutes !== null ? (int) $minutes : (int) config('security.step_up_minutes', 10);
+        $window = $minutes !== null ? (int) $minutes : (int) \App\Services\Policy\Policy::get('security.step_up_minutes', config('security.step_up_minutes', 10));
 
         if (MfaSession::isRecent($request, $window)) {
             return $next($request);

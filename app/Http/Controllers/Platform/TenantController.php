@@ -152,4 +152,40 @@ class TenantController extends Controller
         return redirect()->route('platform.tenants.index')
             ->with('success', "Operator tenant '{$tenant->name}' created successfully with owner {$user->email}.");
     }
+
+    public function suspend(Tenant $tenant)
+    {
+        $tenant->update(['status' => 'suspended']);
+
+        \App\Models\AuditLog::record('tenant.suspended', $tenant, ['by' => auth()->id()]);
+
+        return back()->with('status', "Tenant '{$tenant->name}' suspended.");
+    }
+
+    public function reactivate(Tenant $tenant)
+    {
+        $tenant->update(['status' => 'active']);
+
+        \App\Models\AuditLog::record('tenant.reactivated', $tenant, ['by' => auth()->id()]);
+
+        return back()->with('status', "Tenant '{$tenant->name}' reactivated.");
+    }
+
+    public function verifyKyc(Tenant $tenant)
+    {
+        $tenant->update(['kyc_status' => 'verified']);
+
+        \App\Models\AuditLog::record('tenant.kyc_verified', $tenant, ['by' => auth()->id()]);
+
+        return back()->with('status', "Tenant '{$tenant->name}' KYC verified.");
+    }
+
+    public function rejectKyc(Tenant $tenant)
+    {
+        $tenant->update(['kyc_status' => 'rejected']);
+
+        \App\Models\AuditLog::record('tenant.kyc_rejected', $tenant, ['by' => auth()->id()]);
+
+        return back()->with('status', "Tenant '{$tenant->name}' KYC rejected.");
+    }
 }

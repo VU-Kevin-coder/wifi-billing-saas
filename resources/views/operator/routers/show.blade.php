@@ -143,7 +143,29 @@
                         <span x-text="testing ? 'Testing...' : 'Test LAN API'">Test LAN API</span>
                     </button>
                 </section>
-            </div>
+
+                <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-base font-bold text-gray-900">Hotspot Gateway</h2>
+                    <p class="mb-4 mt-1 text-sm text-gray-500">
+                        The address customers are sent to after paying or redeeming a voucher to log in to this router's hotspot.
+                        It must match the hotspot address configured on the router.
+                    </p>
+                    <form method="POST" action="{{ route('operator.routers.gateway', ['tenant' => $tenant->slug, 'router' => $router->id]) }}">
+                        @csrf
+                        @method('PATCH')
+                        <label for="gateway_ip" class="mb-1 block text-sm font-medium text-gray-700">Gateway IP</label>
+                        <input id="gateway_ip" name="gateway_ip" type="text" inputmode="decimal" maxlength="15" required
+                               value="{{ old('gateway_ip', $router->hotspot_config['gateway'] ?? '') }}"
+                               placeholder="e.g. 10.5.50.1"
+                               class="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        @error('gateway_ip') <p class="mb-2 text-sm text-red-600">{{ $message }}</p> @enderror
+                        <button type="submit"
+                                class="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
+                            Save gateway
+                        </button>
+                    </form>
+                </section>
+            </div>
 
             <!-- Router Provisioning & Setup -->
             <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm" x-data="{
@@ -248,7 +270,6 @@
                     </div>
                 </div>
             </section>
-
-        </div>
-    </div>
+        </div>
+    </div>
 </x-app-layout>

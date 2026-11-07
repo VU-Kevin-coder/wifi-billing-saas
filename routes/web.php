@@ -42,11 +42,18 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'store'])->name('tenants.store');
         Route::get('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'show'])->name('tenants.show');
+        Route::post('/tenants/{tenant}/suspend', [\App\Http\Controllers\Platform\TenantController::class, 'suspend'])->name('tenants.suspend');
+        Route::post('/tenants/{tenant}/reactivate', [\App\Http\Controllers\Platform\TenantController::class, 'reactivate'])->name('tenants.reactivate');
+        Route::post('/tenants/{tenant}/verify-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'verifyKyc'])->name('tenants.verify-kyc');
+        Route::post('/tenants/{tenant}/reject-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'rejectKyc'])->name('tenants.reject-kyc');
         Route::get('/billing', [\App\Http\Controllers\Platform\BillingController::class, 'index'])->name('billing.index');
         Route::get('/revenue', [\App\Http\Controllers\Platform\RevenueController::class, 'index'])->name('revenue.index');
+        Route::get('/revenue/adjustments', [\App\Http\Controllers\Platform\AdjustmentController::class, 'index'])->name('revenue.adjustments.index');
         Route::post('/revenue/withdrawals/{transaction}/approve', [\App\Http\Controllers\Platform\RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.approve');
         Route::post('/revenue/withdrawals/{transaction}/reject', [\App\Http\Controllers\Platform\RevenueController::class, 'rejectWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.reject');
-        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\RevenueController::class, 'adjustBalance'])->middleware('mfa.recent')->name('revenue.adjust');
+        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\AdjustmentController::class, 'store'])->middleware('mfa.recent')->name('revenue.adjust');
+        Route::post('/revenue/adjustments/{adjustment}/approve', [\App\Http\Controllers\Platform\AdjustmentController::class, 'approve'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.approve');
+        Route::post('/revenue/adjustments/{adjustment}/reject', [\App\Http\Controllers\Platform\AdjustmentController::class, 'reject'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.reject');
         Route::post('/plans', [\App\Http\Controllers\Platform\BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'destroyPlan'])->name('plans.destroy');
@@ -61,6 +68,10 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
         Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
         Route::post('/configuration/sms/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
+        Route::get('/configuration/policies', [\App\Http\Controllers\Platform\PolicyController::class, 'index'])->name('policies.index');
+        Route::put('/configuration/policies/lifecycle', [\App\Http\Controllers\Platform\PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
+        Route::put('/configuration/policies/approval', [\App\Http\Controllers\Platform\PolicyController::class, 'updateApproval'])->name('policies.approval.update');
+        Route::put('/configuration/policies/{category}', [\App\Http\Controllers\Platform\PolicyController::class, 'updateCategory'])->name('policies.category.update');
         Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->middleware('mfa.recent')->name('impersonate');
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
@@ -108,7 +119,10 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
 
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
-                    Route::resource('vouchers', \App\Http\Controllers\Operator\VoucherController::class)->only(['index', 'store']);
+                    Route::get('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'index'])->name('vouchers.index');
+                    Route::post('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'store'])
+                        ->middleware('tenant.active:generate_vouchers')
+                        ->name('vouchers.store');
                 });
 
                 Route::middleware('role:operator_admin|operator_network')->group(function () {
@@ -120,6 +134,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::get('routers/{router}/provision-script', [\App\Http\Controllers\Operator\RouterController::class, 'provisionScript'])->name('routers.provision-script');
                     Route::post('routers/{router}/provision', [\App\Http\Controllers\Operator\RouterController::class, 'provision'])->name('routers.provision');
                     Route::post('routers/{router}/test', [\App\Http\Controllers\Operator\RouterController::class, 'testConnection'])->name('routers.test');
+                    Route::patch('routers/{router}/gateway', [\App\Http\Controllers\Operator\RouterController::class, 'updateGateway'])->name('routers.gateway');
                     Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
                     Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
                     Route::post('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'store'])->name('sites.store');
@@ -137,7 +152,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('wallet.index');
                 Route::post('/wallet/withdraw', [\App\Http\Controllers\Operator\WithdrawalController::class, 'store'])
-                    ->middleware(['role:operator_admin|operator_finance', 'mfa.recent'])
+                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:withdraw', 'mfa.recent'])
                     ->name('wallet.withdraw');
 
                 Route::middleware('role:operator_admin')->group(function () {
@@ -244,5 +259,5 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
 
     return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug])
         ->with('voucher_code', $voucher->code)
-        ->with('mikrotik_url', 'http://10.5.50.1/login?username='.rawurlencode($voucher->code));
+        ->with('mikrotik_url', \App\Support\HotspotLogin::forVoucher($voucher));
 })->middleware('web');

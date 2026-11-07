@@ -17,11 +17,15 @@ class Session extends Model
         'tenant_id', 'site_id', 'customer_id', 'voucher_id', 'package_id', 'router_id',
         'status', 'started_at', 'expires_at', 'ip_address', 'mac_address',
         'bytes_in', 'bytes_out', 'rate_in', 'rate_out',
+        'provisioning_requeues', 'provisioning_alerted_at', 'provisioned_at',
     ];
 
     protected $casts = [
         'started_at' => 'datetime',
         'expires_at' => 'datetime',
+        'provisioning_alerted_at' => 'datetime',
+        'provisioned_at' => 'datetime',
+        'provisioning_requeues' => 'integer',
         'bytes_in' => 'integer',
         'bytes_out' => 'integer',
         'rate_in' => 'integer',

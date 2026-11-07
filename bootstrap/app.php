@@ -58,6 +58,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureRole::class,
             'site-agent' => AuthenticateSiteAgent::class,
             'mfa.recent' => \App\Http\Middleware\RequireRecentMfa::class,
+            'tenant.active' => \App\Http\Middleware\EnsureTenantIsActive::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

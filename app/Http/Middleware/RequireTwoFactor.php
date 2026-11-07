@@ -18,7 +18,10 @@ class RequireTwoFactor
             return $next($request);
         }
 
-        if (config('security.platform_admin_mfa_required', true)
+        $mfaRequired = \App\Services\Policy\Policy::get('security.platform_admin_mfa', true)
+            && config('security.platform_admin_mfa_required', true);
+
+        if ($mfaRequired
             && $user->isPlatformAdmin()
             && ! $user->hasEnabledTwoFactorAuthentication()
             && ! $request->routeIs('profile.security.*', 'two-factor.challenge', 'two-factor.verify', 'logout')) {

@@ -334,6 +334,7 @@ class PaymentService
 
             $batchCode = 'ONLINE-'.$tenant->id.'-'.$package->id;
             $batch = VoucherBatch::withoutTenancy()
+                ->where('tenant_id', $tenant->id)
                 ->where('batch_code', $batchCode)
                 ->first()
                 ?? VoucherBatch::create([
