@@ -17,6 +17,15 @@ class AuditLog extends Model
         'meta',
     ];
 
+    /**
+     * Audit entries are append-only.
+     */
+    protected static function booted(): void
+    {
+        static::updating(fn () => throw new \LogicException('Audit log entries cannot be modified.'));
+        static::deleting(fn () => throw new \LogicException('Audit log entries cannot be deleted.'));
+    }
+
     protected $casts = [
         'meta' => 'array',
     ];

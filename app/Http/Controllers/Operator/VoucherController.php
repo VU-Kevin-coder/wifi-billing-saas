@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Package;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
@@ -109,6 +110,12 @@ class VoucherController extends Controller
         foreach (array_chunk($vouchersToInsert, 100) as $chunk) {
             Voucher::insert($chunk);
         }
+
+        AuditLog::record('vouchers.generated', $batch, [
+            'batch_code' => $batchCode,
+            'package_id' => (int) $validated['package_id'],
+            'quantity' => (int) $validated['quantity'],
+        ], auth()->user(), $tenant);
 
         return redirect()->route('operator.vouchers.index', ['tenant' => $tenant->slug])
             ->with('status', "Successfully generated {$validated['quantity']} vouchers for {$batchCode}.");

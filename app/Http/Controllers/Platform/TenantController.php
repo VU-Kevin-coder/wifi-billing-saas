@@ -124,7 +124,7 @@ class TenantController extends Controller
             'slug' => strtolower($validated['slug']),
             'status' => $validated['status'] === 'trial' ? 'active' : $validated['status'],
             'platform_plan_id' => $plan?->id,
-            'plan' => $plan?->name,
+            'plan' => $plan?->name ?? $validated['plan'] ?? 'Starter',
             'plan_fee' => $plan?->price ?? 0,
             'subscription_status' => $validated['status'] === 'trial' ? 'trial' : 'active',
             'trial_ends_at' => $validated['status'] === 'trial' ? now()->addDays($plan?->trial_days ?: 14) : null,
@@ -142,6 +142,12 @@ class TenantController extends Controller
         $user->save();
 
         $user->syncRoles(['operator_admin']);
+
+        \App\Models\AuditLog::record('tenant.created', $tenant, [
+            'slug' => $tenant->slug,
+            'owner_email' => $user->email,
+            'status' => $tenant->status,
+        ], null, $tenant);
 
         return redirect()->route('platform.tenants.index')
             ->with('success', "Operator tenant '{$tenant->name}' created successfully with owner {$user->email}.");

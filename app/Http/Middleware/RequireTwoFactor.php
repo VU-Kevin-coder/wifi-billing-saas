@@ -18,6 +18,14 @@ class RequireTwoFactor
             return $next($request);
         }
 
+        if (config('security.platform_admin_mfa_required', true)
+            && $user->isPlatformAdmin()
+            && ! $user->hasEnabledTwoFactorAuthentication()
+            && ! $request->routeIs('profile.security.*', 'two-factor.challenge', 'two-factor.verify', 'logout')) {
+            return redirect()->route('profile.security.index')
+                ->with('error', 'Platform administrators must enable Two-Factor Authentication to continue.');
+        }
+
         if ($user->hasEnabledTwoFactorAuthentication()) {
             if ($request->session()->get('mfa.verified') === true
                 || $request->routeIs('two-factor.challenge', 'two-factor.verify', 'logout')) {

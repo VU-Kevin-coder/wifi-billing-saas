@@ -4,7 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -81,6 +84,26 @@ class StaffAndImpersonationTest extends TestCase
 
         $created = User::where('email', 'tech@acme.test')->first();
         $this->assertTrue($created->hasRole('operator_support'));
+    }
+
+    public function test_new_staff_do_not_get_a_known_password_and_are_invited_by_email(): void
+    {
+        Notification::fake();
+
+        $this->actingAs($this->acmeAdmin)
+            ->post(route('operator.staff.store'), [
+                'name' => 'New Hire',
+                'email' => 'hire@acme.test',
+                'role' => 'operator_admin',
+            ])
+            ->assertRedirect(route('operator.team.index'));
+
+        $created = User::where('email', 'hire@acme.test')->firstOrFail();
+
+        $this->assertFalse(Hash::check('password', $created->password));
+        $this->assertNull($created->email_verified_at);
+        $this->assertTrue($created->hasRole('operator_admin'));
+        Notification::assertSentTo($created, ResetPassword::class);
     }
 
     public function test_finance_user_cannot_view_staff_list(): void

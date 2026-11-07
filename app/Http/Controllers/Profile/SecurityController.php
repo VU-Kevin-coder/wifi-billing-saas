@@ -69,7 +69,7 @@ class SecurityController extends Controller
         $method = MFA::getMethod($user, 'totp');
         MFA::enableMethod($user, 'totp', ['secret' => $method->secret]);
         $recoveryCodes = MFA::generateRecoveryCodes($user);
-        $request->session()->put('mfa.verified', true);
+        \App\Support\MfaSession::markVerified($request);
 
         return redirect()->route('profile.security.index')
             ->with('status', 'Two-Factor Authentication enabled successfully.')

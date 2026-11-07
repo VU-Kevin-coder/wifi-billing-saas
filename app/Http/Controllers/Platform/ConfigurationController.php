@@ -106,6 +106,8 @@ class ConfigurationController extends Controller
             PlatformSetting::set($key, $value);
         }
 
+        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'general']);
+
         return redirect()->route('platform.configuration.index')
             ->with('status', 'General settings updated successfully.');
     }
@@ -116,6 +118,8 @@ class ConfigurationController extends Controller
         PlatformSetting::set('notify_sms_alerts', $request->boolean('notify_sms_alerts'));
         PlatformSetting::set('enforce_2fa', $request->boolean('enforce_2fa'));
         PlatformSetting::set('session_timeout', $request->input('session_timeout', 30));
+
+        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'security']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Security settings updated successfully.');
@@ -152,6 +156,16 @@ class ConfigurationController extends Controller
         );
         PlatformSetting::set('flutterwave_status', $configured ? 'Configured (Untested)' : 'Not Configured');
 
+        \App\Models\AuditLog::record('platform.config.updated', null, [
+            'section' => 'flutterwave',
+            'environment' => $validated['flutterwave_environment'],
+            // Field names only; secret values are never written to the audit log.
+            'credentials_changed' => array_values(array_filter(
+                ['flutterwave_public_key', 'flutterwave_secret_key', 'flutterwave_encryption_key', 'flutterwave_webhook_secret'],
+                fn (string $key) => $request->filled($key)
+            )),
+        ]);
+
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Flutterwave configuration saved.');
     }
@@ -177,6 +191,8 @@ class ConfigurationController extends Controller
             && PlatformSetting::getSecret('mtn_api_key');
         PlatformSetting::set('mtn_status', $configured ? 'Configured (Untested)' : 'Not Configured');
 
+        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'mtn']);
+
         return redirect()->route('platform.configuration.index')
             ->with('status', 'MTN MoMo configuration saved.');
     }
@@ -199,6 +215,8 @@ class ConfigurationController extends Controller
         $configured = PlatformSetting::getSecret('airtel_client_id')
             && PlatformSetting::getSecret('airtel_client_secret');
         PlatformSetting::set('airtel_status', $configured ? 'Configured (Untested)' : 'Not Configured');
+
+        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'airtel']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Airtel Money configuration saved.');
@@ -223,6 +241,8 @@ class ConfigurationController extends Controller
         if (! empty($validated['smtp_host'])) {
             PlatformSetting::set('email_status', 'Configured (Untested)');
         }
+
+        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'email']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Email gateway configuration saved.');
@@ -279,6 +299,8 @@ class ConfigurationController extends Controller
         if (! empty($validated['sms_api_key'])) {
             PlatformSetting::set('sms_status', 'Configured (Untested)');
         }
+
+        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'sms']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'SMS gateway configuration saved.');

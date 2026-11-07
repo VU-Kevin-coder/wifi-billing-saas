@@ -43,23 +43,23 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'show'])->name('tenants.show');
         Route::get('/billing', [\App\Http\Controllers\Platform\BillingController::class, 'index'])->name('billing.index');
         Route::get('/revenue', [\App\Http\Controllers\Platform\RevenueController::class, 'index'])->name('revenue.index');
-        Route::post('/revenue/withdrawals/{transaction}/approve', [\App\Http\Controllers\Platform\RevenueController::class, 'approveWithdrawal'])->name('revenue.withdrawals.approve');
-        Route::post('/revenue/withdrawals/{transaction}/reject', [\App\Http\Controllers\Platform\RevenueController::class, 'rejectWithdrawal'])->name('revenue.withdrawals.reject');
-        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\RevenueController::class, 'adjustBalance'])->name('revenue.adjust');
+        Route::post('/revenue/withdrawals/{transaction}/approve', [\App\Http\Controllers\Platform\RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.approve');
+        Route::post('/revenue/withdrawals/{transaction}/reject', [\App\Http\Controllers\Platform\RevenueController::class, 'rejectWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.reject');
+        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\RevenueController::class, 'adjustBalance'])->middleware('mfa.recent')->name('revenue.adjust');
         Route::post('/plans', [\App\Http\Controllers\Platform\BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'destroyPlan'])->name('plans.destroy');
         Route::get('/configuration', [\App\Http\Controllers\Platform\ConfigurationController::class, 'index'])->name('configuration.index');
         Route::put('/configuration/general', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
-        Route::put('/configuration/flutterwave', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateFlutterwave'])->name('configuration.flutterwave.update');
-        Route::put('/configuration/mtn', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateMtn'])->name('configuration.mtn.update');
-        Route::put('/configuration/airtel', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateAirtel'])->name('configuration.airtel.update');
+        Route::put('/configuration/flutterwave', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
+        Route::put('/configuration/mtn', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
+        Route::put('/configuration/airtel', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
         Route::put('/configuration/email', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
         Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
         Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
         Route::post('/configuration/sms/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
-        Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->name('impersonate');
+        Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->middleware('mfa.recent')->name('impersonate');
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
 
@@ -132,7 +132,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('wallet.index');
                 Route::post('/wallet/withdraw', [\App\Http\Controllers\Operator\WithdrawalController::class, 'store'])
-                    ->middleware('role:operator_admin|operator_finance')
+                    ->middleware(['role:operator_admin|operator_finance', 'mfa.recent'])
                     ->name('wallet.withdraw');
 
                 Route::middleware('role:operator_admin')->group(function () {

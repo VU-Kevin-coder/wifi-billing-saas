@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Package;
 use App\Services\Tenancy\TenantContext;
@@ -82,6 +83,11 @@ class CustomerController extends Controller
 
     public function destroy(Request $request, string $tenant, Customer $customer)
     {
+        AuditLog::record('customer.deleted', $customer, [
+            'name' => $customer->name,
+            'phone' => $customer->phone,
+        ]);
+
         $customer->delete();
 
         return redirect()->route('operator.customers.index')

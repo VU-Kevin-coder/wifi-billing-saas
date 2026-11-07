@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -177,7 +179,12 @@ class FlutterwaveWithdrawalService
             return ['ok' => true, 'message' => 'No matching withdrawal.'];
         }
 
-        if (($transaction->meta['flutterwave_transfer_id'] ?? null) !== $transferId) {
+        $recorded = $transaction->meta['flutterwave_transfer_id'] ?? null;
+        $adoptable = $recorded === null
+            && $transaction->status === 'pending'
+            && in_array($transaction->meta['flutterwave_transfer_submission'] ?? null, ['submitting', 'unknown'], true);
+
+        if ($recorded !== null ? $recorded !== $transferId : ! $adoptable) {
             Log::warning('Flutterwave transfer webhook ID did not match the recorded transfer.', [
                 'transaction_id' => $transaction->id,
                 'transfer_id' => $transferId,
@@ -198,7 +205,164 @@ class FlutterwaveWithdrawalService
             return ['ok' => false, 'message' => 'Transfer verification is temporarily unavailable.'];
         }
 
+        // Submission outcome was unknown, so the transfer ID was never stored.
+        // Adopt the webhook's ID only after the provider confirms that it is
+        // our reference and amount.
+        if ($adoptable) {
+            if (! $this->transferMatches($transaction, $transferId, $verified)) {
+                return ['ok' => false, 'message' => 'Verified transfer details do not match the withdrawal.'];
+            }
+
+            $this->recordTransfer($transaction, $transferId, (string) ($verified['status'] ?? 'NEW'));
+        }
+
         return $this->reconcile($transaction, $transferId, $verified);
+    }
+
+    /**
+     * Resolve a withdrawal that is stuck after an uncertain submission or an
+     * unfinished transfer, by asking Flutterwave for the authoritative state.
+     * Funds are only released (completed) or returned (failed) on a verified,
+     * matching provider record; "not found" never triggers a refund or retry.
+     *
+     * @return array{state: string, message: string}
+     */
+    public function reconcileStuck(Transaction $transaction): array
+    {
+        $transaction = Transaction::withoutTenancy()->find($transaction->id);
+        if (! $transaction || $transaction->type !== 'withdrawal' || $transaction->status !== 'pending') {
+            return ['state' => 'skipped', 'message' => 'Withdrawal is not pending.'];
+        }
+
+        $meta = $transaction->meta ?? [];
+        $transferId = $meta['flutterwave_transfer_id'] ?? null;
+        $submission = $meta['flutterwave_transfer_submission'] ?? null;
+
+        if (! $transferId && ! in_array($submission, ['submitting', 'unknown'], true)) {
+            return ['state' => 'skipped', 'message' => 'Withdrawal has not been submitted to Flutterwave.'];
+        }
+
+        try {
+            if (! $transferId) {
+                $found = $this->flutterwave->findTransferByReference($transaction->reference);
+                if (! $found || empty($found['id'])) {
+                    return $this->markNotFound($transaction);
+                }
+
+                $transferId = (string) $found['id'];
+                $verified = $this->flutterwave->verifyTransfer($transferId)['data'] ?? [];
+                if (! $this->transferMatches($transaction, $transferId, $verified)) {
+                    return $this->markManualReview($transaction, 'Provider transfer details do not match the withdrawal.');
+                }
+
+                $this->recordTransfer($transaction, $transferId, (string) ($verified['status'] ?? 'NEW'));
+            } else {
+                $verified = $this->flutterwave->verifyTransfer((string) $transferId)['data'] ?? [];
+            }
+        } catch (Throwable $exception) {
+            Log::warning('Unable to reconcile a stuck Flutterwave withdrawal.', [
+                'transaction_id' => $transaction->id,
+                'exception' => $exception::class,
+            ]);
+
+            return ['state' => 'unavailable', 'message' => 'Flutterwave is temporarily unavailable.'];
+        }
+
+        $result = $this->reconcile($transaction, (string) $transferId, $verified);
+        $fresh = Transaction::withoutTenancy()->find($transaction->id);
+
+        if (in_array($fresh->status, ['completed', 'failed'], true)) {
+            AuditLog::record('withdrawal.reconciled', $fresh, [
+                'reference' => $fresh->reference,
+                'outcome' => $fresh->status,
+                'transfer_id' => (string) $transferId,
+            ]);
+
+            return ['state' => $fresh->status, 'message' => $result['message']];
+        }
+
+        if (! $result['ok']) {
+            return $this->markManualReview($transaction, $result['message']);
+        }
+
+        return ['state' => 'processing', 'message' => $result['message']];
+    }
+
+    private function transferMatches(Transaction $transaction, string $transferId, array $transfer): bool
+    {
+        return (string) ($transfer['id'] ?? '') === $transferId
+            && ($transfer['reference'] ?? null) === $transaction->reference
+            && is_numeric($transfer['amount'] ?? null)
+            && (float) $transfer['amount'] === (float) $transaction->amount
+            && strtoupper((string) ($transfer['currency'] ?? '')) === 'UGX';
+    }
+
+    private function markNotFound(Transaction $transaction): array
+    {
+        $flagged = false;
+
+        DB::transaction(function () use ($transaction, &$flagged): void {
+            $locked = Transaction::withoutTenancy()->lockForUpdate()->findOrFail($transaction->id);
+            $meta = $locked->meta ?? [];
+
+            $submittedAt = isset($meta['flutterwave_transfer_submitted_at'])
+                ? Carbon::parse($meta['flutterwave_transfer_submitted_at'])
+                : $locked->created_at;
+
+            $meta['reconcile_not_found_count'] = (int) ($meta['reconcile_not_found_count'] ?? 0) + 1;
+            $meta['reconcile_checked_at'] = now()->toIso8601String();
+
+            $hours = max(1, (int) config('payments.withdrawal_manual_review_hours', 24));
+            if (empty($meta['needs_manual_review']) && $submittedAt->lte(now()->subHours($hours))) {
+                $meta['needs_manual_review'] = true;
+                $flagged = true;
+            }
+
+            $locked->update(['meta' => $meta]);
+        });
+
+        if ($flagged) {
+            $this->announceManualReview($transaction, 'No matching transfer found at Flutterwave.');
+        }
+
+        return ['state' => 'not_found', 'message' => 'No matching transfer found at Flutterwave yet.'];
+    }
+
+    private function markManualReview(Transaction $transaction, string $reason): array
+    {
+        $flagged = false;
+
+        DB::transaction(function () use ($transaction, $reason, &$flagged): void {
+            $locked = Transaction::withoutTenancy()->lockForUpdate()->findOrFail($transaction->id);
+            $meta = $locked->meta ?? [];
+
+            if (empty($meta['needs_manual_review'])) {
+                $meta['needs_manual_review'] = true;
+                $meta['manual_review_reason'] = $reason;
+                $locked->update(['meta' => $meta]);
+                $flagged = true;
+            }
+        });
+
+        if ($flagged) {
+            $this->announceManualReview($transaction, $reason);
+        }
+
+        return ['state' => 'manual_review', 'message' => $reason];
+    }
+
+    private function announceManualReview(Transaction $transaction, string $reason): void
+    {
+        Log::error('Flutterwave withdrawal needs manual review.', [
+            'transaction_id' => $transaction->id,
+            'reference' => $transaction->reference,
+            'reason' => $reason,
+        ]);
+
+        AuditLog::record('withdrawal.needs_manual_review', $transaction, [
+            'reference' => $transaction->reference,
+            'reason' => $reason,
+        ]);
     }
 
     private function reconcile(Transaction $transaction, string $transferId, array $transfer): array

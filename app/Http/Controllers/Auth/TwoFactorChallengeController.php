@@ -48,7 +48,7 @@ class TwoFactorChallengeController extends Controller
         }
 
         $request->session()->regenerate();
-        $request->session()->put('mfa.verified', true);
+        \App\Support\MfaSession::markVerified($request);
 
         return $sessionController->redirectAfterLogin($request, $user, mfaVerified: true);
     }

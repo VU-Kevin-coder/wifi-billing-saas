@@ -139,7 +139,7 @@ class DashboardController extends Controller
     public function impersonate(Request $request, Tenant $tenant)
     {
         $user = $request->user();
-        $token = SsoNonce::issue($user, $tenant, impersonation: true);
+        $token = SsoNonce::issue($user, $tenant, mfaVerified: session('mfa.verified') === true, impersonation: true);
 
         // Generate a signed, single-use URL to switch into the tenant subdomain.
         $ssoUrl = URL::temporarySignedRoute(

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
@@ -153,6 +154,8 @@ class RouterController extends Controller
             'ethernet_ports' => $request->input('ethernet_ports', ['ether2', 'ether3']),
         ]);
 
+        AuditLog::record('router.created', $router, ['name' => $router->name, 'site_id' => $router->site_id]);
+
         return redirect()->route('operator.routers.show', $router)
             ->with('status', "Router '{$router->name}' added. Configure its credentials in the local site-agent router map.");
     }
@@ -194,6 +197,7 @@ class RouterController extends Controller
         }
 
         $name = $router->name;
+        AuditLog::record('router.deleted', $router, ['name' => $name]);
         $router->delete();
 
         return redirect()->route('operator.routers.index')
@@ -331,6 +335,7 @@ class RouterController extends Controller
                     ]);
                 }
                 foreach ($routers as $router) {
+                    AuditLog::record('router.deleted', $router, ['name' => $router->name, 'bulk' => true]);
                     $router->delete();
                 }
                 $message = "Successfully removed {$count} router(s) from your workspace.";

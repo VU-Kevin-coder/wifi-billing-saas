@@ -40,10 +40,24 @@ return Application::configure(basePath: dirname(__DIR__))
             RequireTwoFactor::class,
         ]);
 
+        $middleware->priority([
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \Illuminate\Routing\Middleware\ThrottleRequests::class,
+            \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
+            \Illuminate\Auth\Middleware\Authenticate::class,
+            SetTenantContext::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \Illuminate\Auth\Middleware\Authorize::class,
+        ]);
+
         // Register the role alias
         $middleware->alias([
             'role' => EnsureRole::class,
             'site-agent' => AuthenticateSiteAgent::class,
+            'mfa.recent' => \App\Http\Middleware\RequireRecentMfa::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

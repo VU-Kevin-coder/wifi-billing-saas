@@ -158,7 +158,7 @@
                             <template x-if="activeOperator === {{ $tenant->id }}">
                                 <div class="space-y-6">
                                     @php 
-                                        $pendingTxs = $tenant->transactions()->where('type', 'withdrawal')->where('status', 'pending')->latest()->get(); 
+                                        $pendingTxs = $tenant->transactions()->withoutTenancy()->where('type', 'withdrawal')->where('status', 'pending')->latest()->get(); 
                                     @endphp
                                     @forelse($pendingTxs as $pendingTx)
                                         <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5 space-y-3">
@@ -243,12 +243,12 @@
 
                                         <div>
                                             <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Adjustment Amount ({{ $currency ?? 'UGX' }})</label>
-                                            <input type="number" step="0.01" name="amount" required placeholder="e.g. 10000 or -5000" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-base font-bold">
-                                            <p class="text-xs text-gray-500 mt-1">Positive number to credit, negative number (e.g., -5000) to debit.</p>
+                                            <input type="number" step="0.01" name="amount" required min="-{{ config('payments.max_wallet_adjustment') }}" max="{{ config('payments.max_wallet_adjustment') }}" placeholder="e.g. 10000 or -5000" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-base font-bold">
+                                            <p class="text-xs text-gray-500 mt-1">Positive number to credit, negative number (e.g., -5000) to debit. Reason must be at least 10 characters; every adjustment is audit-logged.</p>
                                         </div>
                                         <div>
                                             <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Reason / Description</label>
-                                            <input type="text" name="reason" required placeholder="e.g. Router compensation credit / Manual refund" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                            <input type="text" name="reason" required minlength="10" maxlength="255" placeholder="e.g. Router compensation credit / Manual refund" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
                                         </div>
                                     </div>
                                     <div class="pt-8 flex gap-3">

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\Tenancy\TenantContext;
@@ -54,7 +55,7 @@ class WithdrawalController extends Controller
             $lockedTenant->decrement('wallet_balance', $request->amount);
 
             // Create the withdrawal transaction
-            Transaction::create([
+            $withdrawal = Transaction::create([
                 'tenant_id' => $lockedTenant->id,
                 'type' => 'withdrawal',
                 'amount' => $request->amount,
@@ -65,6 +66,12 @@ class WithdrawalController extends Controller
                 'description' => "Withdrawal to {$request->phone}",
                 'phone' => $request->phone,
             ]);
+
+            AuditLog::record('withdrawal.requested', $withdrawal, [
+                'reference' => $withdrawal->reference,
+                'amount' => (float) $request->amount,
+                'destination_phone' => $request->phone,
+            ], auth()->user(), $lockedTenant);
 
             return null;
         });

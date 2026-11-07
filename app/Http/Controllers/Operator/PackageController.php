@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Package;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
@@ -50,7 +51,12 @@ class PackageController extends Controller
         $validated['features'] = $request->input('features', []);
         $validated['currency'] = 'UGX'; // Hardcoded for now, will use Tenant settings later
 
-        Package::create($validated);
+        $package = Package::create($validated);
+
+        AuditLog::record('package.created', $package, [
+            'name' => $package->name,
+            'price' => (float) $package->price,
+        ]);
 
         return redirect()->route('operator.packages.index')
             ->with('status', 'Package created successfully.');
@@ -76,6 +82,14 @@ class PackageController extends Controller
         $validated['features'] = $request->input('features', []);
 
         $package->update($validated);
+
+        $changes = array_diff_key($package->getChanges(), ['updated_at' => true, 'features' => true]);
+        if ($changes) {
+            AuditLog::record('package.updated', $package, [
+                'changed' => array_keys($changes),
+                'new_price' => array_key_exists('price', $changes) ? (float) $package->price : null,
+            ]);
+        }
 
         return redirect()->route('operator.packages.index')
             ->with('status', 'Package updated successfully.');

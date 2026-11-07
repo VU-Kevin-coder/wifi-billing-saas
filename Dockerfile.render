@@ -4,6 +4,16 @@
 # Uses a single container that runs Nginx + PHP-FPM via supervisord.
 # Render provides PostgreSQL for the production deployment.
 # ─────────────────────────────────────────────────────────────────────────────
+# ─── Stage 1: build front-end assets (Vite manifest is required by @vite) ──────
+FROM node:22-alpine AS assets
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY vite.config.js postcss.config.js tailwind.config.js ./
+COPY resources ./resources
+RUN npm run build
+
+# ─── Stage 2: application image ─────────────────────────────────────────────
 FROM php:8.3-fpm-alpine AS base
 
 # Install system packages + PHP extensions
@@ -40,6 +50,7 @@ WORKDIR /var/www/html
 # Composer dependencies (cached layer)
 COPY composer.json composer.lock ./
 RUN composer install \
+    --no-dev \
     --no-scripts \
     --no-autoloader \
     --prefer-dist \
@@ -47,6 +58,9 @@ RUN composer install \
 
 # Copy source
 COPY . .
+
+# Built front-end assets (public/build is gitignored)
+COPY --from=assets /app/public/build ./public/build
 
 # Autoloader + storage dirs
 RUN composer dump-autoload --optimize --no-interaction \
@@ -67,7 +81,8 @@ COPY docker/supervisor/supervisord.render.conf /etc/supervisor/conf.d/supervisor
 
 # ─── Deploy script ───────────────────────────────────────────────────────────
 COPY scripts/00-laravel-deploy.sh /usr/local/bin/deploy.sh
-RUN chmod +x /usr/local/bin/deploy.sh
+COPY scripts/preflight.sh /usr/local/bin/preflight.sh
+RUN chmod +x /usr/local/bin/deploy.sh /usr/local/bin/preflight.sh
 
 EXPOSE 8080
 

@@ -15,3 +15,7 @@ Schedule::command('sessions:expire')
 Schedule::command('payments:reconcile')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('withdrawals:reconcile')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();

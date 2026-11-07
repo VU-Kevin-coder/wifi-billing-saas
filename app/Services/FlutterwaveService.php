@@ -43,6 +43,27 @@ class FlutterwaveService
             ->json();
     }
 
+    /**
+     * Look up one of our transfers by the merchant reference we sent when
+     * creating it. Returns the transfer only on an exact reference match, so a
+     * loose or unsupported provider-side filter can never match another payout.
+     */
+    public function findTransferByReference(string $reference): ?array
+    {
+        $response = $this->request()
+            ->get(self::API_URL.'/transfers', ['reference' => $reference])
+            ->throw()
+            ->json();
+
+        foreach ((array) ($response['data'] ?? []) as $transfer) {
+            if (is_array($transfer) && ($transfer['reference'] ?? null) === $reference) {
+                return $transfer;
+            }
+        }
+
+        return null;
+    }
+
     public static function normalizeUgandanPhone(string $phone): ?string
     {
         $number = preg_replace('/\D+/', '', $phone);

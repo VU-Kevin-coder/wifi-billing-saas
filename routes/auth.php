@@ -43,6 +43,12 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:6,1')
         ->name('two-factor.verify');
 
+    Route::get('mfa/step-up', [\App\Http\Controllers\Auth\MfaStepUpController::class, 'create'])
+        ->name('mfa.step-up');
+    Route::post('mfa/step-up', [\App\Http\Controllers\Auth\MfaStepUpController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('mfa.step-up.verify');
+
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 

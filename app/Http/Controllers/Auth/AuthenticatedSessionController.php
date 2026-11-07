@@ -131,7 +131,11 @@ class AuthenticatedSessionController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
-        $request->session()->put('mfa.verified', $mfaVerified);
+        if ($mfaVerified) {
+            \App\Support\MfaSession::markVerified($request);
+        } else {
+            $request->session()->put('mfa.verified', false);
+        }
 
         if ($user->hasEnabledTwoFactorAuthentication() && ! $mfaVerified) {
             return redirect()->route('two-factor.challenge');

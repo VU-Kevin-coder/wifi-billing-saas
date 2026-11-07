@@ -1,0 +1,29 @@
+# Production environment checklist (values here are placeholders).
+# scripts/preflight.sh refuses to boot a production container if the
+# critical ones are wrong.
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://wifi.example.com
+TENANT_BASE_DOMAIN=wifi.example.com
+TRUSTED_PROXIES=*
+
+SESSION_DRIVER=redis
+SESSION_SECURE_COOKIE=true
+SESSION_ENCRYPT=true
+CACHE_STORE=redis
+REDIS_CLIENT=phpredis
+REDIS_URL=
+
+PLATFORM_ADMIN_MFA_REQUIRED=true
+MFA_STEP_UP_ENABLED=true
+MFA_STEP_UP_MINUTES=10
+SITE_AGENT_REQUIRED=true
+MAX_WALLET_ADJUSTMENT=1000000
+WITHDRAWAL_MANUAL_REVIEW_HOURS=24
+
+MAIL_MAILER=smtp
+MAIL_HOST=
+MAIL_PORT=587
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_FROM_ADDRESS=

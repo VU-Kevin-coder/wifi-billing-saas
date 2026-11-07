@@ -7,6 +7,9 @@ set -e
 
 echo ">>> [Hamnet Deploy] Starting bootstrap..."
 
+# ── 0. Refuse to boot with unsafe production settings ─────────────────────────
+/usr/local/bin/preflight.sh web
+
 # ── 1. Storage permissions ────────────────────────────────────────────────────
 mkdir -p \
     storage/framework/cache/data \
