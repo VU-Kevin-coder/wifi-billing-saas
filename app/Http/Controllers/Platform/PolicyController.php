@@ -12,17 +12,26 @@ class PolicyController extends Controller
 {
     public function index()
     {
-        $policies = PolicySetting::where('category', 'lifecycle')
+        $lifecyclePolicies = PolicySetting::where('category', 'lifecycle')
             ->orderBy('key')
             ->get()
-            ->groupBy(fn ($p) => explode('.', $p->key)[1]); // group by state
+            ->groupBy(fn ($p) => explode('.', $p->key)[1]);
+
+        $categories = [
+            'security'     => PolicySetting::where('category', 'security')->orderBy('key')->get(),
+            'wallet'       => PolicySetting::where('category', 'wallet')->orderBy('key')->get(),
+            'provisioning' => PolicySetting::where('category', 'provisioning')->orderBy('key')->get(),
+            'voucher'      => PolicySetting::where('category', 'voucher')->orderBy('key')->get(),
+            'schedule'     => PolicySetting::where('category', 'schedule')->orderBy('key')->get(),
+            'approval'     => PolicySetting::where('category', 'approval')->orderBy('key')->get(),
+        ];
 
         $approval = PolicySetting::where('category', 'approval')
             ->orderBy('key')
             ->get()
             ->keyBy('key');
 
-        return view('platform.configuration.policies', compact('policies', 'approval'));
+        return view('platform.configuration.policies', compact('lifecyclePolicies', 'categories', 'approval'));
     }
 
     public function updateLifecycle(Request $request)
@@ -41,6 +50,31 @@ class PolicyController extends Controller
         ]);
 
         return back()->with('status', 'Lifecycle policies updated.');
+    }
+
+    public function updateCategory(Request $request, string $category)
+    {
+        $validated = $request->validate([
+            'policies' => 'required|array',
+        ]);
+
+        foreach ($validated['policies'] as $key => $value) {
+            if (! str_starts_with($key, $category . '.') && ! ($category === 'voucher' && str_starts_with($key, 'schedule.'))) {
+                abort(403, 'Policy does not belong to this category.');
+            }
+            // Coerce based on existing type
+            $existing = PolicySetting::where('key', $key)->first();
+            $value = match (true) {
+                is_bool($existing?->value) => (bool) $value,
+                is_numeric($existing?->value) => $value + 0,
+                default => (string) $value,
+            };
+            Policy::set($key, $value);
+        }
+
+        AuditLog::record("policy.{$category}.updated", null, ['keys' => array_keys($validated['policies'])]);
+
+        return back()->with('status', ucfirst($category) . ' policies updated.');
     }
 
     public function updateApproval(Request $request)
@@ -66,4 +100,3 @@ class PolicyController extends Controller
         return back()->with('status', 'Approval policies updated.');
     }
 }
-

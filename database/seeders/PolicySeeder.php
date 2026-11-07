@@ -10,6 +10,7 @@ class PolicySeeder extends Seeder
     public function run(): void
     {
         $defaults = [
+            // ── Lifecycle (from Batch A) ──
             // Suspended tenants
             'lifecycle.suspended.portal_sell'       => [false, 'Suspended tenants can sell vouchers'],
             'lifecycle.suspended.portal_redeem'     => [false, 'Suspended tenants can redeem vouchers'],
@@ -51,13 +52,44 @@ class PolicySeeder extends Seeder
             'lifecycle.trial_expired.generate_vouchers' => [false, 'Trial-expired tenants can generate vouchers'],
             'lifecycle.trial_expired.view_reports'      => [true,  'Trial-expired tenants can view reports'],
 
-            // Approval policy (used by Batch B, seeded here so admins see it)
+            // Approval policy (used by Batch B)
             'approval.wallet_adjustment.enabled'      => [true,     'Wallet adjustments require approval'],
             'approval.wallet_adjustment.mode'         => ['always', 'always | threshold | never'],
             'approval.wallet_adjustment.threshold'    => [0,        'Amount above which approval is required'],
             'approval.wallet_adjustment.self_approve' => [false,    'Can the requester approve their own adjustment'],
             'approval.wallet_adjustment.expiry_hours' => [24,       'Hours before a pending adjustment expires'],
             'approval.wallet_adjustment.min_admins'   => [2,        'Minimum admins required for approval'],
+
+            // ── Security ──
+            'security.platform_admin_mfa'       => [true, 'Require MFA for all platform admins'],
+            'security.step_up_enabled'          => [true, 'Require recent MFA for sensitive actions'],
+            'security.step_up_minutes'          => [10,   'How long an MFA verification is considered recent'],
+            'security.password_reset_ttl'       => [60,   'Password reset link validity (minutes)'],
+            'security.login_throttle_attempts'  => [6,    'Login attempts allowed per minute per IP+email'],
+            'security.login_throttle_decay'     => [1,    'Lockout window after failed attempts (minutes)'],
+
+            // ── Wallet ──
+            'wallet.max_adjustment'                 => [1000000, 'Maximum single manual wallet adjustment (UGX)'],
+            'wallet.min_withdrawal'                 => [10000,   'Minimum amount an operator can withdraw (UGX)'],
+            'wallet.withdrawal_manual_review_hours' => [24,      'Hours before an unmatched transfer is flagged for review'],
+            'wallet.withdrawal_pending_limit'       => [1,       'Maximum pending withdrawals per tenant'],
+
+            // ── Provisioning ──
+            'provisioning.alert_after_minutes'     => [10,   'Minutes before alerting operator of a stuck session'],
+            'provisioning.max_requeues'            => [3,    'Automatic retries of failed activation command'],
+            'provisioning.requeue_backoff_minutes' => [5,    'Minutes between retry attempts'],
+            'provisioning.agent_healthy_minutes'   => [5,    'Agent poll interval to be considered healthy'],
+            'provisioning.compensate_delay'        => [true, 'Give full package duration when activation is delayed'],
+            'provisioning.grace_minutes'           => [2,    'Grace period before delay compensation kicks in'],
+
+            // ── Voucher ──
+            'voucher.min_length'    => [8,    'Minimum length for generated voucher codes'],
+            'voucher.max_per_batch' => [1000, 'Maximum vouchers per generation request'],
+
+            // ── Scheduling (changes require scheduler restart) ──
+            'schedule.payment_reconcile_minutes'     => [1, 'Payment reconciler frequency'],
+            'schedule.withdrawal_reconcile_minutes'  => [5, 'Withdrawal reconciler frequency'],
+            'schedule.provisioning_watchdog_minutes' => [1, 'Provisioning watchdog frequency'],
         ];
 
         foreach ($defaults as $key => [$value, $description]) {
@@ -65,4 +97,3 @@ class PolicySeeder extends Seeder
         }
     }
 }
-

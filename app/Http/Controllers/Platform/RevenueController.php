@@ -117,7 +117,7 @@ class RevenueController extends Controller
 
     public function adjustBalance(Request $request, Tenant $tenant)
     {
-        $max = (float) config('payments.max_wallet_adjustment', 1000000);
+        $max = (float) \App\Services\Policy\Policy::get('wallet.max_adjustment', (float) config('payments.max_wallet_adjustment', 1000000));
 
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'between:-'.$max.','.$max],

@@ -48,13 +48,21 @@ class VoucherController extends Controller
     public function store(Request $request, TenantContext $context)
     {
         $tenant = $context->getTenant();
+        $settings = $tenant->settings;
+
+        $maxPerBatch = (int) \App\Services\Policy\Policy::get('voucher.max_per_batch', 1000);
 
         $validated = $request->validate([
             'package_id' => ['required', Rule::exists('packages', 'id')->where('tenant_id', $tenant->id)],
-            'quantity' => ['required', 'integer', 'min:1', 'max:1000'],
+            'quantity' => ['required', 'integer', 'min:1', "max:{$maxPerBatch}"],
         ]);
 
-        $settings = $tenant->settings;
+        // Enforce minimum length
+        $minLength = (int) \App\Services\Policy\Policy::get('voucher.min_length', 0);
+        $length = (int) ($settings['voucher_length'] ?? 8);
+        if ($minLength > 0 && $length < $minLength) {
+            return back()->withErrors(['quantity' => "Voucher length in settings ({$length}) is below the platform minimum ({$minLength}). Update Settings → Hotspot."]);
+        }
 
         try {
             // One transaction: a batch either exists with all of its vouchers or not at all.

@@ -68,6 +68,7 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/configuration/policies', [\App\Http\Controllers\Platform\PolicyController::class, 'index'])->name('policies.index');
         Route::put('/configuration/policies/lifecycle', [\App\Http\Controllers\Platform\PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
         Route::put('/configuration/policies/approval', [\App\Http\Controllers\Platform\PolicyController::class, 'updateApproval'])->name('policies.approval.update');
+        Route::put('/configuration/policies/{category}', [\App\Http\Controllers\Platform\PolicyController::class, 'updateCategory'])->name('policies.category.update');
         Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->middleware('mfa.recent')->name('impersonate');
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });

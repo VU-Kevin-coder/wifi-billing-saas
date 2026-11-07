@@ -11,12 +11,20 @@ class Policy
 
     public static function get(string $key, mixed $default = null): mixed
     {
-        if (! array_key_exists($key, self::$cache)) {
-            $setting = PolicySetting::where('key', $key)->first();
-            self::$cache[$key] = $setting ? $setting->value : $default;
+        if (array_key_exists($key, self::$cache)) {
+            return self::$cache[$key];
         }
 
-        return self::$cache[$key];
+        try {
+            $setting = PolicySetting::where('key', $key)->first();
+            if ($setting) {
+                return self::$cache[$key] = $setting->value;
+            }
+        } catch (\Throwable) {
+            return $default;
+        }
+
+        return $default;
     }
 
     public static function set(string $key, mixed $value, ?string $description = null): void
@@ -39,11 +47,15 @@ class Policy
      */
     public static function denies(Tenant $tenant, string $action): bool
     {
-        foreach (self::applicableStates($tenant) as $state) {
-            $key = "lifecycle.{$state}.{$action}";
-            if (PolicySetting::where('key', $key)->exists() && ! self::get($key, true)) {
-                return true;
+        try {
+            foreach (self::applicableStates($tenant) as $state) {
+                $key = "lifecycle.{$state}.{$action}";
+                if (PolicySetting::where('key', $key)->exists() && ! self::get($key, true)) {
+                    return true;
+                }
             }
+        } catch (\Throwable) {
+            return false;
         }
 
         return false;

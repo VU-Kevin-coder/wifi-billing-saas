@@ -70,12 +70,15 @@ class ProvisioningWatchdog
 
         if ($command->status === 'failed') {
             $agent = $command->agent;
+            $healthyMinutes = (int) \App\Services\Policy\Policy::get('provisioning.agent_healthy_minutes', config('provisioning.agent_healthy_minutes', 5));
             $healthy = $agent && ! $agent->revoked_at && $agent->last_seen_at
-                && $agent->last_seen_at->gte(now()->subMinutes((int) config('provisioning.agent_healthy_minutes')));
-            $canRequeue = $session->provisioning_requeues < (int) config('provisioning.max_requeues');
+                && $agent->last_seen_at->gte(now()->subMinutes($healthyMinutes));
+            $maxRequeues = (int) \App\Services\Policy\Policy::get('provisioning.max_requeues', config('provisioning.max_requeues', 3));
+            $canRequeue = $session->provisioning_requeues < $maxRequeues;
 
             if ($healthy && $canRequeue) {
-                $backedOff = $command->updated_at->lte(now()->subMinutes((int) config('provisioning.requeue_backoff_minutes')));
+                $backoffMinutes = (int) \App\Services\Policy\Policy::get('provisioning.requeue_backoff_minutes', config('provisioning.requeue_backoff_minutes', 5));
+                $backedOff = $command->updated_at->lte(now()->subMinutes($backoffMinutes));
 
                 return $backedOff ? $this->requeue($session, $command) : 'waiting';
             }
@@ -83,7 +86,9 @@ class ProvisioningWatchdog
             return $this->alert($session, $canRequeue ? 'agent_unhealthy' : 'retries_exhausted', $age);
         }
 
-        return $age >= (int) config('provisioning.alert_after_minutes')
+        $alertAfter = (int) \App\Services\Policy\Policy::get('provisioning.alert_after_minutes', config('provisioning.alert_after_minutes', 10));
+
+        return $age >= $alertAfter
             ? $this->alert($session, 'agent_not_responding', $age)
             : 'waiting';
     }
@@ -268,7 +273,10 @@ class ProvisioningWatchdog
             ? Package::withoutTenancy()->where('tenant_id', $session->tenant_id)->find($session->package_id)
             : null;
 
-        if (config('provisioning.compensate_delay') && $package && $delay > (int) config('provisioning.grace_minutes')) {
+        $compensate = (bool) \App\Services\Policy\Policy::get('provisioning.compensate_delay', config('provisioning.compensate_delay', true));
+        $graceMinutes = (int) \App\Services\Policy\Policy::get('provisioning.grace_minutes', config('provisioning.grace_minutes', 2));
+
+        if ($compensate && $package && $delay > $graceMinutes) {
             $updates['expires_at'] = $package->expiresAt(now());
         }
 

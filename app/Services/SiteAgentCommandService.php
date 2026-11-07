@@ -50,7 +50,7 @@ class SiteAgentCommandService
         $payload = $command->payload ?? [];
         $payload['limit_uptime'] = $this->routerUptimeLimit(
             $session,
-            fullDuration: (bool) config('provisioning.compensate_delay'),
+            fullDuration: (bool) \App\Services\Policy\Policy::get('provisioning.compensate_delay', config('provisioning.compensate_delay', true)),
         );
 
         $command->forceFill([
