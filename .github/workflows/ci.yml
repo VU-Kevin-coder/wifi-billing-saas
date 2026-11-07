@@ -1,0 +1,200 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PHP_VERSION: "8.3"
+  NODE_VERSION: "22"
+
+jobs:
+  # Fast feedback: the default suite on in-memory SQLite.
+  tests-sqlite:
+    name: Tests (SQLite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, bcmath, intl, gd, zip, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+      - id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan test
+
+  # The suite that matters for money: row locks (lockForUpdate), JSON-path
+  # queries and migrations only behave like production on a real server.
+  tests-mysql:
+    name: Tests (MySQL 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: testing
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ppassword"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_DATABASE: testing
+      DB_USERNAME: root
+      DB_PASSWORD: password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, bcmath, intl, gd, zip, pdo_mysql
+          tools: composer:v2
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate
+      - run: vendor/bin/phpunit -c phpunit.ci-db.xml
+
+  # render.yaml deploys to PostgreSQL, so production's database must be tested too.
+  tests-postgres:
+    name: Tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: testing
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: testing
+      DB_USERNAME: postgres
+      DB_PASSWORD: password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, bcmath, intl, gd, zip, pdo_pgsql, pgsql
+          tools: composer:v2
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate
+      - run: vendor/bin/phpunit -c phpunit.ci-db.xml
+
+  # The production image needs the Vite manifest; fail here, not at 2 a.m.
+  assets:
+    name: Front-end build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: test -f public/build/manifest.json
+
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+      - name: PHP syntax
+        run: find app bootstrap config database routes tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+      - name: Shell scripts
+        run: sh -n scripts/preflight.sh && sh -n scripts/00-laravel-deploy.sh && sh -n docker/entrypoint.sh
+      - name: YAML (blueprint and workflows)
+        run: python3 -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" render.yaml .github/workflows/ci.yml .github/dependabot.yml
+      - name: nginx config
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq nginx-light
+          cp /etc/nginx/fastcgi_params /tmp/ && cp docker/nginx/render.conf /tmp/site.conf
+          printf 'events{}\nhttp{ include /etc/nginx/mime.types; include /tmp/site.conf; }\n' > /tmp/nginx.conf
+          sudo mkdir -p /var/www/html/public
+          nginx -t -c /tmp/nginx.conf
+      - name: composer.json
+        run: composer validate --no-check-publish
+
+  # Informational at first: triage findings, then remove continue-on-error.
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: composer audit --locked
+      - run: npm audit --omit=dev --audit-level=high
+
+  style:
+    name: Code style (Pint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true # the existing code base is not formatted yet; make blocking after one formatting commit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: vendor/bin/pint --test
+
+  # One stable name to mark as the required status check in branch protection.
+  ci-success:
+    name: CI passed
+    if: always()
+    needs: [tests-sqlite, tests-mysql, tests-postgres, assets, static]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ toJSON(needs) }}'
+          if echo '${{ toJSON(needs) }}' | grep -Eq '"result": "(failure|cancelled|skipped)"'; then
+            echo "A required job did not succeed."; exit 1
+          fi
