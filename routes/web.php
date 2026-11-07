@@ -24,6 +24,7 @@ Route::prefix('portal')
             ->middleware('throttle:3,1')
             ->name('purchase');
         Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+        Route::get('/{tenant}/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])->name('pesapal.callback');
         Route::get('/{tenant}/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
             ->whereNumber('transaction')
             ->name('pending');
@@ -52,6 +53,7 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/configuration', [\App\Http\Controllers\Platform\ConfigurationController::class, 'index'])->name('configuration.index');
         Route::put('/configuration/general', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
+        Route::put('/configuration/pesapal', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updatePesapal'])->middleware('mfa.recent')->name('configuration.pesapal.update');
         Route::put('/configuration/flutterwave', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
         Route::put('/configuration/mtn', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
         Route::put('/configuration/airtel', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
@@ -80,6 +82,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->middleware('throttle:3,1')
                     ->name('purchase');
                 Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+                Route::get('/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])->name('pesapal.callback');
                 Route::get('/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
                     ->whereNumber('transaction')
                     ->name('pending');
@@ -114,6 +117,8 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::post('routers/{router}/ping', [\App\Http\Controllers\Operator\RouterController::class, 'ping'])->name('routers.ping');
                     Route::post('routers/{router}/reboot', [\App\Http\Controllers\Operator\RouterController::class, 'reboot'])->name('routers.reboot');
                     Route::post('routers/{router}/sync', [\App\Http\Controllers\Operator\RouterController::class, 'sync'])->name('routers.sync');
+                    Route::get('routers/{router}/provision-script', [\App\Http\Controllers\Operator\RouterController::class, 'provisionScript'])->name('routers.provision-script');
+                    Route::post('routers/{router}/provision', [\App\Http\Controllers\Operator\RouterController::class, 'provision'])->name('routers.provision');
                     Route::post('routers/{router}/test', [\App\Http\Controllers\Operator\RouterController::class, 'testConnection'])->name('routers.test');
                     Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
                     Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');

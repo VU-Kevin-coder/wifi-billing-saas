@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('webhooks')->group(function () {
+    Route::match(['get', 'post'], '/pesapal', [\App\Http\Controllers\Api\PesapalWebhookController::class, 'handle'])
+        ->name('api.webhooks.pesapal');
     Route::post('/flutterwave', [FlutterwaveWebhookController::class, 'handle'])
         ->name('api.webhooks.flutterwave');
     Route::post('/mtn', [MobileMoneyWebhookController::class, 'handleMtn'])

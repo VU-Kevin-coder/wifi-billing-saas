@@ -8,6 +8,7 @@ use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
 use App\Services\RouterConnectionService;
+use App\Services\RouterProvisioningService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -175,8 +176,9 @@ class RouterController extends Controller
                 ->find($router->site_id)
             : null;
         $liveData = $connectionService->liveStatus($router);
+        $provisionScript = app(RouterProvisioningService::class)->generateScript($router);
 
-        return view('operator.routers.show', compact('tenant', 'router', 'assignedSite', 'liveData'));
+        return view('operator.routers.show', compact('tenant', 'router', 'assignedSite', 'liveData', 'provisionScript'));
     }
 
     /**
@@ -241,6 +243,59 @@ class RouterController extends Controller
         $router = $this->resolveTenantRouter($args, $context);
 
         return response()->json($connectionService->test($router));
+    }
+
+    /**
+     * Download or view the RouterOS provisioning configuration script.
+     */
+    public function provisionScript(Request $request, RouterProvisioningService $provisioningService, ...$args)
+    {
+        $context = app(TenantContext::class);
+        $router = $this->resolveTenantRouter($args, $context);
+        $script = $provisioningService->generateScript($router);
+
+        if ($request->query('download') || $request->is('*/download')) {
+            $filename = 'mikrotik-provision-'.$router->id.'.rsc';
+
+            return response($script, 200, [
+                'Content-Type' => 'text/plain',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            ]);
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'router_id' => $router->id,
+                'script' => $script,
+            ]);
+        }
+
+        return response($script, 200, ['Content-Type' => 'text/plain']);
+    }
+
+    /**
+     * Deploy hotspot profile and walled garden configuration directly to router via API.
+     */
+    public function provision(Request $request, RouterProvisioningService $provisioningService, ...$args)
+    {
+        $context = app(TenantContext::class);
+        $router = $this->resolveTenantRouter($args, $context);
+
+        $result = $provisioningService->deploy($router);
+
+        if ($result['ok']) {
+            AuditLog::record('router.updated', $router, [
+                'action' => 'provisioned_via_api',
+                'profiles_synced' => $result['profiles_synced'] ?? 0,
+            ]);
+        }
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json($result, $result['ok'] ? 200 : 422);
+        }
+
+        return back()->with($result['ok'] ? 'status' : 'error', $result['message']);
     }
 
     /**

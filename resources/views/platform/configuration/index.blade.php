@@ -199,6 +199,15 @@
                             'bg' => 'bg-red-500/10',
                             'text' => 'text-red-600',
                             'status' => $settings['airtel_status'],
+                        ],
+                        [
+                            'key' => 'pesapal',
+                            'name' => 'Pesapal',
+                            'desc' => 'Mobile Money (MTN/Airtel) & Card Collections',
+                            'label' => 'PSP',
+                            'bg' => 'bg-emerald-500/10',
+                            'text' => 'text-emerald-600',
+                            'status' => $settings['pesapal_status'],
                         ],
                         [
                             'key' => 'flutterwave',
@@ -454,7 +463,79 @@
             </div>
         </div>
 
-        <!-- Flutterwave settings overlay -->
+                <!-- Pesapal settings overlay -->
+        <div x-show="activeOverlay === 'pesapal'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
+            <div x-show="activeOverlay === 'pesapal'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
+            <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                <div x-show="activeOverlay === 'pesapal'" x-transition:enter="transform transition ease-in-out duration-500" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transform transition ease-in-out duration-300" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full" class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+                    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-white sticky top-0 z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-600 font-bold text-xs">PSP</div>
+                            <div>
+                                <h2 class="text-sm font-bold text-gray-900">Pesapal Gateway Configuration</h2>
+                                <p class="text-[11px] text-gray-500">Mobile Money (MTN/Airtel) & Card Collections</p>
+                            </div>
+                        </div>
+                        <button type="button" @click="closeOverlay()" class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" aria-label="Close configuration">Close</button>
+                    </div>
+
+                    <form method="POST" action="{{ route('platform.configuration.pesapal.update') }}" class="flex flex-col h-full overflow-y-auto">
+                        @csrf
+                        @method('PUT')
+                        <div class="flex-1 p-6 space-y-5">
+                            <div class="bg-blue-50 border border-blue-200/80 p-3.5 rounded-xl text-xs text-blue-800 leading-relaxed">
+                                <p class="font-bold">Pesapal handles MTN and Airtel Uganda automatically.</p>
+                                <p class="mt-1">Customers are redirected to Pesapal's secure checkout to choose their payment method and complete payment.</p>
+                            </div>
+
+                            <div>
+                                <label for="pesapal_environment" class="block text-[11px] font-semibold text-gray-700 mb-1">Environment</label>
+                                <select id="pesapal_environment" name="pesapal_environment" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3">
+                                    <option value="sandbox" {{ ($settings['pesapal_environment'] ?? 'sandbox') === 'sandbox' ? 'selected' : '' }}>Sandbox (cybqa.pesapal.com)</option>
+                                    <option value="production" {{ ($settings['pesapal_environment'] ?? '') === 'production' ? 'selected' : '' }}>Production (pay.pesapal.com)</option>
+                                </select>
+                            </div>
+
+                            <div class="space-y-4">
+                                <div>
+                                    <label for="pesapal_consumer_key" class="block text-[11px] font-semibold text-gray-700 mb-1">Consumer Key</label>
+                                    <input id="pesapal_consumer_key" type="text" name="pesapal_consumer_key" value="{{ $settings['pesapal_consumer_key'] }}" autocomplete="off" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                                <div>
+                                    <label for="pesapal_consumer_secret" class="block text-[11px] font-semibold text-gray-700 mb-1">Consumer Secret</label>
+                                    <input id="pesapal_consumer_secret" type="password" name="pesapal_consumer_secret" autocomplete="new-password" placeholder="{{ filled($settings['pesapal_consumer_secret']) ? 'Saved — enter new value to change' : 'Enter Consumer Secret' }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                                <div>
+                                    <label for="pesapal_ipn_id" class="block text-[11px] font-semibold text-gray-700 mb-1">IPN Notification ID (Optional)</label>
+                                    <input id="pesapal_ipn_id" type="text" name="pesapal_ipn_id" value="{{ $settings['pesapal_ipn_id'] }}" placeholder="Registered IPN GUID from Pesapal" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 font-mono">
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                                <label class="block text-xs font-semibold text-gray-900 mb-1">Webhook / IPN URL</label>
+                                <p class="text-[10px] text-gray-500 mb-2">Register this URL in your Pesapal merchant dashboard to receive real-time IPN updates.</p>
+                                <div class="flex rounded-md shadow-sm">
+                                    <input id="pesapal-ipn-url" type="text" readonly value="{{ url('/api/webhooks/pesapal') }}" class="min-w-0 flex-1 rounded-l-md border-gray-300 bg-white text-gray-600 font-mono text-[10px]">
+                                    <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('pesapal-ipn-url').value)" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-100 text-gray-600 text-xs hover:bg-gray-200 font-medium">Copy</button>
+                                </div>
+                            </div>
+
+                            <p class="text-[11px] text-gray-500">Status: <span class="font-medium text-gray-700">{{ $settings['pesapal_status'] }}</span></p>
+                        </div>
+
+                        <div class="px-6 py-4 border-t bg-gray-50 flex justify-between items-center">
+                            <p class="text-[10px] text-gray-400">Secrets encrypted at rest.</p>
+                            <div class="flex gap-2">
+                                <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50">Cancel</button>
+                                <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700">Save configuration</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+<!-- Flutterwave settings overlay -->
         <div x-show="activeOverlay === 'flutterwave'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
             <div x-show="activeOverlay === 'flutterwave'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
             <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">

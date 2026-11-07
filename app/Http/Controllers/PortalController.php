@@ -138,6 +138,12 @@ class PortalController extends Controller
             $this->portalUrl($request, 'success', $tenantModel)
         );
 
+        if ($result['status'] === 'redirect') {
+            session()->put('payment_token', $paymentToken);
+
+            return redirect()->away($result['redirect_url']);
+        }
+
         if (in_array($result['status'], ['simulated_success', 'pending'], true)) {
             session()->put('payment_token', $paymentToken);
 
@@ -414,5 +420,89 @@ class PortalController extends Controller
             'voucher_code' => $voucher->code,
             'mikrotik_url' => 'http://10.5.50.1/login?username='.rawurlencode($voucher->code),
         ]);
+    }
+
+    public function pesapalCallback(
+        Request $request,
+        TenantContext $context,
+        ?string $tenant = null
+    ) {
+        $tenantModel = $this->resolveTenant($request, $context, $tenant);
+        abort_unless($tenantModel, 404);
+
+        $orderTrackingId = $request->query('OrderTrackingId');
+        $merchantReference = $request->query('OrderMerchantReference');
+
+        if (! $orderTrackingId) {
+            return redirect()->to($this->portalUrl($request, 'index', $tenantModel))
+                ->withErrors(['error' => 'Payment was cancelled or missing tracking details.']);
+        }
+
+        // Verify with Pesapal API
+        $consumerKey = \App\Models\PlatformSetting::get('pesapal_consumer_key');
+        $consumerSecret = \App\Models\PlatformSetting::getSecret('pesapal_consumer_secret') ?: \App\Models\PlatformSetting::get('pesapal_consumer_secret');
+        $environment = \App\Models\PlatformSetting::get('pesapal_environment', 'sandbox');
+        $baseUrl = $environment === 'production' 
+            ? 'https://pay.pesapal.com/v3/api' 
+            : 'https://cybqa.pesapal.com/pesapalv3/api';
+
+        try {
+            $tokenResponse = \Illuminate\Support\Facades\Http::post("{$baseUrl}/Auth/RequestToken", [
+                'consumer_key' => $consumerKey,
+                'consumer_secret' => $consumerSecret,
+            ]);
+
+            $token = $tokenResponse->json('token');
+
+            $statusResponse = \Illuminate\Support\Facades\Http::withToken($token)
+                ->get("{$baseUrl}/Transactions/GetTransactionStatus?orderTrackingId={$orderTrackingId}");
+
+            $status = $statusResponse->json('payment_status_description') ?? 'FAILED';
+
+            $transaction = Transaction::withoutGlobalScopes()
+                ->where('tenant_id', $tenantModel->id)
+                ->where(function ($q) use ($merchantReference, $orderTrackingId) {
+                    if ($merchantReference) {
+                        $q->where('reference', $merchantReference);
+                    }
+                    if ($orderTrackingId) {
+                        $q->orWhere('provider_reference', $orderTrackingId);
+                    }
+                })
+                ->first();
+
+            if (strtoupper($status) === 'COMPLETED' && $transaction && $transaction->status === 'pending') {
+                $package = Package::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantModel->id)
+                    ->find($transaction->meta['package_id'] ?? null);
+                $phone = $transaction->phone ?? ($transaction->meta['phone'] ?? '');
+
+                if ($package) {
+                    $voucher = app(PaymentService::class)->handleSuccessfulPackagePayment(
+                        $tenantModel,
+                        $package,
+                        $phone,
+                        $transaction
+                    );
+
+                    return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
+                        ->with('voucher_code', $voucher->code)
+                        ->with('auto_activate', true);
+                }
+            }
+
+            if (strtoupper($status) === 'COMPLETED' && $transaction && $transaction->status === 'completed') {
+                $voucherCode = $transaction->meta['voucher_code'] ?? null;
+
+                return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
+                    ->with('voucher_code', $voucherCode)
+                    ->with('auto_activate', true);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Pesapal callback error: '.$e->getMessage());
+        }
+
+        return redirect()->to($this->portalUrl($request, 'index', $tenantModel))
+            ->withErrors(['error' => 'Payment was not successful or is still processing.']);
     }
 }

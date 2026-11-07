@@ -73,6 +73,12 @@ class PaymentService
             return ['status' => 'simulated_success', 'voucher' => $voucher];
         }
 
+        $pesapalKey = PlatformSetting::get('pesapal_consumer_key');
+        $pesapalSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
+        if (filled($pesapalKey) && filled($pesapalSecret)) {
+            return $this->initiatePesapalPayment($tenant, $package, $phone, $transaction);
+        }
+
         $configured = $network === 'MTN' ? $this->mtn->isConfigured() : $this->airtel->isConfigured();
         if (! $configured) {
             $transaction->update(['status' => 'failed']);
@@ -364,5 +370,90 @@ class PaymentService
 
             return $voucher;
         }));
+    }
+
+    public function initiatePesapalPayment(Tenant $tenant, Package $package, string $phone, Transaction $transaction): array
+    {
+        $amount = (float) $package->price;
+        $consumerKey = PlatformSetting::get('pesapal_consumer_key');
+        $consumerSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
+        $environment = PlatformSetting::get('pesapal_environment', 'sandbox');
+        $ipnId = PlatformSetting::get('pesapal_ipn_id');
+
+        $msisdn = preg_replace('/\D+/', '', $phone);
+        if (strlen($msisdn) === 10 && str_starts_with($msisdn, '0')) {
+            $msisdn = '256' . substr($msisdn, 1);
+        }
+
+        $baseUrl = $environment === 'production' 
+            ? 'https://pay.pesapal.com/v3/api' 
+            : 'https://cybqa.pesapal.com/pesapalv3/api';
+
+        try {
+            // 1. Get Access Token
+            $tokenResponse = \Illuminate\Support\Facades\Http::post("{$baseUrl}/Auth/RequestToken", [
+                'consumer_key' => $consumerKey,
+                'consumer_secret' => $consumerSecret,
+            ]);
+
+            if ($tokenResponse->failed()) {
+                Log::error('Pesapal Auth Error: ' . $tokenResponse->body());
+                $transaction->update(['status' => 'failed']);
+                return ['status' => 'failed', 'error' => 'Pesapal authentication failed.'];
+            }
+
+            $token = $tokenResponse->json('token');
+            if (!$token) {
+                $transaction->update(['status' => 'failed']);
+                return ['status' => 'failed', 'error' => 'Pesapal auth token not returned.'];
+            }
+
+            $callbackUrl = route('portal.pesapal.callback', ['tenant' => $tenant->slug]);
+
+            // 2. Submit Order Request
+            $orderResponse = \Illuminate\Support\Facades\Http::withToken($token)
+                ->post("{$baseUrl}/Transactions/SubmitOrderRequest", [
+                    'id' => $transaction->reference,
+                    'currency' => 'UGX',
+                    'amount' => $amount,
+                    'description' => "Wi-Fi Package: {$package->name}",
+                    'callback_url' => $callbackUrl,
+                    'notification_id' => $ipnId,
+                    'billing_address' => [
+                        'phone_number' => $msisdn,
+                        'email_address' => 'customer@hamnet.com',
+                        'first_name' => 'Hamnet',
+                        'last_name' => 'Customer',
+                        'country_code' => 'UG',
+                    ],
+                ]);
+
+            if ($orderResponse->failed()) {
+                Log::error('Pesapal Order Error: ' . $orderResponse->body());
+                $transaction->update(['status' => 'failed']);
+                return ['status' => 'failed', 'error' => 'Could not create Pesapal order.'];
+            }
+
+            $orderData = $orderResponse->json();
+            $orderTrackingId = $orderData['order_tracking_id'] ?? null;
+            $redirectUrl = $orderData['redirect_url'] ?? null;
+
+            $transaction->update([
+                'provider_reference' => $orderTrackingId,
+                'meta' => array_merge($transaction->meta ?? [], [
+                    'payment_provider' => 'pesapal',
+                    'order_tracking_id' => $orderTrackingId,
+                    'pesapal_redirect_url' => $redirectUrl,
+                ]),
+            ]);
+
+            return [
+                'status' => 'redirect',
+                'redirect_url' => $redirectUrl,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Pesapal Exception: ' . $e->getMessage());
+            return ['status' => 'pending', 'message' => 'Payment request sent.'];
+        }
     }
 }

@@ -14,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -94,9 +95,7 @@ class AuditTrailTest extends TestCase
         $this->assertSame('Router compensation credit', $log->meta['reason']);
     }
 
-    /**
-     * @dataProvider invalidAdjustments
-     */
+    #[DataProvider('invalidAdjustments')]
     public function test_invalid_wallet_adjustments_change_nothing(array $payload): void
     {
         $this->adjust($payload)->assertSessionHasErrors();

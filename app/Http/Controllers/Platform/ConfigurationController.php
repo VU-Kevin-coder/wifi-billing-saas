@@ -28,6 +28,13 @@ class ConfigurationController extends Controller
             'enforce_2fa' => PlatformSetting::get('enforce_2fa', false),
             'session_timeout' => PlatformSetting::get('session_timeout', 30),
 
+            // Pesapal
+            'pesapal_consumer_key' => PlatformSetting::get('pesapal_consumer_key'),
+            'pesapal_consumer_secret' => PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret'),
+            'pesapal_environment' => PlatformSetting::get('pesapal_environment', 'sandbox'),
+            'pesapal_status' => PlatformSetting::get('pesapal_status', 'Not Configured'),
+            'pesapal_ipn_id' => PlatformSetting::get('pesapal_ipn_id'),
+
             // Flutterwave
             'flutterwave_public_key' => PlatformSetting::get(
                 'flutterwave_public_key',
@@ -123,6 +130,42 @@ class ConfigurationController extends Controller
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Security settings updated successfully.');
+    }
+
+    public function updatePesapal(Request $request)
+    {
+        $validated = $request->validate([
+            'pesapal_consumer_key' => 'nullable|string|max:255',
+            'pesapal_consumer_secret' => 'nullable|string|max:255',
+            'pesapal_environment' => 'required|in:sandbox,production',
+            'pesapal_ipn_id' => 'nullable|string|max:255',
+        ]);
+
+        foreach ($validated as $key => $value) {
+            if ($key === 'pesapal_consumer_secret') {
+                if ($request->filled($key)) {
+                    PlatformSetting::setSecret($key, $value);
+                }
+            } else {
+                PlatformSetting::set($key, $value);
+            }
+        }
+
+        $hasSecret = filled(PlatformSetting::getSecret('pesapal_consumer_secret')) || filled(PlatformSetting::get('pesapal_consumer_secret'));
+        $isConfigured = filled(PlatformSetting::get('pesapal_consumer_key')) && $hasSecret;
+        PlatformSetting::set('pesapal_status', $isConfigured ? 'Configured (Untested)' : 'Not Configured');
+
+        \App\Models\AuditLog::record('platform.config.updated', null, [
+            'section' => 'pesapal',
+            'environment' => $validated['pesapal_environment'],
+            'credentials_changed' => array_values(array_filter(
+                ['pesapal_consumer_key', 'pesapal_consumer_secret', 'pesapal_ipn_id'],
+                fn (string $key) => $request->filled($key)
+            )),
+        ]);
+
+        return redirect()->route('platform.configuration.index')
+            ->with('status', 'Pesapal configuration saved.');
     }
 
     public function updateFlutterwave(Request $request)

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\Process;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -65,9 +66,7 @@ class ProductionHardeningTest extends TestCase
         $this->assertTrue($this->preflight(['APP_ENV' => 'local', 'APP_DEBUG' => 'true'])->successful());
     }
 
-    /**
-     * @dataProvider unsafeSettings
-     */
+    #[DataProvider('unsafeSettings')]
     public function test_preflight_refuses_unsafe_production_settings(array $overrides, string $expected): void
     {
         $result = $this->preflight($overrides);
