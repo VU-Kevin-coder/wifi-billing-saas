@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class VoucherBatch extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasFactory;
 
     protected $fillable = [
         'tenant_id', 'package_id', 'created_by', 'batch_code', 'quantity', 'status',

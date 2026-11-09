@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
+use App\Http\Controllers\Auth\MfaStepUpController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -46,9 +47,9 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:6,1')
         ->name('two-factor.verify');
 
-    Route::get('mfa/step-up', [\App\Http\Controllers\Auth\MfaStepUpController::class, 'create'])
+    Route::get('mfa/step-up', [MfaStepUpController::class, 'create'])
         ->name('mfa.step-up');
-    Route::post('mfa/step-up', [\App\Http\Controllers\Auth\MfaStepUpController::class, 'store'])
+    Route::post('mfa/step-up', [MfaStepUpController::class, 'store'])
         ->middleware('throttle:6,1')
         ->name('mfa.step-up.verify');
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Package;
 use App\Models\Router;
 use App\Models\Site;
@@ -9,7 +10,6 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
-use App\Services\Tenancy\TenantContext;
 use App\Support\HotspotLogin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\URL;
@@ -205,7 +205,7 @@ class HotspotLoginUrlTest extends TestCase
         $this->assertSame('10.5.50.1', $fresh->hotspot_config['gateway']);
         $this->assertSame('8.8.8.8', $fresh->hotspot_config['dns'], 'other hotspot settings are preserved');
 
-        $log = \App\Models\AuditLog::where('action', 'router.gateway_changed')->firstOrFail();
+        $log = AuditLog::where('action', 'router.gateway_changed')->firstOrFail();
         $this->assertSame('10.10.0.1', $log->meta['from']);
         $this->assertSame('10.5.50.1', $log->meta['to']);
     }

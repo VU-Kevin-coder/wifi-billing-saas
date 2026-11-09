@@ -36,6 +36,7 @@ class RunSiteAgent extends Command
 
                 if ($commands === []) {
                     sleep(3);
+
                     continue;
                 }
 

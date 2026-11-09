@@ -3,6 +3,7 @@
 namespace App\Services\Tenancy;
 
 use App\Models\Tenant;
+use Illuminate\Support\Facades\URL;
 
 class TenantContext
 {
@@ -20,7 +21,7 @@ class TenantContext
         $this->tenant = $tenant;
 
         if ($tenant) {
-            \Illuminate\Support\Facades\URL::defaults(['tenant' => $tenant->slug]);
+            URL::defaults(['tenant' => $tenant->slug]);
         }
     }
 

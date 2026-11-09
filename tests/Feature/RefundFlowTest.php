@@ -14,7 +14,9 @@ use App\Models\WalletLedgerEntry;
 use App\Notifications\RefundRequested;
 use App\Services\PaymentService;
 use App\Services\RefundService;
+use App\Services\WalletService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
@@ -25,8 +27,11 @@ class RefundFlowTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private Package $package;
+
     private User $operator;
+
     private User $platformAdmin;
 
     protected function setUp(): void
@@ -257,7 +262,7 @@ class RefundFlowTest extends TestCase
     {
         $sale = $this->sale();
         // The operator has already withdrawn most of the money (950 -> 50).
-        \Illuminate\Support\Facades\DB::transaction(fn () => app(\App\Services\WalletService::class)
+        DB::transaction(fn () => app(WalletService::class)
             ->apply($this->tenant, -900, 'withdrawal_debit', null, 'simulate an earlier payout'));
         $this->request($sale, 1000)->assertSessionHasNoErrors();
         $before = WalletLedgerEntry::count();

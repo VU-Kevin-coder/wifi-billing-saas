@@ -82,4 +82,3 @@ class AdjustmentController extends Controller
         return back()->with($result['ok'] ? 'status' : 'error', $result['message']);
     }
 }
-

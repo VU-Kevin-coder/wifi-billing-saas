@@ -11,6 +11,7 @@ use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class RouterManagementTest extends TestCase
@@ -27,7 +28,7 @@ class RouterManagementTest extends TestCase
     {
         parent::setUp();
 
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
 
@@ -55,7 +56,7 @@ class RouterManagementTest extends TestCase
         });
 
         $response = $this->actingAs($this->acmeUser)
-            ->get("http://acme.localhost/operator/routers");
+            ->get('http://acme.localhost/operator/routers');
 
         $response->assertStatus(200);
         $response->assertSee('MikroTik routers');
@@ -72,7 +73,7 @@ class RouterManagementTest extends TestCase
         $site = $this->acme->sites()->create(['name' => 'Central Office']);
 
         $response = $this->actingAs($this->acmeUser)
-            ->get("http://acme.localhost/operator/routers/create");
+            ->get('http://acme.localhost/operator/routers/create');
 
         $response->assertStatus(200);
         $response->assertSee('Add MikroTik Router');
@@ -87,7 +88,7 @@ class RouterManagementTest extends TestCase
     public function test_operator_can_create_new_router(): void
     {
         $response = $this->actingAs($this->acmeUser)
-            ->post("http://acme.localhost/operator/routers", [
+            ->post('http://acme.localhost/operator/routers', [
                 'name' => 'TEST-ROUTER-01',
                 'management_ip' => '10.20.1.10',
                 'api_port' => 8729,
@@ -217,7 +218,7 @@ class RouterManagementTest extends TestCase
         $response = $this->actingAs($this->acmeUser)
             ->delete("http://acme.localhost/operator/routers/{$router->id}");
 
-        $response->assertRedirect("http://acme.localhost/operator/routers");
+        $response->assertRedirect('http://acme.localhost/operator/routers');
     }
 
     public function test_router_with_active_sessions_cannot_be_deleted(): void
@@ -377,7 +378,7 @@ class RouterManagementTest extends TestCase
         });
 
         $response = $this->actingAs($this->acmeUser)
-            ->post("http://acme.localhost/operator/routers/ping-all");
+            ->post('http://acme.localhost/operator/routers/ping-all');
 
         $response->assertRedirect();
         $response->assertSessionHas('status');
@@ -389,11 +390,12 @@ class RouterManagementTest extends TestCase
         $routerIds = $context->runAs($this->acme, function () {
             $r1 = Router::create(['name' => 'BULK-1', 'status' => 'offline', 'api_password' => 'p1']);
             $r2 = Router::create(['name' => 'BULK-2', 'status' => 'offline', 'api_password' => 'p2']);
+
             return [$r1->id, $r2->id];
         });
 
         $response = $this->actingAs($this->acmeUser)
-            ->post("http://acme.localhost/operator/routers/bulk-action", [
+            ->post('http://acme.localhost/operator/routers/bulk-action', [
                 'action' => 'ping',
                 'router_ids' => $routerIds,
             ]);
@@ -457,14 +459,14 @@ class RouterManagementTest extends TestCase
 
         // Sync all routers
         $response = $this->actingAs($this->acmeUser)
-            ->post("http://acme.localhost/operator/settings/router/sync-all");
+            ->post('http://acme.localhost/operator/settings/router/sync-all');
 
         $response->assertRedirect();
         $response->assertSessionHas('status');
 
         // Disconnect router
         $disconnectResponse = $this->actingAs($this->acmeUser)
-            ->post("http://acme.localhost/operator/settings/router/disconnect");
+            ->post('http://acme.localhost/operator/settings/router/disconnect');
 
         $disconnectResponse->assertRedirect();
         $this->acme->refresh();
@@ -488,7 +490,7 @@ class RouterManagementTest extends TestCase
         $response = $this->actingAs($this->acmeUser)
             ->delete("http://acme.localhost/operator/routers/{$router->id}");
 
-        $response->assertRedirect("http://acme.localhost/operator/routers");
+        $response->assertRedirect('http://acme.localhost/operator/routers');
 
         // Assert 0 routers in database for Acme
         $context->runAs($this->acme, function () {
@@ -497,7 +499,7 @@ class RouterManagementTest extends TestCase
 
         // 2. Visit routers page again - must NOT auto-seed fake routers
         $listResponse = $this->actingAs($this->acmeUser)
-            ->get("http://acme.localhost/operator/routers");
+            ->get('http://acme.localhost/operator/routers');
 
         $listResponse->assertStatus(200);
         $listResponse->assertSee('No routers found in workspace');
@@ -512,7 +514,7 @@ class RouterManagementTest extends TestCase
 
         // 3. Visit dashboard - must NOT show fake router stats or alerts
         $dashResponse = $this->actingAs($this->acmeUser)
-            ->get("http://acme.localhost/operator/dashboard");
+            ->get('http://acme.localhost/operator/dashboard');
 
         $dashResponse->assertStatus(200);
         $dashResponse->assertSee('0 / 0');
@@ -522,7 +524,7 @@ class RouterManagementTest extends TestCase
 
         // 4. Visit sessions page - must NOT show fake demo sessions
         $sessionsResponse = $this->actingAs($this->acmeUser)
-            ->get("http://acme.localhost/operator/sessions");
+            ->get('http://acme.localhost/operator/sessions');
 
         $sessionsResponse->assertStatus(200);
         $sessionsResponse->assertSee('No active sessions right now');

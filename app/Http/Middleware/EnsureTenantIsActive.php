@@ -29,4 +29,3 @@ class EnsureTenantIsActive
         return $next($request);
     }
 }
-

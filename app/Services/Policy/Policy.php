@@ -86,4 +86,3 @@ class Policy
         return $states;
     }
 }
-

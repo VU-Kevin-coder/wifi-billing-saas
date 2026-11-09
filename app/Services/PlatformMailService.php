@@ -112,7 +112,7 @@ class PlatformMailService
                 </tr>
                 <tr style='border-bottom: 1px solid #f3f4f6;'>
                     <td style='padding: 8px 0; font-weight: bold;'>Port:</td>
-                    <td style='padding: 8px 0;'>".PlatformSetting::get('smtp_port', 587)." (".PlatformSetting::get('smtp_encryption', 'tls').")</td>
+                    <td style='padding: 8px 0;'>".PlatformSetting::get('smtp_port', 587).' ('.PlatformSetting::get('smtp_encryption', 'tls').")</td>
                 </tr>
                 <tr style='border-bottom: 1px solid #f3f4f6;'>
                     <td style='padding: 8px 0; font-weight: bold;'>From:</td>
@@ -137,4 +137,3 @@ class PlatformMailService
         return $res;
     }
 }
-

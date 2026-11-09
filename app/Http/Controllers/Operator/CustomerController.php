@@ -46,12 +46,12 @@ class CustomerController extends Controller
     public function store(Request $request, TenantContext $context)
     {
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255'],
-            'phone'       => ['nullable', 'string', 'max:50'],
-            'email'       => ['nullable', 'email', 'max:255'],
-            'package_id'  => ['nullable', Rule::exists('packages', 'id')->where('tenant_id', $context->getTenant()->id)],
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'package_id' => ['nullable', Rule::exists('packages', 'id')->where('tenant_id', $context->getTenant()->id)],
             'mac_address' => ['nullable', 'string', 'max:50'],
-            'status'      => ['nullable', 'in:active,inactive'],
+            'status' => ['nullable', 'in:active,inactive'],
         ]);
 
         $validated['tenant_id'] = $context->getTenant()->id;
@@ -66,12 +66,12 @@ class CustomerController extends Controller
     public function update(Request $request, string $tenant, Customer $customer)
     {
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255'],
-            'phone'       => ['nullable', 'string', 'max:50'],
-            'email'       => ['nullable', 'email', 'max:255'],
-            'package_id'  => ['nullable', Rule::exists('packages', 'id')->where('tenant_id', $customer->tenant_id)],
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'package_id' => ['nullable', Rule::exists('packages', 'id')->where('tenant_id', $customer->tenant_id)],
             'mac_address' => ['nullable', 'string', 'max:50'],
-            'status'      => ['nullable', 'in:active,inactive'],
+            'status' => ['nullable', 'in:active,inactive'],
         ]);
 
         $validated['status'] = $validated['status'] ?? 'active';

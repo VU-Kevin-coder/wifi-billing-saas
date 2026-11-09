@@ -19,8 +19,8 @@ class ExpireSessions extends Command
         RouterConnectionService $routerService,
         SiteAgentCommandService $agentCommands,
     ): int {
-    $expiredCount = 0;
-    $queuedCount = 0;
+        $expiredCount = 0;
+        $queuedCount = 0;
         $retryCount = 0;
 
         Session::withoutTenancy()

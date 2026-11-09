@@ -8,14 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasColumn('tenants', 'wallet_balance')) {
+        if (! Schema::hasColumn('tenants', 'wallet_balance')) {
             Schema::table('tenants', function (Blueprint $table) {
                 $table->decimal('wallet_balance', 14, 2)->default(0);
                 $table->decimal('commission_rate', 5, 2)->default(5.00);
             });
         }
 
-        if (!Schema::hasTable('transactions')) {
+        if (! Schema::hasTable('transactions')) {
             Schema::create('transactions', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
@@ -43,4 +43,3 @@ return new class extends Migration
         }
     }
 };
-

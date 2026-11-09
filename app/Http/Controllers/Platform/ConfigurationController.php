@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Platform;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Services\PlatformMailService;
 use App\Services\SmsService;
@@ -113,7 +114,7 @@ class ConfigurationController extends Controller
             PlatformSetting::set($key, $value);
         }
 
-        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'general']);
+        AuditLog::record('platform.config.updated', null, ['section' => 'general']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'General settings updated successfully.');
@@ -126,7 +127,7 @@ class ConfigurationController extends Controller
         PlatformSetting::set('enforce_2fa', $request->boolean('enforce_2fa'));
         PlatformSetting::set('session_timeout', $request->input('session_timeout', 30));
 
-        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'security']);
+        AuditLog::record('platform.config.updated', null, ['section' => 'security']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Security settings updated successfully.');
@@ -155,7 +156,7 @@ class ConfigurationController extends Controller
         $isConfigured = filled(PlatformSetting::get('pesapal_consumer_key')) && $hasSecret;
         PlatformSetting::set('pesapal_status', $isConfigured ? 'Configured (Untested)' : 'Not Configured');
 
-        \App\Models\AuditLog::record('platform.config.updated', null, [
+        AuditLog::record('platform.config.updated', null, [
             'section' => 'pesapal',
             'environment' => $validated['pesapal_environment'],
             'credentials_changed' => array_values(array_filter(
@@ -199,7 +200,7 @@ class ConfigurationController extends Controller
         );
         PlatformSetting::set('flutterwave_status', $configured ? 'Configured (Untested)' : 'Not Configured');
 
-        \App\Models\AuditLog::record('platform.config.updated', null, [
+        AuditLog::record('platform.config.updated', null, [
             'section' => 'flutterwave',
             'environment' => $validated['flutterwave_environment'],
             // Field names only; secret values are never written to the audit log.
@@ -234,7 +235,7 @@ class ConfigurationController extends Controller
             && PlatformSetting::getSecret('mtn_api_key');
         PlatformSetting::set('mtn_status', $configured ? 'Configured (Untested)' : 'Not Configured');
 
-        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'mtn']);
+        AuditLog::record('platform.config.updated', null, ['section' => 'mtn']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'MTN MoMo configuration saved.');
@@ -259,7 +260,7 @@ class ConfigurationController extends Controller
             && PlatformSetting::getSecret('airtel_client_secret');
         PlatformSetting::set('airtel_status', $configured ? 'Configured (Untested)' : 'Not Configured');
 
-        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'airtel']);
+        AuditLog::record('platform.config.updated', null, ['section' => 'airtel']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Airtel Money configuration saved.');
@@ -285,7 +286,7 @@ class ConfigurationController extends Controller
             PlatformSetting::set('email_status', 'Configured (Untested)');
         }
 
-        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'email']);
+        AuditLog::record('platform.config.updated', null, ['section' => 'email']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Email gateway configuration saved.');
@@ -343,7 +344,7 @@ class ConfigurationController extends Controller
             PlatformSetting::set('sms_status', 'Configured (Untested)');
         }
 
-        \App\Models\AuditLog::record('platform.config.updated', null, ['section' => 'sms']);
+        AuditLog::record('platform.config.updated', null, ['section' => 'sms']);
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'SMS gateway configuration saved.');

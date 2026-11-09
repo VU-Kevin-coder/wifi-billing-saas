@@ -16,7 +16,7 @@ trait BelongsToTenant
     public static function bootBelongsToTenant(): void
     {
         // Apply global scope so ALL queries are auto-filtered
-        static::addGlobalScope(new TenantScope());
+        static::addGlobalScope(new TenantScope);
 
         // Auto-populate tenant_id on create
         static::creating(function ($model) {

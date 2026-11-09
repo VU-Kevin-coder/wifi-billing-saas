@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Policy\Policy;
 use App\Support\MfaSession;
 use Closure;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ class RequireRecentMfa
     {
         $user = $request->user();
 
-        $stepUpEnabled = \App\Services\Policy\Policy::get('security.step_up_enabled', true)
+        $stepUpEnabled = Policy::get('security.step_up_enabled', true)
             && config('security.step_up_enabled', true);
 
         if (! $user || ! $stepUpEnabled) {
@@ -30,7 +31,7 @@ class RequireRecentMfa
                 ->with('error', 'Enable Two-Factor Authentication to perform this action.');
         }
 
-        $window = $minutes !== null ? (int) $minutes : (int) \App\Services\Policy\Policy::get('security.step_up_minutes', config('security.step_up_minutes', 10));
+        $window = $minutes !== null ? (int) $minutes : (int) Policy::get('security.step_up_minutes', config('security.step_up_minutes', 10));
 
         if (MfaSession::isRecent($request, $window)) {
             return $next($request);

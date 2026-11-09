@@ -2,14 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Models\Package;
 use App\Models\PlatformPlan;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Models\Voucher;
-use App\Models\VoucherBatch;
 use App\Services\Policy\Policy;
+use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -22,7 +21,7 @@ class TenantLifecycleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\PolicySeeder::class);
+        $this->seed(PolicySeeder::class);
 
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
         Role::create(['name' => 'operator_finance', 'guard_name' => 'web']);
@@ -105,7 +104,7 @@ class TenantLifecycleTest extends TestCase
         $this->tenant->update(['status' => 'suspended']);
         $user = User::factory()->create(['tenant_id' => $this->tenant->id, 'password' => bcrypt('password')]);
         $user->assignRole('operator_finance');
-        \Illuminate\Support\Facades\URL::defaults(['tenant' => 'acme']);
+        URL::defaults(['tenant' => 'acme']);
 
         $this->actingAs($user)
             ->post(route('operator.wallet.withdraw'), [

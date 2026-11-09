@@ -16,7 +16,7 @@ class RouterServiceTest extends TestCase
         ]);
 
         // 2. Call our service
-        $service = new RouterService();
+        $service = new RouterService;
         $service->createHotspotUser('KL-TEST-1234', 'Daily-Express');
 
         // 3. Assert that the fake router was actually queried with the right command
@@ -34,7 +34,7 @@ class RouterServiceTest extends TestCase
         ]);
 
         // 2. Call our service
-        $service = new RouterService();
+        $service = new RouterService;
         $sessions = $service->getActiveSessions();
 
         // 3. Assert the data came through

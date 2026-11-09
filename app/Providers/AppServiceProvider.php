@@ -2,14 +2,16 @@
 
 namespace App\Providers;
 
-use App\Services\PlatformMailService;
-use App\Services\Tenancy\TenantContext;
 use App\Auth\TenantAwareEloquentUserProvider;
 use App\Models\AuditLog;
+use App\Services\PlatformMailService;
+use App\Services\Policy\Policy;
+use App\Services\Tenancy\TenantContext;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(TenantContext::class, function ($app) {
-            return new TenantContext();
+            return new TenantContext;
         });
     }
 
@@ -41,7 +43,7 @@ class AppServiceProvider extends ServiceProvider
         $this->registerAuthAuditing();
         $this->registerRateLimiters();
 
-        \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {
+        ResetPassword::createUrlUsing(function ($user, string $token) {
             return url(route('password.reset', [
                 'token' => $token,
                 'email' => $user->getEmailForPasswordReset(),
@@ -50,7 +52,7 @@ class AppServiceProvider extends ServiceProvider
 
         try {
             if (Schema::hasTable('policy_settings')) {
-                $ttl = (int) \App\Services\Policy\Policy::get('security.password_reset_ttl', 60);
+                $ttl = (int) Policy::get('security.password_reset_ttl', 60);
                 config(['auth.passwords.users.expire' => $ttl]);
             }
         } catch (\Throwable $e) {

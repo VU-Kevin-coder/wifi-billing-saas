@@ -3,12 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\PendingAdjustment;
-use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Policy\AdjustmentService;
 use App\Services\Policy\Policy;
+use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -18,13 +18,15 @@ class AdjustmentApprovalTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $admin1;
+
     private User $admin2;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\PolicySeeder::class);
+        $this->seed(PolicySeeder::class);
 
         Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
@@ -165,4 +167,3 @@ class AdjustmentApprovalTest extends TestCase
         $this->assertSame(100000, (int) $this->tenant->fresh()->wallet_balance);
     }
 }
-

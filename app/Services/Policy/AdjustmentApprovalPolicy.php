@@ -22,4 +22,3 @@ class AdjustmentApprovalPolicy
         return $approver->id !== $requestedBy;
     }
 }
-

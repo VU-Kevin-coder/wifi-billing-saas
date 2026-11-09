@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\Policy\Policy;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -60,7 +61,7 @@ class LoginRequest extends FormRequest
      */
     public function ensureIsNotRateLimited(): void
     {
-        $maxAttempts = (int) \App\Services\Policy\Policy::get('security.login_throttle_attempts', 6);
+        $maxAttempts = (int) Policy::get('security.login_throttle_attempts', 6);
 
         if (! RateLimiter::tooManyAttempts($this->throttleKey(), $maxAttempts)) {
             return;
@@ -88,7 +89,7 @@ class LoginRequest extends FormRequest
 
     public function hit(): void
     {
-        $decaySeconds = (int) \App\Services\Policy\Policy::get('security.login_throttle_decay', 1) * 60;
+        $decaySeconds = (int) Policy::get('security.login_throttle_decay', 1) * 60;
         RateLimiter::hit($this->throttleKey(), $decaySeconds);
     }
 }

@@ -21,7 +21,7 @@ class AdjustmentService
         $max = (float) Policy::get('wallet.max_adjustment', 1000000);
         if (abs($amount) > $max) {
             return ['status' => 'blocked', 'adjustment' => null, 'transaction' => null,
-                    'message' => "Amount exceeds the maximum single adjustment ({$max})."];
+                'message' => "Amount exceeds the maximum single adjustment ({$max})."];
         }
 
         if ($amount < 0 && ((float) $tenant->wallet_balance + $amount) < 0) {
@@ -32,13 +32,14 @@ class AdjustmentService
 
         if ($decision === 'blocked') {
             return ['status' => 'blocked', 'adjustment' => null, 'transaction' => null,
-                    'message' => 'Wallet adjustments are currently disabled by policy.'];
+                'message' => 'Wallet adjustments are currently disabled by policy.'];
         }
 
         if ($decision === 'auto') {
             $transaction = $this->apply($tenant, $amount, $reason, $requester, null);
+
             return ['status' => 'auto_applied', 'adjustment' => null, 'transaction' => $transaction,
-                    'message' => 'Adjustment applied.'];
+                'message' => 'Adjustment applied.'];
         }
 
         // Manual approval required
@@ -59,7 +60,7 @@ class AdjustmentService
         ], $requester, $tenant);
 
         return ['status' => 'pending', 'adjustment' => $adjustment, 'transaction' => null,
-                'message' => 'Adjustment submitted. A second platform admin must approve it.'];
+            'message' => 'Adjustment submitted. A second platform admin must approve it.'];
     }
 
     public function approve(PendingAdjustment $adjustment, User $approver, ?string $note = null): array
@@ -160,7 +161,7 @@ class AdjustmentService
                 throw new \DomainException('Adjustment would make the wallet balance negative.');
             }
 
-            $reference = 'ADJ-' . strtoupper(Str::random(10));
+            $reference = 'ADJ-'.strtoupper(Str::random(10));
 
             $transaction = Transaction::withoutTenancy()->create([
                 'tenant_id' => $locked->id,

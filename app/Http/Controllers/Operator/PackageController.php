@@ -14,19 +14,19 @@ class PackageController extends Controller
     {
         // Automatically scoped to current tenant by BelongsToTenant
         $packages = Package::orderBy('price')->get();
-        
+
         // Calculate KPIs for the top cards
         $publishedCount = $packages->where('is_published', true)->count();
         // Placeholder for now: active subscriptions will come from customers module later
-        $activeSubscriptions = 0; 
-        
+        $activeSubscriptions = 0;
+
         // Determine most popular (hardcoded logic for now, will be driven by real data later)
         $mostPopular = $packages->firstWhere('is_popular', true) ?? $packages->first();
-        
+
         return view('operator.packages.index', compact(
-            'packages', 
-            'publishedCount', 
-            'activeSubscriptions', 
+            'packages',
+            'publishedCount',
+            'activeSubscriptions',
             'mostPopular'
         ));
     }

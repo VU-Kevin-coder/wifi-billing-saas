@@ -2,8 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Tenant;
+use App\Models\PolicySetting;
 use App\Services\Policy\Policy;
+use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -14,7 +15,7 @@ class PolicyEngineTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\PolicySeeder::class);
+        $this->seed(PolicySeeder::class);
     }
 
     public function test_withdrawal_min_reads_from_policy(): void
@@ -67,8 +68,7 @@ class PolicyEngineTest extends TestCase
         ];
 
         foreach ($expected as $key) {
-            $this->assertNotNull(\App\Models\PolicySetting::where('key', $key)->first(), "Missing policy: {$key}");
+            $this->assertNotNull(PolicySetting::where('key', $key)->first(), "Missing policy: {$key}");
         }
     }
 }
-

@@ -4,9 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\Customer;
-use App\Models\Router;
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -24,8 +24,11 @@ class AuditTrailTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $platformAdmin;
+
     private User $operatorAdmin;
+
     private User $finance;
 
     protected function setUp(): void

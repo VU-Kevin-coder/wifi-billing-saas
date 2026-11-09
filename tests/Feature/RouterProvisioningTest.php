@@ -6,8 +6,8 @@ use App\Models\Package;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\RouterConnectionService;
 use App\Services\RouterProvisioningService;
-use App\Services\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
@@ -19,8 +19,11 @@ class RouterProvisioningTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $operatorAdmin;
+
     private Router $router;
+
     private Package $package;
 
     protected function setUp(): void
@@ -76,7 +79,7 @@ class RouterProvisioningTest extends TestCase
 
     public function test_provisioning_service_generates_routeros_script(): void
     {
-        $service = new RouterProvisioningService();
+        $service = new RouterProvisioningService;
         $script = $service->generateScript($this->router);
 
         $this->assertStringContainsString('/system identity set name="Main-Hotspot-Router"', $script);
@@ -106,7 +109,7 @@ class RouterProvisioningTest extends TestCase
 
     public function test_router_show_page_renders_provisioning_section(): void
     {
-        $this->mock(\App\Services\RouterConnectionService::class, function ($mock): void {
+        $this->mock(RouterConnectionService::class, function ($mock): void {
             $mock->shouldReceive('liveStatus')->andReturn([
                 'ok' => false,
                 'message' => 'N/A',

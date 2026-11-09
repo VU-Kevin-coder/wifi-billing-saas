@@ -8,8 +8,6 @@ use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\PaymentService;
-use App\Services\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
@@ -21,7 +19,9 @@ class PesapalPaymentTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $platformAdmin;
+
     private Package $package;
 
     protected function setUp(): void

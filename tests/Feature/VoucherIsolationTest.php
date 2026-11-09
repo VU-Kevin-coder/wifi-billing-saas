@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Package;
+use App\Models\Session;
 use App\Models\Tenant;
+use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class VoucherIsolationTest extends TestCase
@@ -15,6 +18,7 @@ class VoucherIsolationTest extends TestCase
     use RefreshDatabase;
 
     protected Tenant $acme;
+
     protected Tenant $beta;
 
     protected function setUp(): void
@@ -31,46 +35,46 @@ class VoucherIsolationTest extends TestCase
         // Seed Acme's vouchers
         $context->runAs($this->acme, function () {
             $pkg = Package::create([
-                'name'            => 'Acme Pkg',
-                'price'           => 1000,
-                'duration_value'  => 1,
-                'duration_unit'   => 'days',
-                'speed_limit_mbps'=> 5,
-                'device_limit'    => 1,
+                'name' => 'Acme Pkg',
+                'price' => 1000,
+                'duration_value' => 1,
+                'duration_unit' => 'days',
+                'speed_limit_mbps' => 5,
+                'device_limit' => 1,
             ]);
             $batch = VoucherBatch::create([
                 'package_id' => $pkg->id,
                 'batch_code' => 'BATCH-ACM',
-                'quantity'   => 1,
+                'quantity' => 1,
             ]);
             Voucher::create([
                 'voucher_batch_id' => $batch->id,
-                'package_id'       => $pkg->id,
-                'code'             => 'ACME-1234',
-                'status'           => 'unused',
+                'package_id' => $pkg->id,
+                'code' => 'ACME-1234',
+                'status' => 'unused',
             ]);
         });
 
         // Seed Beta's vouchers
         $context->runAs($this->beta, function () {
             $pkg = Package::create([
-                'name'            => 'Beta Pkg',
-                'price'           => 5000,
-                'duration_value'  => 7,
-                'duration_unit'   => 'days',
-                'speed_limit_mbps'=> 10,
-                'device_limit'    => 2,
+                'name' => 'Beta Pkg',
+                'price' => 5000,
+                'duration_value' => 7,
+                'duration_unit' => 'days',
+                'speed_limit_mbps' => 10,
+                'device_limit' => 2,
             ]);
             $batch = VoucherBatch::create([
                 'package_id' => $pkg->id,
                 'batch_code' => 'BATCH-BET',
-                'quantity'   => 1,
+                'quantity' => 1,
             ]);
             Voucher::create([
                 'voucher_batch_id' => $batch->id,
-                'package_id'       => $pkg->id,
-                'code'             => 'BETA-5678',
-                'status'           => 'unused',
+                'package_id' => $pkg->id,
+                'code' => 'BETA-5678',
+                'status' => 'unused',
             ]);
         });
 
@@ -93,7 +97,7 @@ class VoucherIsolationTest extends TestCase
 
     public function test_voucher_generation_overlay_shows_tenant_voucher_format(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
 
         $this->acme->update([
             'settings' => [
@@ -103,7 +107,7 @@ class VoucherIsolationTest extends TestCase
             ],
         ]);
 
-        $operator = \App\Models\User::factory()->create([
+        $operator = User::factory()->create([
             'tenant_id' => $this->acme->id,
         ]);
         $operator->assignRole('operator_admin');
@@ -120,9 +124,9 @@ class VoucherIsolationTest extends TestCase
 
     public function test_redeemed_voucher_creates_active_session_and_appears_in_live_sessions(): void
     {
-        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
 
-        $operator = \App\Models\User::factory()->create([
+        $operator = User::factory()->create([
             'tenant_id' => $this->acme->id,
             'name' => 'Acme Admin',
             'email' => 'admin@acme.test',
@@ -132,46 +136,47 @@ class VoucherIsolationTest extends TestCase
         $context = app(TenantContext::class);
         $voucher = $context->runAs($this->acme, function () {
             $pkg = Package::create([
-                'name'            => '1 Hour Pass',
-                'price'           => 1000,
-                'duration_value'  => 1,
-                'duration_unit'   => 'hours',
-                'speed_limit_mbps'=> 5,
-                'device_limit'    => 1,
+                'name' => '1 Hour Pass',
+                'price' => 1000,
+                'duration_value' => 1,
+                'duration_unit' => 'hours',
+                'speed_limit_mbps' => 5,
+                'device_limit' => 1,
             ]);
             $batch = VoucherBatch::create([
                 'package_id' => $pkg->id,
                 'batch_code' => 'BATCH-TEST',
-                'quantity'   => 1,
+                'quantity' => 1,
             ]);
+
             return Voucher::create([
                 'voucher_batch_id' => $batch->id,
-                'package_id'       => $pkg->id,
-                'code'             => 'TEST-PASS-99',
-                'status'           => 'unused',
+                'package_id' => $pkg->id,
+                'code' => 'TEST-PASS-99',
+                'status' => 'unused',
             ]);
         });
 
         // 1. Redeem voucher through captive portal
-        $response = $this->post("http://acme.localhost/portal/redeem", [
+        $response = $this->post('http://acme.localhost/portal/redeem', [
             'voucher_code' => 'TEST-PASS-99',
         ]);
 
-        $response->assertRedirect("http://acme.localhost/portal/success");
+        $response->assertRedirect('http://acme.localhost/portal/success');
 
         // Voucher should be marked redeemed
         $voucher->refresh();
         $this->assertEquals('redeemed', $voucher->status);
 
         // 2. Active session must exist in database for this voucher
-        $session = \App\Models\Session::where('voucher_id', $voucher->id)->first();
+        $session = Session::where('voucher_id', $voucher->id)->first();
         $this->assertNotNull($session);
         $this->assertEquals('active', $session->status);
         $this->assertEquals($this->acme->id, $session->tenant_id);
 
         // 3. Live sessions UI must show this session
         $sessionsUiResponse = $this->actingAs($operator)
-            ->get("http://acme.localhost/operator/sessions");
+            ->get('http://acme.localhost/operator/sessions');
 
         $sessionsUiResponse->assertStatus(200);
         $sessionsUiResponse->assertSee('TEST-PASS-99');

@@ -9,6 +9,7 @@ use App\Models\SsoNonce;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Tenancy\TenantContext;
+use App\Support\MfaSession;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -132,7 +133,7 @@ class AuthenticatedSessionController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
         if ($mfaVerified) {
-            \App\Support\MfaSession::markVerified($request);
+            MfaSession::markVerified($request);
         } else {
             $request->session()->put('mfa.verified', false);
         }

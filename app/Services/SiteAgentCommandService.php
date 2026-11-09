@@ -7,6 +7,7 @@ use App\Models\Session;
 use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
 use App\Models\Voucher;
+use App\Services\Policy\Policy;
 
 class SiteAgentCommandService
 {
@@ -50,7 +51,7 @@ class SiteAgentCommandService
         $payload = $command->payload ?? [];
         $payload['limit_uptime'] = $this->routerUptimeLimit(
             $session,
-            fullDuration: (bool) \App\Services\Policy\Policy::get('provisioning.compensate_delay', config('provisioning.compensate_delay', true)),
+            fullDuration: (bool) Policy::get('provisioning.compensate_delay', config('provisioning.compensate_delay', true)),
         );
 
         $command->forceFill([

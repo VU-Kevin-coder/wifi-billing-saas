@@ -17,6 +17,6 @@ class ProductionSeedGuardTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Demo data seeding is disabled in production.');
 
-        (new DatabaseSeeder())->run();
+        (new DatabaseSeeder)->run();
     }
 }

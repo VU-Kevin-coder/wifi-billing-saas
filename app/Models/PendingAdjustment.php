@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PendingAdjustment extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasFactory;
 
     protected $fillable = [
         'tenant_id', 'requested_by', 'approved_by',
@@ -49,4 +49,3 @@ class PendingAdjustment extends Model
             && ($this->expires_at === null || $this->expires_at->isFuture());
     }
 }
-

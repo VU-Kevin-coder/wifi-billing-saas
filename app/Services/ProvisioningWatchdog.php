@@ -11,6 +11,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Notifications\ProvisioningStuck;
+use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -70,14 +71,14 @@ class ProvisioningWatchdog
 
         if ($command->status === 'failed') {
             $agent = $command->agent;
-            $healthyMinutes = (int) \App\Services\Policy\Policy::get('provisioning.agent_healthy_minutes', config('provisioning.agent_healthy_minutes', 5));
+            $healthyMinutes = (int) Policy::get('provisioning.agent_healthy_minutes', config('provisioning.agent_healthy_minutes', 5));
             $healthy = $agent && ! $agent->revoked_at && $agent->last_seen_at
                 && $agent->last_seen_at->gte(now()->subMinutes($healthyMinutes));
-            $maxRequeues = (int) \App\Services\Policy\Policy::get('provisioning.max_requeues', config('provisioning.max_requeues', 3));
+            $maxRequeues = (int) Policy::get('provisioning.max_requeues', config('provisioning.max_requeues', 3));
             $canRequeue = $session->provisioning_requeues < $maxRequeues;
 
             if ($healthy && $canRequeue) {
-                $backoffMinutes = (int) \App\Services\Policy\Policy::get('provisioning.requeue_backoff_minutes', config('provisioning.requeue_backoff_minutes', 5));
+                $backoffMinutes = (int) Policy::get('provisioning.requeue_backoff_minutes', config('provisioning.requeue_backoff_minutes', 5));
                 $backedOff = $command->updated_at->lte(now()->subMinutes($backoffMinutes));
 
                 return $backedOff ? $this->requeue($session, $command) : 'waiting';
@@ -86,7 +87,7 @@ class ProvisioningWatchdog
             return $this->alert($session, $canRequeue ? 'agent_unhealthy' : 'retries_exhausted', $age);
         }
 
-        $alertAfter = (int) \App\Services\Policy\Policy::get('provisioning.alert_after_minutes', config('provisioning.alert_after_minutes', 10));
+        $alertAfter = (int) Policy::get('provisioning.alert_after_minutes', config('provisioning.alert_after_minutes', 10));
 
         return $age >= $alertAfter
             ? $this->alert($session, 'agent_not_responding', $age)
@@ -273,8 +274,8 @@ class ProvisioningWatchdog
             ? Package::withoutTenancy()->where('tenant_id', $session->tenant_id)->find($session->package_id)
             : null;
 
-        $compensate = (bool) \App\Services\Policy\Policy::get('provisioning.compensate_delay', config('provisioning.compensate_delay', true));
-        $graceMinutes = (int) \App\Services\Policy\Policy::get('provisioning.grace_minutes', config('provisioning.grace_minutes', 2));
+        $compensate = (bool) Policy::get('provisioning.compensate_delay', config('provisioning.compensate_delay', true));
+        $graceMinutes = (int) Policy::get('provisioning.grace_minutes', config('provisioning.grace_minutes', 2));
 
         if ($compensate && $package && $delay > $graceMinutes) {
             $updates['expires_at'] = $package->expiresAt(now());

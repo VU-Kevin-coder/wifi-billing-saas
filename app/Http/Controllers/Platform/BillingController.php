@@ -50,26 +50,26 @@ class BillingController extends Controller
     public function storePlan(Request $request)
     {
         $validated = $request->validate([
-            'name'          => 'required|string|max:100|unique:platform_plans,name',
-            'price'         => 'required|numeric|min:0',
-            'trial_days'    => 'required|integer|min:0|max:365',
+            'name' => 'required|string|max:100|unique:platform_plans,name',
+            'price' => 'required|numeric|min:0',
+            'trial_days' => 'required|integer|min:0|max:365',
             'max_customers' => 'required|integer|min:1',
-            'max_routers'   => 'required|integer|min:1',
-            'features'      => 'nullable|string',
+            'max_routers' => 'required|integer|min:1',
+            'features' => 'nullable|string',
         ]);
 
         $features = [];
-        if (!empty($validated['features'])) {
+        if (! empty($validated['features'])) {
             $features = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $validated['features']))));
         }
 
         $plan = PlatformPlan::create([
-            'name'          => $validated['name'],
-            'price'         => $validated['price'],
-            'trial_days'    => $validated['trial_days'],
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+            'trial_days' => $validated['trial_days'],
             'max_customers' => $validated['max_customers'],
-            'max_routers'   => $validated['max_routers'],
-            'features'      => $features,
+            'max_routers' => $validated['max_routers'],
+            'features' => $features,
         ]);
 
         return redirect()->route('platform.billing.index')
@@ -79,26 +79,26 @@ class BillingController extends Controller
     public function updatePlan(Request $request, PlatformPlan $plan)
     {
         $validated = $request->validate([
-            'name'          => 'required|string|max:100|unique:platform_plans,name,' . $plan->id,
-            'price'         => 'required|numeric|min:0',
-            'trial_days'    => 'required|integer|min:0|max:365',
+            'name' => 'required|string|max:100|unique:platform_plans,name,'.$plan->id,
+            'price' => 'required|numeric|min:0',
+            'trial_days' => 'required|integer|min:0|max:365',
             'max_customers' => 'required|integer|min:1',
-            'max_routers'   => 'required|integer|min:1',
-            'features'      => 'nullable|string',
+            'max_routers' => 'required|integer|min:1',
+            'features' => 'nullable|string',
         ]);
 
         $features = [];
-        if (!empty($validated['features'])) {
+        if (! empty($validated['features'])) {
             $features = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $validated['features']))));
         }
 
         $plan->update([
-            'name'          => $validated['name'],
-            'price'         => $validated['price'],
-            'trial_days'    => $validated['trial_days'],
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+            'trial_days' => $validated['trial_days'],
             'max_customers' => $validated['max_customers'],
-            'max_routers'   => $validated['max_routers'],
-            'features'      => $features,
+            'max_routers' => $validated['max_routers'],
+            'features' => $features,
         ]);
 
         return redirect()->route('platform.billing.index')
@@ -109,7 +109,7 @@ class BillingController extends Controller
     {
         $planName = $plan->name;
         $tenantCount = $plan->tenants()->count();
-        
+
         // Unlink tenants so they are safely preserved
         if ($tenantCount > 0) {
             $plan->tenants()->update(['platform_plan_id' => null]);

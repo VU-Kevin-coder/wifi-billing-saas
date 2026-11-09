@@ -12,7 +12,6 @@ use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 
-
 class DashboardController extends Controller
 {
     public function __invoke()
@@ -48,10 +47,10 @@ class DashboardController extends Controller
             ->where(function ($q) {
                 $last = now()->subMonth();
                 $q->whereYear('created_at', '<', $last->year)
-                  ->orWhere(function ($q2) use ($last) {
-                      $q2->whereYear('created_at', $last->year)
-                         ->whereMonth('created_at', '<=', $last->month);
-                  });
+                    ->orWhere(function ($q2) use ($last) {
+                        $q2->whereYear('created_at', $last->year)
+                            ->whereMonth('created_at', '<=', $last->month);
+                    });
             })
             ->sum('plan_fee');
 
@@ -87,11 +86,11 @@ class DashboardController extends Controller
             ->count();
 
         // ── 4. Tenant KPIs ─────────────────────────────────────────────
-        $totalTenants     = Tenant::count();
-        $activeTenants    = Tenant::where('subscription_status', 'active')->count();
-        $trialTenants     = Tenant::where('subscription_status', 'trial')->count();
+        $totalTenants = Tenant::count();
+        $activeTenants = Tenant::where('subscription_status', 'active')->count();
+        $trialTenants = Tenant::where('subscription_status', 'trial')->count();
         $suspendedTenants = Tenant::where('status', 'suspended')->count();
-        $overdueTenants   = Tenant::where('subscription_status', 'past_due')->count();
+        $overdueTenants = Tenant::where('subscription_status', 'past_due')->count();
 
         // ── 5. End Customers (across ALL tenants) ──────────────────────
         $totalCustomers = Customer::withoutTenancy()->count();
@@ -107,10 +106,10 @@ class DashboardController extends Controller
             $subRev = Tenant::where('subscription_status', 'active')
                 ->where(function ($q) use ($month) {
                     $q->whereYear('created_at', '<', $month->year)
-                      ->orWhere(function ($q2) use ($month) {
-                          $q2->whereYear('created_at', $month->year)
-                             ->whereMonth('created_at', '<=', $month->month);
-                      });
+                        ->orWhere(function ($q2) use ($month) {
+                            $q2->whereYear('created_at', $month->year)
+                                ->whereMonth('created_at', '<=', $month->month);
+                        });
                 })
                 ->sum('plan_fee');
 
@@ -120,9 +119,9 @@ class DashboardController extends Controller
                 ->sum('platform_fee');
 
             $chartData[] = [
-                'month'         => $month->format('M'),
+                'month' => $month->format('M'),
                 'subscriptions' => (float) $subRev,
-                'commissions'   => (float) $comm,
+                'commissions' => (float) $comm,
             ];
         }
 

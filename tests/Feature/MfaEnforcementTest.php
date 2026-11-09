@@ -19,7 +19,9 @@ class MfaEnforcementTest extends TestCase
     private const SECRET = 'JBSWY3DPEHPK3PXP';
 
     private Tenant $tenant;
+
     private User $platformAdmin;
+
     private User $finance;
 
     protected function setUp(): void

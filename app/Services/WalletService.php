@@ -16,9 +16,13 @@ use App\Models\WalletLedgerEntry;
 class WalletService
 {
     public const SALE_CREDIT = 'sale_credit';
+
     public const WITHDRAWAL_DEBIT = 'withdrawal_debit';
+
     public const WITHDRAWAL_REFUND = 'withdrawal_refund';
+
     public const ADJUSTMENT = 'adjustment';
+
     public const REFUND_DEBIT = 'refund_debit';
 
     /**

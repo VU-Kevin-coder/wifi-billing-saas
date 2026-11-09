@@ -12,4 +12,3 @@ class PolicySetting extends Model
         'value' => 'json',
     ];
 }
-

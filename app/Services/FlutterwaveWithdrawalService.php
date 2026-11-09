@@ -4,8 +4,8 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\PlatformSetting;
-use App\Models\Tenant;
 use App\Models\Transaction;
+use App\Services\Policy\Policy;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,9 +13,7 @@ use Throwable;
 
 class FlutterwaveWithdrawalService
 {
-    public function __construct(private readonly FlutterwaveService $flutterwave)
-    {
-    }
+    public function __construct(private readonly FlutterwaveService $flutterwave) {}
 
     public function approve(Transaction $transaction): array
     {
@@ -312,7 +310,7 @@ class FlutterwaveWithdrawalService
             $meta['reconcile_not_found_count'] = (int) ($meta['reconcile_not_found_count'] ?? 0) + 1;
             $meta['reconcile_checked_at'] = now()->toIso8601String();
 
-            $hours = max(1, (int) \App\Services\Policy\Policy::get('wallet.withdrawal_manual_review_hours', 24));
+            $hours = max(1, (int) Policy::get('wallet.withdrawal_manual_review_hours', 24));
             if (empty($meta['needs_manual_review']) && $submittedAt->lte(now()->subHours($hours))) {
                 $meta['needs_manual_review'] = true;
                 $flagged = true;

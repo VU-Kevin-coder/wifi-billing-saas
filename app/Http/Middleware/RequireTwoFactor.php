@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use Closure;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ class RequireTwoFactor
             return $next($request);
         }
 
-        $mfaRequired = \App\Services\Policy\Policy::get('security.platform_admin_mfa', true)
+        $mfaRequired = Policy::get('security.platform_admin_mfa', true)
             && config('security.platform_admin_mfa_required', true);
 
         if ($mfaRequired

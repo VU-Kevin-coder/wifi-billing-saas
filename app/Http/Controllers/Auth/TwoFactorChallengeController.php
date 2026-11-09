@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Services\Tenancy\TenantContext;
+use App\Support\MfaSession;
 use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,7 +49,7 @@ class TwoFactorChallengeController extends Controller
         }
 
         $request->session()->regenerate();
-        \App\Support\MfaSession::markVerified($request);
+        MfaSession::markVerified($request);
 
         return $sessionController->redirectAfterLogin($request, $user, mfaVerified: true);
     }

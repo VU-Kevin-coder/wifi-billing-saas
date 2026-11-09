@@ -1,13 +1,24 @@
 <?php
 
-use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\AuthenticateSiteAgent;
+use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureTenantIsActive;
+use App\Http\Middleware\RequireRecentMfa;
 use App\Http\Middleware\RequireTwoFactor;
 use App\Http\Middleware\SetTenantContext;
+use Illuminate\Auth\Middleware\Authenticate;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -41,24 +52,24 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->priority([
-            \Illuminate\Cookie\Middleware\EncryptCookies::class,
-            \Illuminate\Session\Middleware\StartSession::class,
-            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-            \Illuminate\Routing\Middleware\ThrottleRequests::class,
-            \Illuminate\Routing\Middleware\ThrottleRequestsWithRedis::class,
-            \Illuminate\Auth\Middleware\Authenticate::class,
+            EncryptCookies::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            ValidateCsrfToken::class,
+            ThrottleRequests::class,
+            ThrottleRequestsWithRedis::class,
+            Authenticate::class,
             SetTenantContext::class,
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \Illuminate\Auth\Middleware\Authorize::class,
+            SubstituteBindings::class,
+            Authorize::class,
         ]);
 
         // Register the role alias
         $middleware->alias([
             'role' => EnsureRole::class,
             'site-agent' => AuthenticateSiteAgent::class,
-            'mfa.recent' => \App\Http\Middleware\RequireRecentMfa::class,
-            'tenant.active' => \App\Http\Middleware\EnsureTenantIsActive::class,
+            'mfa.recent' => RequireRecentMfa::class,
+            'tenant.active' => EnsureTenantIsActive::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

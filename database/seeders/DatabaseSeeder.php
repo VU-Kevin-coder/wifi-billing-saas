@@ -16,6 +16,7 @@ use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
@@ -39,10 +40,10 @@ class DatabaseSeeder extends Seeder
 
         // ─── 3. PLATFORM PLANS (SaaS Tiers) ─────────────────────
         $starter = PlatformPlan::firstOrCreate(['name' => 'Starter'], [
-            'price' => 100000, 'trial_days' => 14, 'max_customers' => 500, 'max_routers' => 2
+            'price' => 100000, 'trial_days' => 14, 'max_customers' => 500, 'max_routers' => 2,
         ]);
         $growth = PlatformPlan::firstOrCreate(['name' => 'Growth'], [
-            'price' => 180000, 'trial_days' => 14, 'max_customers' => 2000, 'max_routers' => 10
+            'price' => 180000, 'trial_days' => 14, 'max_customers' => 2000, 'max_routers' => 10,
         ]);
 
         // ─── 4. TENANTS (Operators) ─────────────────────────────
@@ -84,7 +85,7 @@ class DatabaseSeeder extends Seeder
         // generated and must be reset through the normal flow.
         $seedPassword = (string) env('SEED_ADMIN_PASSWORD', '');
         if ($seedPassword === '') {
-            $seedPassword = \Illuminate\Support\Str::password(24);
+            $seedPassword = Str::password(24);
         }
 
         $platformAdmin = User::firstOrCreate(['email' => 'platform@hamnet.test'], [
@@ -215,8 +216,8 @@ class DatabaseSeeder extends Seeder
 
         // Create a completed sale
         for ($i = 0; $i < 5; $i++) {
-            $txRef = 'TXN-' . strtoupper(\Illuminate\Support\Str::random(6));
-            $voucherCode = 'KL-D7XP-' . strtoupper(\Illuminate\Support\Str::random(4));
+            $txRef = 'TXN-'.strtoupper(Str::random(6));
+            $voucherCode = 'KL-D7XP-'.strtoupper(Str::random(4));
 
             // Create the transaction (completed)
             $tx = Transaction::create([
@@ -228,7 +229,7 @@ class DatabaseSeeder extends Seeder
                 'status' => 'completed',
                 'reference' => $txRef,
                 'description' => "Online Purchase: {$daily->name}",
-                'meta' => ['package_id' => $daily->id, 'phone' => '25677200000' . $i],
+                'meta' => ['package_id' => $daily->id, 'phone' => '25677200000'.$i],
             ]);
 
             // Credit the wallet
@@ -242,7 +243,7 @@ class DatabaseSeeder extends Seeder
                 'code' => $voucherCode,
                 'status' => 'redeemed',
                 'redeemed_at' => now(),
-                'redeemed_by' => '25677200000' . $i,
+                'redeemed_by' => '25677200000'.$i,
             ]);
         }
 

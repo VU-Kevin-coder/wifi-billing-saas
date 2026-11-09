@@ -8,6 +8,7 @@ use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\FlutterwaveWithdrawalService;
+use App\Services\Policy\AdjustmentService;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,25 +24,25 @@ class RevenueController extends Controller
         $totalCommissions = (float) Transaction::withoutTenancy()->where('type', 'voucher_sale')
             ->where('status', 'completed')
             ->sum('platform_fee');
-        
+
         // Subscription Revenue
         $subscriptionRevenue = (float) Tenant::where('subscription_status', 'active')->sum('plan_fee');
 
         // Platform Payouts (Total completed withdrawals to operators)
-        $platformPayouts = (float) Transaction::withoutTenancy()->where('type', 'withdrawal')->where('status', 'completed')->sum('amount'); 
+        $platformPayouts = (float) Transaction::withoutTenancy()->where('type', 'withdrawal')->where('status', 'completed')->sum('amount');
 
         // 2. Fetch Operators with their Wallet Data & Pending Withdrawals
         $operators = Tenant::withCount([
             'transactions as pending_withdrawals_count' => function ($query) {
                 $query->withoutTenancy()->where('type', 'withdrawal')->where('status', 'pending');
-            }
+            },
         ])->withSum([
             'transactions as pending_withdrawals_amount' => function ($query) {
                 $query->withoutTenancy()->where('type', 'withdrawal')->where('status', 'pending');
-            }
+            },
         ], 'amount')
-        ->orderBy('wallet_balance', 'desc')
-        ->get();
+            ->orderBy('wallet_balance', 'desc')
+            ->get();
 
         return view('platform.revenue.index', compact(
             'totalCommissions', 'subscriptionRevenue', 'platformPayouts', 'operators', 'currency'
@@ -121,7 +122,7 @@ class RevenueController extends Controller
         return back()->with('status', 'Withdrawal rejected. Funds returned to operator wallet.');
     }
 
-    public function adjustBalance(Request $request, Tenant $tenant, \App\Services\Policy\AdjustmentService $service)
+    public function adjustBalance(Request $request, Tenant $tenant, AdjustmentService $service)
     {
         $validated = $request->validate([
             'amount' => 'required|numeric',

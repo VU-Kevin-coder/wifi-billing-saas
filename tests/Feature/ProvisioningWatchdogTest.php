@@ -30,9 +30,13 @@ class ProvisioningWatchdogTest extends TestCase
     private const TOKEN = 'watchdog-test-token';
 
     private Tenant $tenant;
+
     private SiteAgent $agent;
+
     private User $admin;
+
     private Session $session;
+
     private SiteAgentCommand $command;
 
     protected function setUp(): void

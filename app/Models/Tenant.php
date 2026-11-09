@@ -24,15 +24,15 @@ class Tenant extends Model
     ];
 
     protected $casts = [
-        'settings'             => 'array',
-        'mikrotik_password'    => 'encrypted',
-        'mikrotik_port'        => 'integer',
-        'trial_ends_at'        => 'datetime',
+        'settings' => 'array',
+        'mikrotik_password' => 'encrypted',
+        'mikrotik_port' => 'integer',
+        'trial_ends_at' => 'datetime',
         'subscription_ends_at' => 'datetime',
-        'auto_renew'           => 'boolean',
-        'plan_fee'             => 'decimal:2',
-        'wallet_balance'       => 'decimal:2',
-        'commission_rate'      => 'decimal:2',
+        'auto_renew' => 'boolean',
+        'plan_fee' => 'decimal:2',
+        'wallet_balance' => 'decimal:2',
+        'commission_rate' => 'decimal:2',
     ];
 
     /**

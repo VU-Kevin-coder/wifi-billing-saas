@@ -24,7 +24,7 @@ class StaffController extends Controller
 
         // Retrieve only users belonging to the active tenant
         $staff = $tenant->users()->with('roles')->orderBy('name')->get();
-        
+
         return view('operator.staff.index', compact('staff'));
     }
 

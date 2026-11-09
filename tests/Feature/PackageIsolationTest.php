@@ -2,12 +2,13 @@
 
 namespace Tests\Feature;
 
-use Carbon\Carbon;
 use App\Models\Package;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Tenancy\TenantContext;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -16,6 +17,7 @@ class PackageIsolationTest extends TestCase
     use RefreshDatabase;
 
     protected Tenant $acme;
+
     protected Tenant $beta;
 
     protected function setUp(): void
@@ -96,7 +98,7 @@ class PackageIsolationTest extends TestCase
 
     public function test_operator_can_view_packages_page_and_dashboard(): void
     {
-        \Illuminate\Support\Facades\URL::defaults(['tenant' => $this->acme->slug]);
+        URL::defaults(['tenant' => $this->acme->slug]);
 
         $admin = User::factory()->create(['tenant_id' => $this->acme->id]);
         $admin->assignRole('operator_admin');

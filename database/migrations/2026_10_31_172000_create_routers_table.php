@@ -11,16 +11,16 @@ return new class extends Migration
         Schema::create('routers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
-            
+
             // Basic Info
             $table->string('name'); // e.g., NTD-CORE-01
             $table->string('serial_number')->nullable();
             $table->string('hardware_model')->nullable(); // e.g., CCR2004
-            
+
             // Network
             $table->string('management_ip')->nullable();
             $table->string('site')->nullable(); // e.g., Ntinda Hub
-            
+
             // Status & Telemetry
             $table->string('status')->default('offline'); // online, offline, provisioning
             $table->integer('cpu_usage')->default(0);
@@ -30,7 +30,7 @@ return new class extends Migration
 
             // Credentials (Encrypted)
             $table->string('api_username')->default('sopraent_user');
-            $table->text('api_password')->nullable(); 
+            $table->text('api_password')->nullable();
             $table->integer('api_port')->default(8728);
 
             // Onboarding & Service Setup

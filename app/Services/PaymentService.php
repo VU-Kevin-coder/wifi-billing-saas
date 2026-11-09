@@ -11,6 +11,7 @@ use App\Models\VoucherBatch;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -392,36 +393,38 @@ class PaymentService
 
         $msisdn = preg_replace('/\D+/', '', $phone);
         if (strlen($msisdn) === 10 && str_starts_with($msisdn, '0')) {
-            $msisdn = '256' . substr($msisdn, 1);
+            $msisdn = '256'.substr($msisdn, 1);
         }
 
-        $baseUrl = $environment === 'production' 
-            ? 'https://pay.pesapal.com/v3/api' 
+        $baseUrl = $environment === 'production'
+            ? 'https://pay.pesapal.com/v3/api'
             : 'https://cybqa.pesapal.com/pesapalv3/api';
 
         try {
             // 1. Get Access Token
-            $tokenResponse = \Illuminate\Support\Facades\Http::post("{$baseUrl}/Auth/RequestToken", [
+            $tokenResponse = Http::post("{$baseUrl}/Auth/RequestToken", [
                 'consumer_key' => $consumerKey,
                 'consumer_secret' => $consumerSecret,
             ]);
 
             if ($tokenResponse->failed()) {
-                Log::error('Pesapal Auth Error: ' . $tokenResponse->body());
+                Log::error('Pesapal Auth Error: '.$tokenResponse->body());
                 $transaction->update(['status' => 'failed']);
+
                 return ['status' => 'failed', 'error' => 'Pesapal authentication failed.'];
             }
 
             $token = $tokenResponse->json('token');
-            if (!$token) {
+            if (! $token) {
                 $transaction->update(['status' => 'failed']);
+
                 return ['status' => 'failed', 'error' => 'Pesapal auth token not returned.'];
             }
 
             $callbackUrl = route('portal.pesapal.callback', ['tenant' => $tenant->slug]);
 
             // 2. Submit Order Request
-            $orderResponse = \Illuminate\Support\Facades\Http::withToken($token)
+            $orderResponse = Http::withToken($token)
                 ->post("{$baseUrl}/Transactions/SubmitOrderRequest", [
                     'id' => $transaction->reference,
                     'currency' => 'UGX',
@@ -439,8 +442,9 @@ class PaymentService
                 ]);
 
             if ($orderResponse->failed()) {
-                Log::error('Pesapal Order Error: ' . $orderResponse->body());
+                Log::error('Pesapal Order Error: '.$orderResponse->body());
                 $transaction->update(['status' => 'failed']);
+
                 return ['status' => 'failed', 'error' => 'Could not create Pesapal order.'];
             }
 
@@ -462,7 +466,8 @@ class PaymentService
                 'redirect_url' => $redirectUrl,
             ];
         } catch (\Throwable $e) {
-            Log::error('Pesapal Exception: ' . $e->getMessage());
+            Log::error('Pesapal Exception: '.$e->getMessage());
+
             return ['status' => 'pending', 'message' => 'Payment request sent.'];
         }
     }

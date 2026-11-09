@@ -8,6 +8,7 @@ use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -16,9 +17,13 @@ class StaffAndImpersonationTest extends TestCase
     use RefreshDatabase;
 
     protected Tenant $acme;
+
     protected Tenant $beta;
+
     protected User $platformAdmin;
+
     protected User $acmeAdmin;
+
     protected User $acmeFinance;
 
     protected function setUp(): void
@@ -43,7 +48,7 @@ class StaffAndImpersonationTest extends TestCase
         $this->acmeFinance = User::factory()->create(['tenant_id' => $this->acme->id]);
         $this->acmeFinance->assignRole('operator_finance');
 
-        \Illuminate\Support\Facades\URL::defaults(['tenant' => $this->acme->slug]);
+        URL::defaults(['tenant' => $this->acme->slug]);
     }
 
     public function test_operator_admin_can_view_staff_list(): void

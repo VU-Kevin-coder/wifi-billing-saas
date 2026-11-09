@@ -25,10 +25,10 @@ class RouterService
     public function createHotspotUser(string $voucherCode, string $packageName)
     {
         return $this->getHotspotManager()->createUser([
-            'name'     => $voucherCode,
+            'name' => $voucherCode,
             'password' => $voucherCode,
-            'profile'  => $packageName,
-            'comment'  => 'Created by Wi-Fi Billing SaaS',
+            'profile' => $packageName,
+            'comment' => 'Created by Wi-Fi Billing SaaS',
         ]);
     }
 
@@ -52,7 +52,7 @@ class RouterService
 
             $resources = $system->getResources();
 
-            return !empty($resources);
+            return ! empty($resources);
         } catch (\Throwable $e) {
             return false;
         }
@@ -66,11 +66,11 @@ class RouterService
         if ($this->tenant && $this->tenant->mikrotik_host) {
             config([
                 "mikrotik.routers.{$this->tenant->slug}" => [
-                    'host'     => $this->tenant->mikrotik_host,
+                    'host' => $this->tenant->mikrotik_host,
                     'username' => $this->tenant->mikrotik_username ?? 'admin',
                     'password' => $this->tenant->mikrotik_password ?? '',
-                    'port'     => (int) ($this->tenant->mikrotik_port ?? 8728),
-                    'timeout'  => 10,
+                    'port' => (int) ($this->tenant->mikrotik_port ?? 8728),
+                    'timeout' => 10,
                 ],
             ]);
 

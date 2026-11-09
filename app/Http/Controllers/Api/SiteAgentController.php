@@ -36,6 +36,7 @@ class SiteAgentController extends Controller
             foreach ($rows as $command) {
                 if ($command->attempts >= 5) {
                     $command->update(['status' => 'failed']);
+
                     continue;
                 }
 

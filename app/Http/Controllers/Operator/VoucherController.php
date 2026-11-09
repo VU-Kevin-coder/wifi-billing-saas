@@ -5,14 +5,14 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\Tenant;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
+use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use App\Models\Tenant;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 class VoucherController extends Controller
 {
@@ -20,9 +20,9 @@ class VoucherController extends Controller
     {
         // KPI Calculations (tenant-scoped via global scope)
         $generatedThisMonth = Voucher::whereMonth('created_at', now()->month)->count();
-        $unusedStock        = Voucher::where('status', 'unused')->count();
-        $redeemed           = Voucher::where('status', 'redeemed')->count();
-        $voided             = Voucher::where('status', 'voided')->count();
+        $unusedStock = Voucher::where('status', 'unused')->count();
+        $redeemed = Voucher::where('status', 'redeemed')->count();
+        $voided = Voucher::where('status', 'voided')->count();
 
         // Paginated voucher list with eager-loaded relations
         $vouchers = Voucher::with(['package', 'batch'])
@@ -50,7 +50,7 @@ class VoucherController extends Controller
         $tenant = $context->getTenant();
         $settings = $tenant->settings;
 
-        $maxPerBatch = (int) \App\Services\Policy\Policy::get('voucher.max_per_batch', 1000);
+        $maxPerBatch = (int) Policy::get('voucher.max_per_batch', 1000);
 
         $validated = $request->validate([
             'package_id' => ['required', Rule::exists('packages', 'id')->where('tenant_id', $tenant->id)],
@@ -58,7 +58,7 @@ class VoucherController extends Controller
         ]);
 
         // Enforce minimum length
-        $minLength = (int) \App\Services\Policy\Policy::get('voucher.min_length', 0);
+        $minLength = (int) Policy::get('voucher.min_length', 0);
         $length = (int) ($settings['voucher_length'] ?? 8);
         if ($minLength > 0 && $length < $minLength) {
             return back()->withErrors(['quantity' => "Voucher length in settings ({$length}) is below the platform minimum ({$minLength}). Update Settings → Hotspot."]);
@@ -66,7 +66,7 @@ class VoucherController extends Controller
 
         try {
             // One transaction: a batch either exists with all of its vouchers or not at all.
-            [$batch, $batchCode] = DB::transaction(function () use ($request, $tenant, $validated, $settings) {
+            [$batch, $batchCode] = DB::transaction(function () use ($tenant, $validated, $settings) {
                 // Serialise batch creation per tenant so numbering cannot race.
                 Tenant::query()->lockForUpdate()->findOrFail($tenant->id);
 

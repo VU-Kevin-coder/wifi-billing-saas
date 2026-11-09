@@ -1,9 +1,37 @@
 <?php
 
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Operator\CustomerController;
 use App\Http\Controllers\Operator\DashboardController as OperatorDashboard;
+use App\Http\Controllers\Operator\LiveSessionController;
+use App\Http\Controllers\Operator\PackageController;
+use App\Http\Controllers\Operator\PortalSettingsController;
+use App\Http\Controllers\Operator\RouterController;
+use App\Http\Controllers\Operator\RouterSettingsController;
+use App\Http\Controllers\Operator\SettingsController;
+use App\Http\Controllers\Operator\SiteController;
 use App\Http\Controllers\Operator\StaffController;
+use App\Http\Controllers\Operator\TeamController;
+use App\Http\Controllers\Operator\VoucherController;
+use App\Http\Controllers\Operator\WalletController;
+use App\Http\Controllers\Operator\WithdrawalController;
+use App\Http\Controllers\Platform\AdjustmentController;
+use App\Http\Controllers\Platform\BillingController;
+use App\Http\Controllers\Platform\ConfigurationController;
 use App\Http\Controllers\Platform\DashboardController as PlatformDashboard;
+use App\Http\Controllers\Platform\PolicyController;
+use App\Http\Controllers\Platform\RefundController;
+use App\Http\Controllers\Platform\RevenueController;
+use App\Http\Controllers\Platform\TenantController;
+use App\Http\Controllers\PortalController;
+use App\Http\Controllers\Profile\SecurityController;
 use App\Http\Controllers\ProfileController;
+use App\Models\Package;
+use App\Models\Tenant;
+use App\Models\Transaction;
+use App\Models\Voucher;
+use App\Services\PaymentService;
+use App\Support\HotspotLogin;
 use Illuminate\Support\Facades\Route;
 
 // ─── Public / Landing Page ──────────────────────────────────
@@ -15,26 +43,26 @@ Route::get('/', function () {
 Route::prefix('portal')
     ->name('portal.direct.')
     ->group(function () {
-        Route::get('/{tenant?}', [\App\Http\Controllers\PortalController::class, 'index'])
+        Route::get('/{tenant?}', [PortalController::class, 'index'])
             ->middleware('throttle:portal-browse')
             ->name('index');
-        Route::post('/{tenant?}/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])
+        Route::post('/{tenant?}/redeem', [PortalController::class, 'redeem'])
             ->middleware('throttle:portal-redeem')
             ->name('redeem');
-        Route::post('/{tenant?}/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])
+        Route::post('/{tenant?}/purchase', [PortalController::class, 'purchase'])
             ->middleware('throttle:portal-purchase')
             ->name('purchase');
-        Route::get('/{tenant?}/success', [\App\Http\Controllers\PortalController::class, 'success'])
+        Route::get('/{tenant?}/success', [PortalController::class, 'success'])
             ->middleware('throttle:portal-browse')
             ->name('success');
-        Route::get('/{tenant}/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])
+        Route::get('/{tenant}/pesapal/callback', [PortalController::class, 'pesapalCallback'])
             ->middleware('throttle:portal-browse')
             ->name('pesapal.callback');
-        Route::get('/{tenant}/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
+        Route::get('/{tenant}/pending/{transaction}', [PortalController::class, 'pending'])
             ->whereNumber('transaction')
             ->middleware('throttle:portal-browse')
             ->name('pending');
-        Route::get('/{tenant}/check/{transaction}', [\App\Http\Controllers\PortalController::class, 'check'])
+        Route::get('/{tenant}/check/{transaction}', [PortalController::class, 'check'])
             ->whereNumber('transaction')
             ->middleware('throttle:payment-poll')
             ->name('check');
@@ -46,45 +74,45 @@ Route::middleware(['auth', 'role:platform_admin'])
     ->name('platform.')
     ->group(function () {
         Route::get('/dashboard', PlatformDashboard::class)->name('dashboard');
-        Route::get('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('tenants.index');
-        Route::post('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'store'])->name('tenants.store');
-        Route::get('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'show'])->name('tenants.show');
-        Route::put('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'update'])->name('tenants.update');
-        Route::put('/tenants/{tenant}/plan', [\App\Http\Controllers\Platform\TenantController::class, 'changePlan'])->name('tenants.change-plan');
-        Route::post('/tenants/{tenant}/suspend', [\App\Http\Controllers\Platform\TenantController::class, 'suspend'])->name('tenants.suspend');
-        Route::post('/tenants/{tenant}/reactivate', [\App\Http\Controllers\Platform\TenantController::class, 'reactivate'])->name('tenants.reactivate');
-        Route::post('/tenants/{tenant}/verify-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'verifyKyc'])->name('tenants.verify-kyc');
-        Route::post('/tenants/{tenant}/reject-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'rejectKyc'])->name('tenants.reject-kyc');
-        Route::get('/billing', [\App\Http\Controllers\Platform\BillingController::class, 'index'])->name('billing.index');
-        Route::get('/revenue', [\App\Http\Controllers\Platform\RevenueController::class, 'index'])->name('revenue.index');
-        Route::get('/revenue/adjustments', [\App\Http\Controllers\Platform\AdjustmentController::class, 'index'])->name('revenue.adjustments.index');
-        Route::post('/revenue/withdrawals/{transaction}/approve', [\App\Http\Controllers\Platform\RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.approve');
-        Route::post('/revenue/withdrawals/{transaction}/reject', [\App\Http\Controllers\Platform\RevenueController::class, 'rejectWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.reject');
-        Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\AdjustmentController::class, 'store'])->middleware('mfa.recent')->name('revenue.adjust');
-        Route::post('/revenue/adjustments/{adjustment}/approve', [\App\Http\Controllers\Platform\AdjustmentController::class, 'approve'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.approve');
-        Route::post('/revenue/adjustments/{adjustment}/reject', [\App\Http\Controllers\Platform\AdjustmentController::class, 'reject'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.reject');
+        Route::get('/tenants', [TenantController::class, 'index'])->name('tenants.index');
+        Route::post('/tenants', [TenantController::class, 'store'])->name('tenants.store');
+        Route::get('/tenants/{tenant}', [TenantController::class, 'show'])->name('tenants.show');
+        Route::put('/tenants/{tenant}', [TenantController::class, 'update'])->name('tenants.update');
+        Route::put('/tenants/{tenant}/plan', [TenantController::class, 'changePlan'])->name('tenants.change-plan');
+        Route::post('/tenants/{tenant}/suspend', [TenantController::class, 'suspend'])->name('tenants.suspend');
+        Route::post('/tenants/{tenant}/reactivate', [TenantController::class, 'reactivate'])->name('tenants.reactivate');
+        Route::post('/tenants/{tenant}/verify-kyc', [TenantController::class, 'verifyKyc'])->name('tenants.verify-kyc');
+        Route::post('/tenants/{tenant}/reject-kyc', [TenantController::class, 'rejectKyc'])->name('tenants.reject-kyc');
+        Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+        Route::get('/revenue', [RevenueController::class, 'index'])->name('revenue.index');
+        Route::get('/revenue/adjustments', [AdjustmentController::class, 'index'])->name('revenue.adjustments.index');
+        Route::post('/revenue/withdrawals/{transaction}/approve', [RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.approve');
+        Route::post('/revenue/withdrawals/{transaction}/reject', [RevenueController::class, 'rejectWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.reject');
+        Route::post('/revenue/{tenant}/adjust', [AdjustmentController::class, 'store'])->middleware('mfa.recent')->name('revenue.adjust');
+        Route::post('/revenue/adjustments/{adjustment}/approve', [AdjustmentController::class, 'approve'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.approve');
+        Route::post('/revenue/adjustments/{adjustment}/reject', [AdjustmentController::class, 'reject'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.reject');
 
-        Route::get('/refunds', [\App\Http\Controllers\Platform\RefundController::class, 'index'])->name('refunds.index');
-        Route::post('/refunds/{refund}/approve', [\App\Http\Controllers\Platform\RefundController::class, 'approve'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.approve');
-        Route::post('/refunds/{refund}/reject', [\App\Http\Controllers\Platform\RefundController::class, 'reject'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.reject');
-        Route::post('/plans', [\App\Http\Controllers\Platform\BillingController::class, 'storePlan'])->name('plans.store');
-        Route::put('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'updatePlan'])->name('plans.update');
-        Route::delete('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'destroyPlan'])->name('plans.destroy');
-        Route::get('/configuration', [\App\Http\Controllers\Platform\ConfigurationController::class, 'index'])->name('configuration.index');
-        Route::put('/configuration/general', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
-        Route::put('/configuration/security', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
-        Route::put('/configuration/pesapal', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updatePesapal'])->middleware('mfa.recent')->name('configuration.pesapal.update');
-        Route::put('/configuration/flutterwave', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
-        Route::put('/configuration/mtn', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
-        Route::put('/configuration/airtel', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
-        Route::put('/configuration/email', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
-        Route::post('/configuration/email/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
-        Route::put('/configuration/sms', [\App\Http\Controllers\Platform\ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
-        Route::post('/configuration/sms/test', [\App\Http\Controllers\Platform\ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
-        Route::get('/configuration/policies', [\App\Http\Controllers\Platform\PolicyController::class, 'index'])->name('policies.index');
-        Route::put('/configuration/policies/lifecycle', [\App\Http\Controllers\Platform\PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
-        Route::put('/configuration/policies/approval', [\App\Http\Controllers\Platform\PolicyController::class, 'updateApproval'])->name('policies.approval.update');
-        Route::put('/configuration/policies/{category}', [\App\Http\Controllers\Platform\PolicyController::class, 'updateCategory'])->name('policies.category.update');
+        Route::get('/refunds', [RefundController::class, 'index'])->name('refunds.index');
+        Route::post('/refunds/{refund}/approve', [RefundController::class, 'approve'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.approve');
+        Route::post('/refunds/{refund}/reject', [RefundController::class, 'reject'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.reject');
+        Route::post('/plans', [BillingController::class, 'storePlan'])->name('plans.store');
+        Route::put('/plans/{plan}', [BillingController::class, 'updatePlan'])->name('plans.update');
+        Route::delete('/plans/{plan}', [BillingController::class, 'destroyPlan'])->name('plans.destroy');
+        Route::get('/configuration', [ConfigurationController::class, 'index'])->name('configuration.index');
+        Route::put('/configuration/general', [ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
+        Route::put('/configuration/security', [ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
+        Route::put('/configuration/pesapal', [ConfigurationController::class, 'updatePesapal'])->middleware('mfa.recent')->name('configuration.pesapal.update');
+        Route::put('/configuration/flutterwave', [ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
+        Route::put('/configuration/mtn', [ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
+        Route::put('/configuration/airtel', [ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
+        Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
+        Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
+        Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
+        Route::post('/configuration/sms/test', [ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
+        Route::get('/configuration/policies', [PolicyController::class, 'index'])->name('policies.index');
+        Route::put('/configuration/policies/lifecycle', [PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
+        Route::put('/configuration/policies/approval', [PolicyController::class, 'updateApproval'])->name('policies.approval.update');
+        Route::put('/configuration/policies/{category}', [PolicyController::class, 'updateCategory'])->name('policies.category.update');
         Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->middleware('mfa.recent')->name('impersonate');
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
@@ -97,33 +125,33 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
         Route::prefix('portal')
             ->name('portal.')
             ->group(function () {
-                Route::get('/', [\App\Http\Controllers\PortalController::class, 'index'])
+                Route::get('/', [PortalController::class, 'index'])
                     ->middleware('throttle:portal-browse')
                     ->name('index');
-                Route::post('/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])
+                Route::post('/redeem', [PortalController::class, 'redeem'])
                     ->middleware('throttle:portal-redeem')
                     ->name('redeem');
-                Route::post('/purchase', [\App\Http\Controllers\PortalController::class, 'purchase'])
+                Route::post('/purchase', [PortalController::class, 'purchase'])
                     ->middleware('throttle:portal-purchase')
                     ->name('purchase');
-                Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])
+                Route::get('/success', [PortalController::class, 'success'])
                     ->middleware('throttle:portal-browse')
                     ->name('success');
-                Route::get('/pesapal/callback', [\App\Http\Controllers\PortalController::class, 'pesapalCallback'])
+                Route::get('/pesapal/callback', [PortalController::class, 'pesapalCallback'])
                     ->middleware('throttle:portal-browse')
                     ->name('pesapal.callback');
-                Route::get('/pending/{transaction}', [\App\Http\Controllers\PortalController::class, 'pending'])
+                Route::get('/pending/{transaction}', [PortalController::class, 'pending'])
                     ->whereNumber('transaction')
                     ->middleware('throttle:portal-browse')
                     ->name('pending');
-                Route::get('/check/{transaction}', [\App\Http\Controllers\PortalController::class, 'check'])
+                Route::get('/check/{transaction}', [PortalController::class, 'check'])
                     ->whereNumber('transaction')
                     ->middleware('throttle:payment-poll')
                     ->name('check');
             });
 
         // Secure single-use SSO transfer for cross-domain login
-        Route::get('/sso/verify', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'ssoVerify'])
+        Route::get('/sso/verify', [AuthenticatedSessionController::class, 'ssoVerify'])
             ->name('operator.sso.verify');
 
         Route::middleware(['auth', 'role:operator_admin|operator_finance|operator_support|operator_network'])
@@ -133,78 +161,78 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::get('/dashboard', OperatorDashboard::class)->name('dashboard');
 
                 Route::middleware('role:operator_admin|operator_support')->group(function () {
-                    Route::resource('customers', \App\Http\Controllers\Operator\CustomerController::class)
+                    Route::resource('customers', CustomerController::class)
                         ->only(['index', 'show', 'store', 'update', 'destroy']);
                 });
 
                 Route::middleware('role:operator_admin')->group(function () {
-                    Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
-                    Route::get('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'index'])->name('vouchers.index');
-                    Route::post('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'store'])
+                    Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
+                    Route::get('/vouchers', [VoucherController::class, 'index'])->name('vouchers.index');
+                    Route::post('/vouchers', [VoucherController::class, 'store'])
                         ->middleware('tenant.active:generate_vouchers')
                         ->name('vouchers.store');
                 });
 
                 Route::middleware('role:operator_admin|operator_network')->group(function () {
-                    Route::post('routers/ping-all', [\App\Http\Controllers\Operator\RouterController::class, 'pingAll'])->name('routers.ping-all');
-                    Route::post('routers/bulk-action', [\App\Http\Controllers\Operator\RouterController::class, 'bulkAction'])->name('routers.bulk-action');
-                    Route::post('routers/{router}/ping', [\App\Http\Controllers\Operator\RouterController::class, 'ping'])->name('routers.ping');
-                    Route::post('routers/{router}/reboot', [\App\Http\Controllers\Operator\RouterController::class, 'reboot'])->name('routers.reboot');
-                    Route::post('routers/{router}/sync', [\App\Http\Controllers\Operator\RouterController::class, 'sync'])->name('routers.sync');
-                    Route::get('routers/{router}/provision-script', [\App\Http\Controllers\Operator\RouterController::class, 'provisionScript'])->name('routers.provision-script');
-                    Route::post('routers/{router}/provision', [\App\Http\Controllers\Operator\RouterController::class, 'provision'])->name('routers.provision');
-                    Route::post('routers/{router}/test', [\App\Http\Controllers\Operator\RouterController::class, 'testConnection'])->name('routers.test');
-                    Route::patch('routers/{router}/gateway', [\App\Http\Controllers\Operator\RouterController::class, 'updateGateway'])->name('routers.gateway');
-                    Route::resource('routers', \App\Http\Controllers\Operator\RouterController::class);
-                    Route::post('/sessions/{session}/disconnect', [\App\Http\Controllers\Operator\LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
-                    Route::post('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'store'])->name('sites.store');
+                    Route::post('routers/ping-all', [RouterController::class, 'pingAll'])->name('routers.ping-all');
+                    Route::post('routers/bulk-action', [RouterController::class, 'bulkAction'])->name('routers.bulk-action');
+                    Route::post('routers/{router}/ping', [RouterController::class, 'ping'])->name('routers.ping');
+                    Route::post('routers/{router}/reboot', [RouterController::class, 'reboot'])->name('routers.reboot');
+                    Route::post('routers/{router}/sync', [RouterController::class, 'sync'])->name('routers.sync');
+                    Route::get('routers/{router}/provision-script', [RouterController::class, 'provisionScript'])->name('routers.provision-script');
+                    Route::post('routers/{router}/provision', [RouterController::class, 'provision'])->name('routers.provision');
+                    Route::post('routers/{router}/test', [RouterController::class, 'testConnection'])->name('routers.test');
+                    Route::patch('routers/{router}/gateway', [RouterController::class, 'updateGateway'])->name('routers.gateway');
+                    Route::resource('routers', RouterController::class);
+                    Route::post('/sessions/{session}/disconnect', [LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
+                    Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
                 });
 
-                Route::get('/sessions', [\App\Http\Controllers\Operator\LiveSessionController::class, 'index'])->name('sessions.index');
-                Route::get('/sites/export', [\App\Http\Controllers\Operator\SiteController::class, 'export'])->name('sites.export');
-                Route::get('/sites', [\App\Http\Controllers\Operator\SiteController::class, 'index'])->name('sites.index');
-                Route::get('/billing', [\App\Http\Controllers\Operator\BillingController::class, 'index'])
+                Route::get('/sessions', [LiveSessionController::class, 'index'])->name('sessions.index');
+                Route::get('/sites/export', [SiteController::class, 'export'])->name('sites.export');
+                Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
+                Route::get('/billing', [App\Http\Controllers\Operator\BillingController::class, 'index'])
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('billing.index');
 
                 // Operator Wallet & Withdrawals
-                Route::get('/wallet', [\App\Http\Controllers\Operator\WalletController::class, 'index'])
+                Route::get('/wallet', [WalletController::class, 'index'])
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('wallet.index');
-                Route::post('/wallet/withdraw', [\App\Http\Controllers\Operator\WithdrawalController::class, 'store'])
+                Route::post('/wallet/withdraw', [WithdrawalController::class, 'store'])
                     ->middleware(['role:operator_admin|operator_finance', 'tenant.active:withdraw', 'mfa.recent'])
                     ->name('wallet.withdraw');
 
                 // Refund requests (the platform approves and pays the customer)
                 Route::middleware('role:operator_admin|operator_finance')->group(function () {
-                    Route::get('/refunds', [\App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
-                    Route::post('/refunds', [\App\Http\Controllers\Operator\RefundController::class, 'store'])->name('refunds.store');
-                    Route::post('/refunds/{refund}/cancel', [\App\Http\Controllers\Operator\RefundController::class, 'cancel'])->whereNumber('refund')->name('refunds.cancel');
+                    Route::get('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
+                    Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->name('refunds.store');
+                    Route::post('/refunds/{refund}/cancel', [App\Http\Controllers\Operator\RefundController::class, 'cancel'])->whereNumber('refund')->name('refunds.cancel');
                 });
 
                 Route::middleware('role:operator_admin')->group(function () {
-                    Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');
-                    Route::put('/settings/general', [\App\Http\Controllers\Operator\SettingsController::class, 'updateGeneral'])->name('settings.general.update');
-                    Route::put('/settings/hotspot', [\App\Http\Controllers\Operator\SettingsController::class, 'updateHotspot'])->name('settings.hotspot.update');
-                    Route::put('/settings/sms', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSms'])->name('settings.sms.update');
-                    Route::put('/settings/whatsapp', [\App\Http\Controllers\Operator\SettingsController::class, 'updateWhatsapp'])->name('settings.whatsapp.update');
-                    Route::put('/settings/notifications', [\App\Http\Controllers\Operator\SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
-                    Route::put('/settings/security', [\App\Http\Controllers\Operator\SettingsController::class, 'updateSecurity'])->name('settings.security.update');
-                    Route::get('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'edit'])->name('settings.portal');
-                    Route::put('/settings/portal', [\App\Http\Controllers\Operator\PortalSettingsController::class, 'update'])->name('settings.portal.update');
+                    Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+                    Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general.update');
+                    Route::put('/settings/hotspot', [SettingsController::class, 'updateHotspot'])->name('settings.hotspot.update');
+                    Route::put('/settings/sms', [SettingsController::class, 'updateSms'])->name('settings.sms.update');
+                    Route::put('/settings/whatsapp', [SettingsController::class, 'updateWhatsapp'])->name('settings.whatsapp.update');
+                    Route::put('/settings/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
+                    Route::put('/settings/security', [SettingsController::class, 'updateSecurity'])->name('settings.security.update');
+                    Route::get('/settings/portal', [PortalSettingsController::class, 'edit'])->name('settings.portal');
+                    Route::put('/settings/portal', [PortalSettingsController::class, 'update'])->name('settings.portal.update');
                 });
 
                 Route::middleware('role:operator_admin|operator_network')->group(function () {
-                    Route::get('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'edit'])->name('settings.router');
-                    Route::put('/settings/router', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'update'])->name('settings.router.update');
-                    Route::post('/settings/router/test', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'testConnection'])->name('settings.router.test');
-                    Route::post('/settings/router/sync-all', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'syncAll'])->name('settings.router.sync-all');
-                    Route::post('/settings/router/disconnect', [\App\Http\Controllers\Operator\RouterSettingsController::class, 'disconnect'])->name('settings.router.disconnect');
+                    Route::get('/settings/router', [RouterSettingsController::class, 'edit'])->name('settings.router');
+                    Route::put('/settings/router', [RouterSettingsController::class, 'update'])->name('settings.router.update');
+                    Route::post('/settings/router/test', [RouterSettingsController::class, 'testConnection'])->name('settings.router.test');
+                    Route::post('/settings/router/sync-all', [RouterSettingsController::class, 'syncAll'])->name('settings.router.sync-all');
+                    Route::post('/settings/router/disconnect', [RouterSettingsController::class, 'disconnect'])->name('settings.router.disconnect');
                 });
 
                 // Staff Management is strictly for operator_admin
                 Route::middleware('role:operator_admin')->group(function () {
-                    Route::get('/team', [\App\Http\Controllers\Operator\TeamController::class, 'index'])->name('team.index');
+                    Route::get('/team', [TeamController::class, 'index'])->name('team.index');
                     Route::resource('staff', StaffController::class)->only(['index', 'create', 'store']);
                 });
             });
@@ -219,17 +247,18 @@ Route::get('/dashboard', function () {
     if ($tenant) {
         return redirect()->to($tenant->url('operator/dashboard'));
     }
+
     return redirect()->route('login');
 })->middleware(['auth'])->name('dashboard');
 
 // ─── Authentication Routes (Breeze) ────────────────────────
 // These are accessible on all domains.
 Route::middleware('auth')->group(function () {
-    Route::get('/profile/security', [\App\Http\Controllers\Profile\SecurityController::class, 'index'])->name('profile.security.index');
-    Route::post('/profile/security/enable', [\App\Http\Controllers\Profile\SecurityController::class, 'enable'])
+    Route::get('/profile/security', [SecurityController::class, 'index'])->name('profile.security.index');
+    Route::post('/profile/security/enable', [SecurityController::class, 'enable'])
         ->middleware('throttle:6,1')
         ->name('profile.security.enable');
-    Route::post('/profile/security/confirm', [\App\Http\Controllers\Profile\SecurityController::class, 'confirm'])
+    Route::post('/profile/security/confirm', [SecurityController::class, 'confirm'])
         ->middleware('throttle:6,1')
         ->name('profile.security.confirm');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -247,23 +276,23 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
         404
     );
 
-    $transaction = \App\Models\Transaction::withoutGlobalScopes()
+    $transaction = Transaction::withoutGlobalScopes()
         ->where('type', 'voucher_sale')
         ->where('reference', $reference)
         ->firstOrFail();
-    $tenant = \App\Models\Tenant::query()->findOrFail($transaction->tenant_id);
+    $tenant = Tenant::query()->findOrFail($transaction->tenant_id);
 
     if ($transaction->status === 'pending') {
         $packageId = $transaction->meta['package_id'] ?? null;
         $phone = $transaction->phone ?? $transaction->meta['phone'] ?? null;
         $package = $packageId
-            ? \App\Models\Package::withoutGlobalScopes()
+            ? Package::withoutGlobalScopes()
                 ->where('tenant_id', $tenant->id)
                 ->find($packageId)
             : null;
 
         abort_unless($package && is_string($phone) && $phone !== '', 422, 'Missing package or phone in transaction.');
-        app(\App\Services\PaymentService::class)->handleSuccessfulPackagePayment(
+        app(PaymentService::class)->handleSuccessfulPackagePayment(
             $tenant,
             $package,
             $phone,
@@ -276,7 +305,7 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
 
     $voucherId = $transaction->meta['voucher_id'] ?? null;
     $voucher = $voucherId
-        ? \App\Models\Voucher::withoutGlobalScopes()
+        ? Voucher::withoutGlobalScopes()
             ->where('tenant_id', $tenant->id)
             ->find($voucherId)
         : null;
@@ -286,5 +315,5 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
 
     return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug])
         ->with('voucher_code', $voucher->code)
-        ->with('mikrotik_url', \App\Support\HotspotLogin::forVoucher($voucher));
+        ->with('mikrotik_url', HotspotLogin::forVoucher($voucher));
 })->middleware('web');

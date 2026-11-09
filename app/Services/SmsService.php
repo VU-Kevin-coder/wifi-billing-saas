@@ -17,7 +17,7 @@ class SmsService
         $provider = PlatformSetting::get('sms_provider', 'africastalking');
         $normalizedPhone = self::normalizePhoneNumber($to);
 
-        if (!$normalizedPhone) {
+        if (! $normalizedPhone) {
             return [
                 'success' => false,
                 'message' => "Invalid recipient phone number format: {$to}. Please use E.164 format like +256700000000.",
@@ -31,14 +31,14 @@ class SmsService
 
             return self::sendViaAfricasTalking($normalizedPhone, $message);
         } catch (Throwable $e) {
-            Log::error('SMS Dispatch Exception: ' . $e->getMessage(), [
+            Log::error('SMS Dispatch Exception: '.$e->getMessage(), [
                 'to' => $normalizedPhone,
                 'provider' => $provider,
             ]);
 
             return [
                 'success' => false,
-                'message' => 'SMS Gateway Exception: ' . $e->getMessage(),
+                'message' => 'SMS Gateway Exception: '.$e->getMessage(),
             ];
         }
     }
@@ -71,7 +71,7 @@ class SmsService
         ];
 
         // Custom sender ID / Shortcode (not supported for standard sandbox)
-        if (!empty($senderId) && $environment === 'production') {
+        if (! empty($senderId) && $environment === 'production') {
             $payload['from'] = $senderId;
         }
 
@@ -95,22 +95,22 @@ class SmsService
                 if (in_array(strtolower($status), ['success', 'sent'])) {
                     return [
                         'success' => true,
-                        'message' => "SMS dispatched successfully to {$to} (Status: {$status}, Cost: " . ($firstRecipient['cost'] ?? 'N/A') . ")",
+                        'message' => "SMS dispatched successfully to {$to} (Status: {$status}, Cost: ".($firstRecipient['cost'] ?? 'N/A').')',
                         'data' => $json,
                     ];
                 }
 
                 return [
                     'success' => false,
-                    'message' => "Africa's Talking error: Recipient status '{$status}'. " . ($firstRecipient['message'] ?? ''),
+                    'message' => "Africa's Talking error: Recipient status '{$status}'. ".($firstRecipient['message'] ?? ''),
                     'data' => $json,
                 ];
             }
         }
 
-        $errorMessage = $json['SMSMessageData']['Message'] 
-            ?? $json['errorMessage'] 
-            ?? $response->body() 
+        $errorMessage = $json['SMSMessageData']['Message']
+            ?? $json['errorMessage']
+            ?? $response->body()
             ?? "HTTP Error {$response->status()}";
 
         return [
@@ -212,21 +212,20 @@ class SmsService
 
         // Starts with 256... (e.g. 256772123456)
         if (str_starts_with($clean, '256') && strlen($clean) >= 12) {
-            return '+' . $clean;
+            return '+'.$clean;
         }
 
         // Starts with 254 (Kenya), 255 (Tanzania), 250 (Rwanda)
         if ((str_starts_with($clean, '254') || str_starts_with($clean, '255') || str_starts_with($clean, '250')) && strlen($clean) >= 12) {
-            return '+' . $clean;
+            return '+'.$clean;
         }
 
         // Local format 07... (10 digits in Uganda) -> replace 0 with +256
         if (str_starts_with($clean, '0') && strlen($clean) === 10) {
-            return '+256' . substr($clean, 1);
+            return '+256'.substr($clean, 1);
         }
 
         // Default: prepend +
-        return '+' . $clean;
+        return '+'.$clean;
     }
 }
-

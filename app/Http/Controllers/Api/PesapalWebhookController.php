@@ -39,7 +39,8 @@ class PesapalWebhookController extends Controller
             ]);
 
             if ($tokenResponse->failed()) {
-                Log::error('Pesapal Webhook Auth Error: ' . $tokenResponse->body());
+                Log::error('Pesapal Webhook Auth Error: '.$tokenResponse->body());
+
                 return response()->json(['status' => 'auth_failed'], 502);
             }
 
@@ -49,7 +50,8 @@ class PesapalWebhookController extends Controller
                 ->get("{$baseUrl}/Transactions/GetTransactionStatus?orderTrackingId={$orderTrackingId}");
 
             if ($statusResponse->failed()) {
-                Log::error('Pesapal Webhook Status Error: ' . $statusResponse->body());
+                Log::error('Pesapal Webhook Status Error: '.$statusResponse->body());
+
                 return response()->json(['status' => 'status_check_failed'], 502);
             }
 
@@ -100,7 +102,8 @@ class PesapalWebhookController extends Controller
                 'status' => 200,
             ]);
         } catch (\Throwable $e) {
-            Log::error('Pesapal Webhook Exception: ' . $e->getMessage());
+            Log::error('Pesapal Webhook Exception: '.$e->getMessage());
+
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }

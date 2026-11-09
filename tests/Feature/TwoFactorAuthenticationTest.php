@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Tenant;
 use App\Models\SsoNonce;
+use App\Models\Tenant;
 use App\Models\User;
 use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Foundation\Testing\RefreshDatabase;

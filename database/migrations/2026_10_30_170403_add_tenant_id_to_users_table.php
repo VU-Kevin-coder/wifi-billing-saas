@@ -11,10 +11,10 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             // Nullable because Platform Admins do not belong to a tenant
             $table->foreignId('tenant_id')
-                  ->nullable()
-                  ->constrained('tenants')
-                  ->cascadeOnDelete()
-                  ->after('id');
+                ->nullable()
+                ->constrained('tenants')
+                ->cascadeOnDelete()
+                ->after('id');
         });
     }
 

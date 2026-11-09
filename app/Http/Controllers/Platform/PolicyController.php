@@ -18,12 +18,12 @@ class PolicyController extends Controller
             ->groupBy(fn ($p) => explode('.', $p->key)[1]);
 
         $categories = [
-            'security'     => PolicySetting::where('category', 'security')->orderBy('key')->get(),
-            'wallet'       => PolicySetting::where('category', 'wallet')->orderBy('key')->get(),
+            'security' => PolicySetting::where('category', 'security')->orderBy('key')->get(),
+            'wallet' => PolicySetting::where('category', 'wallet')->orderBy('key')->get(),
             'provisioning' => PolicySetting::where('category', 'provisioning')->orderBy('key')->get(),
-            'voucher'      => PolicySetting::where('category', 'voucher')->orderBy('key')->get(),
-            'schedule'     => PolicySetting::where('category', 'schedule')->orderBy('key')->get(),
-            'approval'     => PolicySetting::where('category', 'approval')->orderBy('key')->get(),
+            'voucher' => PolicySetting::where('category', 'voucher')->orderBy('key')->get(),
+            'schedule' => PolicySetting::where('category', 'schedule')->orderBy('key')->get(),
+            'approval' => PolicySetting::where('category', 'approval')->orderBy('key')->get(),
         ];
 
         $approval = PolicySetting::where('category', 'approval')
@@ -59,7 +59,7 @@ class PolicyController extends Controller
         ]);
 
         foreach ($validated['policies'] as $key => $value) {
-            if (! str_starts_with($key, $category . '.') && ! ($category === 'voucher' && str_starts_with($key, 'schedule.'))) {
+            if (! str_starts_with($key, $category.'.') && ! ($category === 'voucher' && str_starts_with($key, 'schedule.'))) {
                 abort(403, 'Policy does not belong to this category.');
             }
             // Coerce based on existing type
@@ -74,7 +74,7 @@ class PolicyController extends Controller
 
         AuditLog::record("policy.{$category}.updated", null, ['keys' => array_keys($validated['policies'])]);
 
-        return back()->with('status', ucfirst($category) . ' policies updated.');
+        return back()->with('status', ucfirst($category).' policies updated.');
     }
 
     public function updateApproval(Request $request)

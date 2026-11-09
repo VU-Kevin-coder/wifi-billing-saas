@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -38,7 +39,7 @@ class WalletAccountingTest extends TestCase
             ]);
         }
 
-        \Illuminate\Support\Facades\URL::defaults(['tenant' => $tenant->slug]);
+        URL::defaults(['tenant' => $tenant->slug]);
 
         $response = $this->actingAs($admin)->get('http://acme.localhost:8000/operator/wallet');
 

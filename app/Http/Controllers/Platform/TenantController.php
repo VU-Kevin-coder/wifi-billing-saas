@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Platform;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Package;
 use App\Models\PlatformPlan;
@@ -13,6 +14,8 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class TenantController extends Controller
@@ -20,16 +23,16 @@ class TenantController extends Controller
     public function index()
     {
         // 1. Global KPIs
-        $totalOperators    = Tenant::count();
-        $managedRouters    = Router::withoutTenancy()->count();
-        $onlineRouters     = Router::withoutTenancy()->where('status', 'online')->count();
-        $offlineRouters    = $managedRouters - $onlineRouters;
-        $endCustomers      = Customer::withoutTenancy()->count();
-        $trialsInProgress  = Tenant::where('created_at', '>=', now()->subDays(14))->count();
-        $activeOperators   = Tenant::where('status', 'active')->count();
+        $totalOperators = Tenant::count();
+        $managedRouters = Router::withoutTenancy()->count();
+        $onlineRouters = Router::withoutTenancy()->where('status', 'online')->count();
+        $offlineRouters = $managedRouters - $onlineRouters;
+        $endCustomers = Customer::withoutTenancy()->count();
+        $trialsInProgress = Tenant::where('created_at', '>=', now()->subDays(14))->count();
+        $activeOperators = Tenant::where('status', 'active')->count();
         $suspendedOperators = Tenant::where('status', 'suspended')->count();
         // Trials ending in the next 7 days
-        $trialsEndingSoon  = Tenant::whereBetween('created_at', [now()->subDays(14), now()->subDays(7)])->count();
+        $trialsEndingSoon = Tenant::whereBetween('created_at', [now()->subDays(14), now()->subDays(7)])->count();
 
         // 2. Fetch Tenants with counts and eager-loaded plan
         $tenants = Tenant::with(['plan', 'users'])
@@ -39,20 +42,20 @@ class TenantController extends Controller
             ])->orderBy('created_at', 'desc')->paginate(10);
 
         // Fetch dynamic platform plans
-        $plans = \App\Models\PlatformPlan::orderBy('price', 'asc')->get();
+        $plans = PlatformPlan::orderBy('price', 'asc')->get();
 
         // 3. Attach additional metrics to each tenant
         foreach ($tenants as $tenant) {
             // Package usage
-            $packageCount  = Package::withoutTenancy()->where('tenant_id', $tenant->id)->count();
+            $packageCount = Package::withoutTenancy()->where('tenant_id', $tenant->id)->count();
             $customerCount = Customer::withoutTenancy()->where('tenant_id', $tenant->id)->count();
 
-            $tenant->package_usage      = "{$customerCount} / {$packageCount}";
+            $tenant->package_usage = "{$customerCount} / {$packageCount}";
             $tenant->package_percentage = $packageCount > 0 ? round(($customerCount / $packageCount) * 100) : 0;
 
             // Router health
-            $tenantOnline         = Router::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
-            $tenant->router_health  = "{$tenantOnline} / {$tenant->router_count}";
+            $tenantOnline = Router::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
+            $tenant->router_health = "{$tenantOnline} / {$tenant->router_count}";
             $tenant->router_healthy = ($tenant->router_count === 0) || ($tenantOnline === $tenant->router_count);
 
             // Account status
@@ -84,8 +87,8 @@ class TenantController extends Controller
         ];
 
         $customerCount = Customer::withoutTenancy()->where('tenant_id', $tenant->id)->count();
-        $packageCount  = Package::withoutTenancy()->where('tenant_id', $tenant->id)->count();
-        $routerCount   = Router::withoutTenancy()->where('tenant_id', $tenant->id)->count();
+        $packageCount = Package::withoutTenancy()->where('tenant_id', $tenant->id)->count();
+        $routerCount = Router::withoutTenancy()->where('tenant_id', $tenant->id)->count();
         $onlineRouters = Router::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
         $plans = PlatformPlan::orderBy('price')->get();
 
@@ -117,7 +120,7 @@ class TenantController extends Controller
 
         $tenant->update($validated);
 
-        \App\Models\AuditLog::record('tenant.updated', $tenant, ['fields' => array_keys($validated)], null, $tenant);
+        AuditLog::record('tenant.updated', $tenant, ['fields' => array_keys($validated)], null, $tenant);
 
         return back()->with('status', 'Tenant updated successfully.');
     }
@@ -140,7 +143,7 @@ class TenantController extends Controller
             'subscription_ends_at' => $validated['subscription_ends_at'] ?? null,
         ]);
 
-        \App\Models\AuditLog::record('tenant.plan_changed', $tenant, [
+        AuditLog::record('tenant.plan_changed', $tenant, [
             'new_plan' => $plan->name,
             'new_status' => $validated['subscription_status'],
         ], null, $tenant);
@@ -168,12 +171,12 @@ class TenantController extends Controller
 
         // Resolve plan dynamically from DB
         $plan = null;
-        if (!empty($validated['platform_plan_id'])) {
-            $plan = \App\Models\PlatformPlan::find($validated['platform_plan_id']);
-        } elseif (!empty($validated['plan'])) {
-            $plan = \App\Models\PlatformPlan::where('name', $validated['plan'])->first();
+        if (! empty($validated['platform_plan_id'])) {
+            $plan = PlatformPlan::find($validated['platform_plan_id']);
+        } elseif (! empty($validated['plan'])) {
+            $plan = PlatformPlan::where('name', $validated['plan'])->first();
         }
-        $plan ??= \App\Models\PlatformPlan::orderBy('price', 'asc')->first();
+        $plan ??= PlatformPlan::orderBy('price', 'asc')->first();
 
         $settings = [
             'brand_name' => $validated['name'],
@@ -196,19 +199,19 @@ class TenantController extends Controller
             'name' => $validated['owner_name'],
             'email' => $validated['owner_email'],
             // The owner sets their own password through the emailed reset link.
-            'password' => Hash::make(\Illuminate\Support\Str::random(64)),
+            'password' => Hash::make(Str::random(64)),
         ]);
         $user->syncRoles(['operator_admin']);
 
-        $status = \Illuminate\Support\Facades\Password::broker()->sendResetLink(['email' => $user->email]);
+        $status = Password::broker()->sendResetLink(['email' => $user->email]);
 
-        \App\Models\AuditLog::record('tenant.created', $tenant, [
+        AuditLog::record('tenant.created', $tenant, [
             'slug' => $tenant->slug,
             'owner_email' => $user->email,
             'status' => $tenant->status,
         ], null, $tenant);
 
-        $invited = $status === \Illuminate\Support\Facades\Password::RESET_LINK_SENT;
+        $invited = $status === Password::RESET_LINK_SENT;
 
         return redirect()->route('platform.tenants.index')
             ->with('success', $invited
@@ -220,7 +223,7 @@ class TenantController extends Controller
     {
         $tenant->update(['status' => 'suspended']);
 
-        \App\Models\AuditLog::record('tenant.suspended', $tenant, ['by' => auth()->id()], null, $tenant);
+        AuditLog::record('tenant.suspended', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' suspended.");
     }
@@ -229,7 +232,7 @@ class TenantController extends Controller
     {
         $tenant->update(['status' => 'active']);
 
-        \App\Models\AuditLog::record('tenant.reactivated', $tenant, ['by' => auth()->id()], null, $tenant);
+        AuditLog::record('tenant.reactivated', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' reactivated.");
     }
@@ -238,7 +241,7 @@ class TenantController extends Controller
     {
         $tenant->update(['kyc_status' => 'verified']);
 
-        \App\Models\AuditLog::record('tenant.kyc_verified', $tenant, ['by' => auth()->id()], null, $tenant);
+        AuditLog::record('tenant.kyc_verified', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' KYC verified.");
     }
@@ -247,7 +250,7 @@ class TenantController extends Controller
     {
         $tenant->update(['kyc_status' => 'rejected']);
 
-        \App\Models\AuditLog::record('tenant.kyc_rejected', $tenant, ['by' => auth()->id()], null, $tenant);
+        AuditLog::record('tenant.kyc_rejected', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' KYC rejected.");
     }

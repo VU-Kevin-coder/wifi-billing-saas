@@ -50,16 +50,16 @@ class WalletController extends Controller
         $transactions = Transaction::where('tenant_id', $tenant->id)->latest()->paginate(20);
 
         // Operator contact phone fallback
-        $defaultPhone = auth()->user()->phone 
-            ?? $tenant->contact_phone 
+        $defaultPhone = auth()->user()->phone
+            ?? $tenant->contact_phone
             ?? ($tenant->settings['support_phone'] ?? '');
 
         return view('operator.wallet.index', compact(
-            'tenant', 
-            'transactions', 
-            'totalGross', 
-            'totalFees', 
-            'totalWithdrawn', 
+            'tenant',
+            'transactions',
+            'totalGross',
+            'totalFees',
+            'totalWithdrawn',
             'pendingPayouts',
             'currency',
             'dateFormat',
@@ -70,4 +70,3 @@ class WalletController extends Controller
         ));
     }
 }
-

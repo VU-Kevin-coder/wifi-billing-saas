@@ -3,16 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
-use App\Support\HotspotLogin;
 use App\Services\PaymentService;
+use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
+use App\Support\HotspotLogin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -52,7 +56,7 @@ class PortalController extends Controller
         $tenantModel = $this->resolveTenant($request, $context, $tenant);
         abort_unless($tenantModel, 404);
 
-        if (\App\Services\Policy\Policy::denies($tenantModel, 'portal_redeem')) {
+        if (Policy::denies($tenantModel, 'portal_redeem')) {
             return back()->withErrors(['error' => 'This Wi-Fi operator is not redeeming vouchers right now.']);
         }
 
@@ -93,7 +97,7 @@ class PortalController extends Controller
         $tenantModel = $this->resolveTenant($request, $context, $tenant);
         abort_unless($tenantModel, 404);
 
-        if (\App\Services\Policy\Policy::denies($tenantModel, 'portal_sell')) {
+        if (Policy::denies($tenantModel, 'portal_sell')) {
             return back()->withErrors(['error' => 'This Wi-Fi operator is not accepting payments right now.']);
         }
 
@@ -345,7 +349,7 @@ class PortalController extends Controller
 
         try {
             $tenant = Tenant::query()->findOrFail($transaction->tenant_id);
-            $session = app(\App\Services\Tenancy\TenantContext::class)->runAs(
+            $session = app(TenantContext::class)->runAs(
                 $tenant,
                 fn () => $activationService->activate(
                     $tenant,
@@ -448,22 +452,22 @@ class PortalController extends Controller
         }
 
         // Verify with Pesapal API
-        $consumerKey = \App\Models\PlatformSetting::get('pesapal_consumer_key');
-        $consumerSecret = \App\Models\PlatformSetting::getSecret('pesapal_consumer_secret') ?: \App\Models\PlatformSetting::get('pesapal_consumer_secret');
-        $environment = \App\Models\PlatformSetting::get('pesapal_environment', 'sandbox');
-        $baseUrl = $environment === 'production' 
-            ? 'https://pay.pesapal.com/v3/api' 
+        $consumerKey = PlatformSetting::get('pesapal_consumer_key');
+        $consumerSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
+        $environment = PlatformSetting::get('pesapal_environment', 'sandbox');
+        $baseUrl = $environment === 'production'
+            ? 'https://pay.pesapal.com/v3/api'
             : 'https://cybqa.pesapal.com/pesapalv3/api';
 
         try {
-            $tokenResponse = \Illuminate\Support\Facades\Http::post("{$baseUrl}/Auth/RequestToken", [
+            $tokenResponse = Http::post("{$baseUrl}/Auth/RequestToken", [
                 'consumer_key' => $consumerKey,
                 'consumer_secret' => $consumerSecret,
             ]);
 
             $token = $tokenResponse->json('token');
 
-            $statusResponse = \Illuminate\Support\Facades\Http::withToken($token)
+            $statusResponse = Http::withToken($token)
                 ->get("{$baseUrl}/Transactions/GetTransactionStatus?orderTrackingId={$orderTrackingId}");
 
             $status = $statusResponse->json('payment_status_description') ?? 'FAILED';
@@ -508,7 +512,7 @@ class PortalController extends Controller
                     ->with('auto_activate', true);
             }
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Pesapal callback error: '.$e->getMessage());
+            Log::error('Pesapal callback error: '.$e->getMessage());
         }
 
         return redirect()->to($this->portalUrl($request, 'index', $tenantModel))

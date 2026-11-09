@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\FlutterwaveWebhookController;
 use App\Http\Controllers\Api\MobileMoneyWebhookController;
+use App\Http\Controllers\Api\PesapalWebhookController;
 use App\Http\Controllers\Api\SiteAgentController;
 use App\Http\Controllers\PortalController;
 use Illuminate\Support\Facades\Route;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('webhooks')->group(function () {
-    Route::match(['get', 'post'], '/pesapal', [\App\Http\Controllers\Api\PesapalWebhookController::class, 'handle'])
+    Route::match(['get', 'post'], '/pesapal', [PesapalWebhookController::class, 'handle'])
         ->name('api.webhooks.pesapal');
     Route::post('/flutterwave', [FlutterwaveWebhookController::class, 'handle'])
         ->name('api.webhooks.flutterwave');

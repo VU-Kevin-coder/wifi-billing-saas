@@ -22,6 +22,7 @@ class PlatformRevenueControllerTest extends TestCase
     private const API_URL = 'https://api.flutterwave.com/v3';
 
     private User $admin;
+
     private Tenant $tenant;
 
     protected function setUp(): void

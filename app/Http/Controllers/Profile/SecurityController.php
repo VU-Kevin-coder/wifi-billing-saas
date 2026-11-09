@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Profile;
 
 use App\Http\Controllers\Controller;
+use App\Support\MfaSession;
 use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -69,7 +70,7 @@ class SecurityController extends Controller
         $method = MFA::getMethod($user, 'totp');
         MFA::enableMethod($user, 'totp', ['secret' => $method->secret]);
         $recoveryCodes = MFA::generateRecoveryCodes($user);
-        \App\Support\MfaSession::markVerified($request);
+        MfaSession::markVerified($request);
 
         return redirect()->route('profile.security.index')
             ->with('status', 'Two-Factor Authentication enabled successfully.')
