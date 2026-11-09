@@ -14,7 +14,7 @@ COPY resources ./resources
 RUN npm run build
 
 # ─── Stage 2: application image ─────────────────────────────────────────────
-FROM php:8.3-fpm-alpine AS base
+FROM php:8.5-fpm-alpine AS base
 
 # Install system packages + PHP extensions
 RUN apk add --no-cache \

@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────────────────────
 # Base: PHP 8.3 FPM (matches Laravel 12 requirement: 8.2+)
 # ─────────────────────────────────────────────────────────────
-FROM php:8.3-fpm-alpine AS base
+FROM php:8.5-fpm-alpine AS base
 
 # Install system utilities + PHP extensions via mlocati's
 # install-php-extensions (handles build deps + cleanup + the
