@@ -11,6 +11,7 @@ use App\Models\Voucher;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use App\Support\ReportingTime;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -38,9 +39,9 @@ class DashboardController extends Controller
         $currency = $request->query('currency');
         $currency = in_array($currency, $currencies, true) ? $currency : $currencies[0];
 
-        $todayRevenue = $this->revenueForPeriod($tenantId, $currency, today()->startOfDay(), today()->endOfDay());
-        $weeklyRevenue = $this->revenueForPeriod($tenantId, $currency, now()->startOfWeek(), now()->endOfWeek());
-        $monthlyRevenue = $this->revenueForPeriod($tenantId, $currency, now()->startOfMonth(), now()->endOfMonth());
+        $todayRevenue = $this->revenueForPeriod($tenantId, $currency, ...ReportingTime::dayRange());
+        $weeklyRevenue = $this->revenueForPeriod($tenantId, $currency, ...ReportingTime::weekRange());
+        $monthlyRevenue = $this->revenueForPeriod($tenantId, $currency, ...ReportingTime::monthRange());
 
         $totalCustomers = Customer::query()
             ->where('customers.tenant_id', $tenantId)
@@ -68,24 +69,20 @@ class DashboardController extends Controller
             ->where('routers.status', 'online')
             ->count();
 
-        $chartStart = today()->subDays(6)->startOfDay();
-        $revenueByDay = $this->redeemedVouchers($tenantId, $currency)
-            ->whereBetween('vouchers.redeemed_at', [$chartStart, now()])
-            ->selectRaw('DATE(vouchers.redeemed_at) as date, SUM(packages.price) as revenue, COUNT(vouchers.id) as transactions')
-            ->groupBy(DB::raw('DATE(vouchers.redeemed_at)'))
-            ->orderBy('date')
-            ->get()
-            ->keyBy('date');
-
-        $chartData = collect(range(0, 6))->map(function (int $daysAgo) use ($chartStart, $revenueByDay): array {
-            $date = $chartStart->copy()->addDays($daysAgo);
-            $dailyTotals = $revenueByDay->get($date->toDateString());
+        // Last 7 local days, oldest first. One small indexed query per day keeps the
+        // day boundaries exact in the reporting timezone on every database.
+        $chartData = collect(range(6, 0))->map(function (int $daysAgo) use ($tenantId, $currency): array {
+            $day = ReportingTime::now()->startOfDay()->subDays($daysAgo);
+            $totals = $this->redeemedVouchers($tenantId, $currency)
+                ->whereBetween('vouchers.redeemed_at', ReportingTime::dayRange($day))
+                ->selectRaw('COALESCE(SUM(COALESCE(vouchers.redeemed_price, packages.price)), 0) as revenue, COUNT(vouchers.id) as transactions')
+                ->first();
 
             return [
-                'date' => $date->toDateString(),
-                'label' => $date->format('D'),
-                'revenue' => (float) ($dailyTotals->revenue ?? 0),
-                'transactions' => (int) ($dailyTotals->transactions ?? 0),
+                'date' => $day->toDateString(),
+                'label' => $day->format('D'),
+                'revenue' => (float) ($totals->revenue ?? 0),
+                'transactions' => (int) ($totals->transactions ?? 0),
             ];
         });
 
@@ -119,7 +116,7 @@ class DashboardController extends Controller
     {
         return (float) $this->redeemedVouchers($tenantId, $currency)
             ->whereBetween('vouchers.redeemed_at', [$start, $end])
-            ->sum('packages.price');
+            ->sum(DB::raw('COALESCE(vouchers.redeemed_price, packages.price)'));
     }
 
     private function redeemedVouchers(int $tenantId, string $currency): Builder

@@ -11,7 +11,7 @@ class Voucher extends Model
     use BelongsToTenant, HasFactory;
 
     protected $fillable = [
-        'tenant_id', 'site_id', 'voucher_batch_id', 'package_id', 'code', 'status',
+        'tenant_id', 'site_id', 'voucher_batch_id', 'package_id', 'code', 'status', 'redeemed_price',
         'assigned_site', 'redeemed_by', 'redeemed_at',
     ];
 

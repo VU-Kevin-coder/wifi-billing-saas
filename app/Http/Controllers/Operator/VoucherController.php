@@ -19,10 +19,10 @@ class VoucherController extends Controller
     public function index(TenantContext $context)
     {
         // KPI Calculations (tenant-scoped via global scope)
-        $generatedThisMonth = Voucher::whereMonth('created_at', now()->month)->count();
-        $unusedStock = Voucher::where('status', 'unused')->count();
-        $redeemed = Voucher::where('status', 'redeemed')->count();
-        $voided = Voucher::where('status', 'voided')->count();
+        $generatedThisMonth = Voucher::whereBetween('created_at', \App\Support\ReportingTime::monthRange())->count();
+        $unusedStock        = Voucher::where('status', 'unused')->count();
+        $redeemed           = Voucher::where('status', 'redeemed')->count();
+        $voided             = Voucher::where('status', 'voided')->count();
 
         // Paginated voucher list with eager-loaded relations
         $vouchers = Voucher::with(['package', 'batch'])
@@ -116,6 +116,25 @@ class VoucherController extends Controller
 
         return redirect()->route('operator.vouchers.index', ['tenant' => $tenant->slug])
             ->with('status', "Successfully generated {$validated['quantity']} vouchers for {$batchCode}.");
+    }
+
+    /**
+     * Take a voucher out of circulation. A redeemed voucher also loses its connection.
+     */
+    public function void(Request $request, \App\Services\AccessRevoker $revoker, string $tenant, int $voucher)
+    {
+        $model = Voucher::findOrFail($voucher); // tenant-scoped
+
+        if ($model->status === 'voided') {
+            return back()->withErrors(['error' => 'This voucher is already voided.']);
+        }
+        if (! in_array($model->status, ['unused', 'redeemed'], true)) {
+            return back()->withErrors(['error' => 'Only unused or active vouchers can be voided.']);
+        }
+
+        $revoker->revoke($model, 'voided by '.($request->user()?->email ?? 'staff'));
+
+        return back()->with('status', "Voucher {$model->code} was voided.");
     }
 
     /**

@@ -84,6 +84,7 @@ class VoucherActivationService
             $voucher->update([
                 'status' => 'redeemed',
                 'redeemed_at' => $startedAt,
+                'redeemed_price' => $package->price,
                 'redeemed_by' => $phone,
                 'site_id' => $voucher->site_id ?? $site?->id,
             ]);

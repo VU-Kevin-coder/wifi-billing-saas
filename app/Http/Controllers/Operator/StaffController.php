@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Operator;
 
+use Illuminate\Validation\Rule;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
@@ -93,5 +94,81 @@ class StaffController extends Controller
 
         return redirect()->route('operator.team.index')
             ->with('status', 'Staff member added. An email was sent so they can set their own password.');
+    }
+
+    private const ROLES = ['operator_admin', 'operator_finance', 'operator_support', 'operator_network'];
+
+    public function update(Request $request, TenantContext $context, string $tenant, int $staff)
+    {
+        $member = $this->member($context, $staff);
+        $validated = $request->validate(['role' => ['required', Rule::in(self::ROLES)]]);
+
+        if ($problem = $this->refusal($context, $member, removesAdmin: $validated['role'] !== 'operator_admin')) {
+            return back()->withErrors(['error' => $problem]);
+        }
+
+        $previous = $member->getRoleNames()->first();
+        $member->syncRoles([$validated['role']]);
+
+        AuditLog::record('staff.role_changed', $member, ['from' => $previous, 'to' => $validated['role']], auth()->user());
+
+        return back()->with('status', "{$member->name} is now {$validated['role']}.");
+    }
+
+    public function deactivate(TenantContext $context, string $tenant, int $staff)
+    {
+        $member = $this->member($context, $staff);
+
+        if ($problem = $this->refusal($context, $member, removesAdmin: true)) {
+            return back()->withErrors(['error' => $problem]);
+        }
+
+        // Rotating the remember token ends any "remember me" session; the
+        // EnsureUserIsActive middleware ends every other session immediately.
+        $member->forceFill(['deactivated_at' => now(), 'remember_token' => Str::random(60)])->save();
+
+        AuditLog::record('staff.deactivated', $member, ['email' => $member->email], auth()->user());
+
+        return back()->with('status', "{$member->name} was deactivated and can no longer sign in.");
+    }
+
+    public function reactivate(TenantContext $context, string $tenant, int $staff)
+    {
+        $member = $this->member($context, $staff);
+        $member->forceFill(['deactivated_at' => null])->save();
+
+        AuditLog::record('staff.reactivated', $member, ['email' => $member->email], auth()->user());
+
+        return back()->with('status', "{$member->name} can sign in again.");
+    }
+
+    private function member(TenantContext $context, int $id): User
+    {
+        $tenant = $context->getTenant();
+        abort_unless($tenant, 403, 'Tenant context not set.');
+
+        return $tenant->users()->findOrFail($id);
+    }
+
+    /** Why this change must not happen, or null when it is fine. */
+    private function refusal(TenantContext $context, User $member, bool $removesAdmin): ?string
+    {
+        if ($member->is(auth()->user())) {
+            return 'You cannot change your own role or deactivate your own account.';
+        }
+
+        if ($removesAdmin && $member->hasRole('operator_admin')) {
+            $otherActiveAdmins = $context->getTenant()->users()
+                ->whereNull('users.deactivated_at')
+                ->where('users.id', '!=', $member->id)
+                ->role('operator_admin')
+                ->count();
+
+            if ($otherActiveAdmins === 0) {
+                return 'There must always be at least one active Administrator.';
+            }
+        }
+
+        return null;
     }
 }

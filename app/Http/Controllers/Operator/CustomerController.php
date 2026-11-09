@@ -18,7 +18,7 @@ class CustomerController extends Controller
         $totalCustomers = Customer::count();
         $activeCustomers = Customer::where('status', 'active')->count();
         $outstandingBalance = 0;    // TODO: wire up once balance tracking is connected
-        $newThisMonth = Customer::whereMonth('created_at', now()->month)->count();
+        $newThisMonth = Customer::whereBetween('created_at', \App\Support\ReportingTime::monthRange())->count();
 
         // Paginated customer list with assigned package
         $customers = Customer::with('package')->orderBy('created_at', 'desc')->paginate(25);

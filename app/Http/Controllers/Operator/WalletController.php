@@ -31,7 +31,7 @@ class WalletController extends Controller
         $voucherGross = (float) Voucher::where('vouchers.tenant_id', $tenant->id)
             ->where('vouchers.status', 'redeemed')
             ->join('packages', 'vouchers.package_id', '=', 'packages.id')
-            ->sum('packages.price');
+            ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(vouchers.redeemed_price, packages.price)'));
 
         // Total Gross is the highest of actual voucher revenue or transaction records
         $totalGross = max($onlineGross, $voucherGross);

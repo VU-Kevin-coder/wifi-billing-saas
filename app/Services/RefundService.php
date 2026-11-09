@@ -6,14 +6,11 @@ use App\Exceptions\InsufficientWalletBalance;
 use App\Exceptions\RefundException;
 use App\Models\AuditLog;
 use App\Models\Refund;
-use App\Models\Router;
-use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Notifications\RefundRequested;
-use App\Services\Tenancy\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -33,8 +30,7 @@ class RefundService
 {
     public function __construct(
         private readonly WalletService $wallet,
-        private readonly SiteAgentCommandService $commands,
-        private readonly TenantContext $context,
+        private readonly AccessRevoker $revoker,
     ) {}
 
     /** What can still be refunded on a sale (pending requests are reserved). */
@@ -223,8 +219,7 @@ class RefundService
     }
 
     /**
-     * After a full refund the customer must not keep the service: void the
-     * voucher and ask the site agent to remove the router user. Best effort;
+     * After a full refund the customer must not keep the service. Best effort:
      * the refund itself has already been recorded.
      */
     private function revokeAccess(Transaction $sale): void
@@ -232,32 +227,9 @@ class RefundService
         try {
             $voucherId = $sale->meta['voucher_id'] ?? null;
             $voucher = $voucherId ? Voucher::withoutTenancy()->where('tenant_id', $sale->tenant_id)->find($voucherId) : null;
-            if (! $voucher) {
-                return;
-            }
 
-            $voucher->update(['status' => 'voided']);
-            AuditLog::record('voucher.voided_by_refund', $voucher, ['sale_reference' => $sale->reference]);
-
-            $session = Session::withoutTenancy()
-                ->where('tenant_id', $sale->tenant_id)
-                ->where('voucher_id', $voucher->id)
-                ->whereIn('status', ['active', 'provisioning'])
-                ->latest('id')
-                ->first();
-            $router = $session?->router_id
-                ? Router::withoutTenancy()->where('tenant_id', $sale->tenant_id)->find($session->router_id)
-                : null;
-            $tenant = Tenant::find($sale->tenant_id);
-
-            $queued = false;
-            if ($session && $router && $tenant) {
-                $this->context->runAs($tenant, fn () => $this->commands->expire($router, $session, $voucher));
-                $queued = true; // the agent marks the session expired once the router user is removed
-            }
-
-            if ($session && ! $queued) {
-                $session->update(['status' => 'expired']); // nothing on a router to remove
+            if ($voucher) {
+                $this->revoker->revoke($voucher, 'refund of sale '.$sale->reference);
             }
         } catch (Throwable $exception) {
             Log::error('Unable to revoke access after a refund.', [

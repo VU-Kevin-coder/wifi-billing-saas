@@ -191,9 +191,9 @@ class SiteController extends Controller
             ->where('packages.currency', $currency)
             ->where('vouchers.status', 'redeemed')
             ->whereNotNull('vouchers.site_id')
-            ->whereBetween('vouchers.redeemed_at', [now()->startOfMonth(), now()->endOfMonth()])
+            ->whereBetween('vouchers.redeemed_at', \App\Support\ReportingTime::monthRange())
             ->select('vouchers.site_id')
-            ->selectRaw('SUM(packages.price) as revenue')
+            ->selectRaw('SUM(COALESCE(vouchers.redeemed_price, packages.price)) as revenue')
             ->groupBy('vouchers.site_id')
             ->get()
             ->keyBy('site_id');

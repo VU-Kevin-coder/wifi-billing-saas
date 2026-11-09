@@ -166,11 +166,18 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 });
 
                 Route::middleware('role:operator_admin')->group(function () {
-                    Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
-                    Route::get('/vouchers', [VoucherController::class, 'index'])->name('vouchers.index');
-                    Route::post('/vouchers', [VoucherController::class, 'store'])
+                    Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
+
+                    // Vouchers: index + store are gated by the tenant lifecycle policy
+                    Route::get('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'index'])->name('vouchers.index');
+                    Route::post('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'store'])
                         ->middleware('tenant.active:generate_vouchers')
                         ->name('vouchers.store');
+
+                    // Voucher void: admin-only, removes a voucher from circulation
+                    Route::post('vouchers/{voucher}/void', [\App\Http\Controllers\Operator\VoucherController::class, 'void'])
+                        ->whereNumber('voucher')
+                        ->name('vouchers.void');
                 });
 
                 Route::middleware('role:operator_admin|operator_network')->group(function () {
@@ -234,6 +241,9 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::get('/team', [TeamController::class, 'index'])->name('team.index');
                     Route::resource('staff', StaffController::class)->only(['index', 'create', 'store']);
+                    Route::patch('staff/{staff}', [StaffController::class, 'update'])->whereNumber('staff')->name('staff.update');
+                    Route::post('staff/{staff}/deactivate', [StaffController::class, 'deactivate'])->whereNumber('staff')->name('staff.deactivate');
+                    Route::post('staff/{staff}/reactivate', [StaffController::class, 'reactivate'])->whereNumber('staff')->name('staff.reactivate');
                 });
             });
     });

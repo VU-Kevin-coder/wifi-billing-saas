@@ -47,6 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Register the tenant context middleware globally for web routes
         $middleware->web(append: [
+            \App\Http\Middleware\EnsureUserIsActive::class,
             SetTenantContext::class,
             RequireTwoFactor::class,
         ]);
