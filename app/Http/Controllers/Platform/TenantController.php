@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Package;
+use App\Models\PlatformPlan;
 use App\Models\Router;
+use App\Models\Session;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -67,17 +70,28 @@ class TenantController extends Controller
     {
         $tenant->load('plan');
 
-        // 1. KPI Metrics
+        $stats = [
+            'customers' => Customer::withoutTenancy()->where('tenant_id', $tenant->id)->count(),
+            'active_sessions' => Session::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'active')->count(),
+            'monthly_revenue' => (float) Transaction::withoutTenancy()
+                ->where('tenant_id', $tenant->id)
+                ->where('type', 'voucher_sale')
+                ->where('status', 'completed')
+                ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
+                ->sum('amount'),
+            'routers_total' => Router::withoutTenancy()->where('tenant_id', $tenant->id)->count(),
+            'routers_online' => Router::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'online')->count(),
+        ];
+
         $customerCount = Customer::withoutTenancy()->where('tenant_id', $tenant->id)->count();
         $packageCount  = Package::withoutTenancy()->where('tenant_id', $tenant->id)->count();
         $routerCount   = Router::withoutTenancy()->where('tenant_id', $tenant->id)->count();
         $onlineRouters = Router::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'online')->count();
+        $plans = PlatformPlan::orderBy('price')->get();
 
-        // 2. Staff list
         $staff = User::withoutTenancy()->where('tenant_id', $tenant->id)->with('roles')->get();
 
-        // 3. Recent sessions (live activity)
-        $recentActivity = \App\Models\Session::withoutTenancy()
+        $recentActivity = Session::withoutTenancy()
             ->where('tenant_id', $tenant->id)
             ->with(['customer', 'package'])
             ->latest('started_at')
@@ -85,9 +99,53 @@ class TenantController extends Controller
             ->get();
 
         return view('platform.tenants.show', compact(
-            'tenant', 'customerCount', 'packageCount',
+            'tenant', 'stats', 'plans', 'customerCount', 'packageCount',
             'routerCount', 'onlineRouters', 'staff', 'recentActivity'
         ));
+    }
+
+    public function update(Request $request, Tenant $tenant)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'legal_name' => ['nullable', 'string', 'max:255'],
+            'contact_name' => ['nullable', 'string', 'max:255'],
+            'contact_email' => ['nullable', 'email', 'max:255'],
+            'contact_phone' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $tenant->update($validated);
+
+        \App\Models\AuditLog::record('tenant.updated', $tenant, ['fields' => array_keys($validated)], null, $tenant);
+
+        return back()->with('status', 'Tenant updated successfully.');
+    }
+
+    public function changePlan(Request $request, Tenant $tenant)
+    {
+        $validated = $request->validate([
+            'platform_plan_id' => ['required', 'exists:platform_plans,id'],
+            'subscription_status' => ['required', Rule::in(['trial', 'active', 'past_due', 'suspended'])],
+            'subscription_ends_at' => ['nullable', 'date'],
+        ]);
+
+        $plan = PlatformPlan::findOrFail($validated['platform_plan_id']);
+
+        $tenant->update([
+            'platform_plan_id' => $plan->id,
+            'plan' => $plan->name,
+            'plan_fee' => $plan->price,
+            'subscription_status' => $validated['subscription_status'],
+            'subscription_ends_at' => $validated['subscription_ends_at'] ?? null,
+        ]);
+
+        \App\Models\AuditLog::record('tenant.plan_changed', $tenant, [
+            'new_plan' => $plan->name,
+            'new_status' => $validated['subscription_status'],
+        ], null, $tenant);
+
+        return back()->with('status', "Plan changed to {$plan->name}.");
     }
 
     public function store(Request $request)
@@ -162,7 +220,7 @@ class TenantController extends Controller
     {
         $tenant->update(['status' => 'suspended']);
 
-        \App\Models\AuditLog::record('tenant.suspended', $tenant, ['by' => auth()->id()]);
+        \App\Models\AuditLog::record('tenant.suspended', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' suspended.");
     }
@@ -171,7 +229,7 @@ class TenantController extends Controller
     {
         $tenant->update(['status' => 'active']);
 
-        \App\Models\AuditLog::record('tenant.reactivated', $tenant, ['by' => auth()->id()]);
+        \App\Models\AuditLog::record('tenant.reactivated', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' reactivated.");
     }
@@ -180,7 +238,7 @@ class TenantController extends Controller
     {
         $tenant->update(['kyc_status' => 'verified']);
 
-        \App\Models\AuditLog::record('tenant.kyc_verified', $tenant, ['by' => auth()->id()]);
+        \App\Models\AuditLog::record('tenant.kyc_verified', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' KYC verified.");
     }
@@ -189,7 +247,7 @@ class TenantController extends Controller
     {
         $tenant->update(['kyc_status' => 'rejected']);
 
-        \App\Models\AuditLog::record('tenant.kyc_rejected', $tenant, ['by' => auth()->id()]);
+        \App\Models\AuditLog::record('tenant.kyc_rejected', $tenant, ['by' => auth()->id()], null, $tenant);
 
         return back()->with('status', "Tenant '{$tenant->name}' KYC rejected.");
     }

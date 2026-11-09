@@ -9,8 +9,22 @@
         </div>
     </x-slot>
 
-    <div class="py-8 bg-gray-50 min-h-screen">
+    <div class="py-8 bg-gray-50 min-h-screen" x-data="{ showEdit: false, showPlan: false, showSuspend: false, tab: 'overview' }">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+
+            @if(session('status'))
+                <div class="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">{{ session('status') }}</div>
+            @endif
+            @if($errors->any())
+                <div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                    <p class="font-medium">Please correct the following:</p>
+                    <ul class="mt-1 list-disc list-inside text-sm">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
             <!-- Header -->
             <div class="flex justify-between items-start mb-6">
@@ -36,10 +50,28 @@
                     @endif
                     <p class="text-xs text-gray-400 mt-1">Tenant ID: {{ $tenant->slug }} • Created {{ $tenant->created_at->format('d M Y') }}</p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2 justify-end">
                     <a href="{{ route('platform.tenants.index') }}" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors">
                         ← Back to list
                     </a>
+                    <button type="button" @click="showEdit = true" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50">
+                        Edit
+                    </button>
+                    <button type="button" @click="showPlan = true; tab = 'billing'" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50">
+                        Change plan
+                    </button>
+                    @if($tenant->status === 'active')
+                        <button type="button" @click="showSuspend = true" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
+                            Suspend
+                        </button>
+                    @else
+                        <form method="POST" action="{{ route('platform.tenants.reactivate', $tenant) }}">
+                            @csrf
+                            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
+                                Reactivate
+                            </button>
+                        </form>
+                    @endif
                     <form method="POST" action="{{ route('platform.impersonate', $tenant) }}">
                         @csrf
                         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center gap-2 transition-colors">
@@ -52,12 +84,14 @@
 
             <!-- Tabs -->
             <div class="border-b border-gray-200 mb-6">
-                <nav class="-mb-px flex space-x-8">
-                    <a href="#overview" class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Overview</a>
-                    <a href="#billing"  class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Billing</a>
-                    <a href="#infra"    class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Infrastructure</a>
-                    <a href="#team"     class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Team</a>
-                    <a href="#activity" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Activity</a>
+                <nav class="-mb-px flex space-x-8" aria-label="Tenant details">
+                    @foreach(['overview' => 'Overview', 'billing' => 'Billing', 'infrastructure' => 'Infrastructure', 'activity' => 'Activity'] as $tabKey => $tabLabel)
+                        <button type="button" @click="tab = '{{ $tabKey }}'"
+                                :class="tab === '{{ $tabKey }}' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                            {{ $tabLabel }}
+                        </button>
+                    @endforeach
                 </nav>
             </div>
 
@@ -87,28 +121,31 @@
             @endif
 
             <!-- KPI Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6" id="overview">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <p class="text-sm font-medium text-gray-500">End-customers</p>
-                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($customerCount) }}</p>
+                    <p class="text-sm font-medium text-gray-500">Customers</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($stats['customers']) }}</p>
                     <p class="text-xs text-gray-500 mt-1">{{ $packageCount }} {{ Str::plural('package', $packageCount) }} defined</p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <p class="text-sm font-medium text-gray-500">Staff / operators</p>
-                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ $staff->count() }}</p>
-                    <p class="text-xs text-gray-500 mt-1">{{ $staff->where('roles.0.name', 'operator_admin')->count() }} admin • {{ $staff->count() - $staff->where('roles.0.name', 'operator_admin')->count() }} staff</p>
+                    <p class="text-sm font-medium text-gray-500">Active sessions</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($stats['active_sessions']) }}</p>
+                    <p class="text-xs text-gray-500 mt-1">Current connections</p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <p class="text-sm font-medium text-gray-500">Router availability</p>
-                    <p class="text-3xl font-bold text-gray-900 mt-2">
-                        {{ $routerCount > 0 ? number_format(($onlineRouters / $routerCount) * 100, 1) : '—' }}%
-                    </p>
-                    <p class="text-xs text-gray-500 mt-1">{{ $onlineRouters }} / {{ $routerCount }} routers online</p>
+                    <p class="text-sm font-medium text-gray-500">Monthly revenue</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-2">UGX {{ number_format($stats['monthly_revenue']) }}</p>
+                    <p class="text-xs text-gray-500 mt-1">Completed voucher sales</p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <p class="text-sm font-medium text-gray-500">Recent sessions</p>
-                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ $recentActivity->count() }}</p>
-                    <p class="text-xs text-gray-500 mt-1">Latest {{ $recentActivity->count() }} logged</p>
+                    <p class="text-sm font-medium text-gray-500">Wallet balance</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-2">UGX {{ number_format((float) $tenant->wallet_balance) }}</p>
+                    <p class="text-xs text-gray-500 mt-1">Current operator balance</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-sm font-medium text-gray-500">Routers online</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ $onlineRouters }} / {{ $routerCount }}</p>
+                    <p class="text-xs text-gray-500 mt-1">Online / total routers</p>
                 </div>
             </div>
 
@@ -116,10 +153,10 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
                 <!-- Account Information -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div x-show="tab === 'overview'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-base font-bold text-gray-900">Account information</h3>
-                        <button class="text-blue-600 text-sm font-medium hover:underline">Edit details</button>
+                        <button type="button" @click="showEdit = true" class="text-blue-600 text-sm font-medium hover:underline">Edit details</button>
                     </div>
                     <p class="text-xs text-gray-500 mb-4">Operator organization and primary contact.</p>
 
@@ -152,10 +189,28 @@
                             <p class="text-sm font-medium text-gray-900 mt-1">{{ $tenant->legal_name ?? $tenant->name }}</p>
                         </div>
                     </div>
+                    <div class="mt-6 border-t border-gray-100 pt-4">
+                        <h4 class="text-sm font-semibold text-gray-900">KYC verification</h4>
+                        <p class="text-xs text-gray-500 mt-1 mb-3">Current status: {{ ucfirst($tenant->kyc_status ?? 'pending') }}</p>
+                        <div class="flex flex-wrap gap-2">
+                            @if($tenant->kyc_status !== 'verified')
+                                <form method="POST" action="{{ route('platform.tenants.verify-kyc', $tenant) }}">
+                                    @csrf
+                                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-xs font-medium">Verify KYC</button>
+                                </form>
+                            @endif
+                            @if($tenant->kyc_status !== 'rejected')
+                                <form method="POST" action="{{ route('platform.tenants.reject-kyc', $tenant) }}">
+                                    @csrf
+                                    <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-xs font-medium">Reject KYC</button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Plan & Billing -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" id="billing">
+                <div x-show="tab === 'billing'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-base font-bold text-gray-900">Plan & billing details</h3>
                         <button class="text-blue-600 text-sm font-medium hover:underline">View billing</button>
@@ -206,14 +261,14 @@
                         </div>
                         <div class="flex justify-between items-center pt-1">
                             <span class="text-xs text-gray-500">Change plan</span>
-                            <button class="text-blue-600 text-sm font-medium hover:underline">Change plan &rarr;</button>
+                            <button type="button" @click="showPlan = true" class="text-blue-600 text-sm font-medium hover:underline">Change plan &rarr;</button>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Infrastructure & Team -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6" id="infra">
+            <div x-show="tab === 'infrastructure'" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
                 <!-- Infrastructure Health -->
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -254,7 +309,7 @@
                 </div>
 
                 <!-- Team -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" id="team">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-base font-bold text-gray-900">Operator team</h3>
                         <span class="text-xs text-gray-400">{{ $staff->count() }} {{ Str::plural('member', $staff->count()) }}</span>
@@ -287,7 +342,7 @@
             </div>
 
             <!-- Recent Activity -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6" id="activity">
+            <div x-show="tab === 'activity'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
                 <div class="flex justify-between items-center mb-4">
                     <div>
                         <h3 class="text-base font-bold text-gray-900">Recent sessions</h3>
@@ -329,7 +384,7 @@
             </div>
 
             <!-- Access Safeguards -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div x-show="tab === 'overview'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div class="flex justify-between items-center mb-2">
                     <h3 class="text-base font-bold text-gray-900">Tenant management safeguards</h3>
                     <button class="text-blue-600 text-sm font-medium hover:underline">Access policy</button>
@@ -353,7 +408,101 @@
                 <p class="text-xs text-gray-400">Plan changes, suspensions, and workspace access are recorded in the audit trail.</p>
             </div>
 
+            <div x-show="showEdit" x-cloak class="fixed inset-0 z-50 overflow-hidden" @keydown.escape.window="showEdit = false">
+                <div class="absolute inset-0 bg-gray-900/50" @click="showEdit = false"></div>
+                <div class="absolute inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
+                    <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h2 class="text-lg font-bold text-gray-900">Edit tenant</h2>
+                        <button type="button" @click="showEdit = false" aria-label="Close" class="text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                    <form method="POST" action="{{ route('platform.tenants.update', $tenant) }}" class="flex-1 overflow-y-auto p-6 space-y-4">
+                        @csrf
+                        @method('PUT')
+                        <div>
+                            <label for="tenant-name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                            <input id="tenant-name" type="text" name="name" value="{{ old('name', $tenant->name) }}" required maxlength="255" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
+                            <label for="tenant-legal-name" class="block text-sm font-medium text-gray-700 mb-1">Legal name</label>
+                            <input id="tenant-legal-name" type="text" name="legal_name" value="{{ old('legal_name', $tenant->legal_name) }}" maxlength="255" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
+                            <label for="tenant-contact-name" class="block text-sm font-medium text-gray-700 mb-1">Contact name</label>
+                            <input id="tenant-contact-name" type="text" name="contact_name" value="{{ old('contact_name', $tenant->contact_name) }}" maxlength="255" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
+                            <label for="tenant-contact-email" class="block text-sm font-medium text-gray-700 mb-1">Contact email</label>
+                            <input id="tenant-contact-email" type="email" name="contact_email" value="{{ old('contact_email', $tenant->contact_email) }}" maxlength="255" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
+                            <label for="tenant-contact-phone" class="block text-sm font-medium text-gray-700 mb-1">Contact phone</label>
+                            <input id="tenant-contact-phone" type="text" name="contact_phone" value="{{ old('contact_phone', $tenant->contact_phone) }}" maxlength="50" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
+                            <label for="tenant-address" class="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                            <textarea id="tenant-address" name="address" rows="3" maxlength="500" class="block w-full rounded-md border-gray-300 shadow-sm">{{ old('address', $tenant->address) }}</textarea>
+                        </div>
+                        <div class="pt-4 flex justify-end gap-2 border-t border-gray-100">
+                            <button type="button" @click="showEdit = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg">Cancel</button>
+                            <button type="submit" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Save changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div x-show="showPlan" x-cloak class="fixed inset-0 z-50 overflow-hidden" @keydown.escape.window="showPlan = false">
+                <div class="absolute inset-0 bg-gray-900/50" @click="showPlan = false"></div>
+                <div class="absolute inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
+                    <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h2 class="text-lg font-bold text-gray-900">Change plan</h2>
+                        <button type="button" @click="showPlan = false" aria-label="Close" class="text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                    <form method="POST" action="{{ route('platform.tenants.change-plan', $tenant) }}" class="flex-1 overflow-y-auto p-6 space-y-4">
+                        @csrf
+                        @method('PUT')
+                        <div>
+                            <label for="tenant-plan" class="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+                            <select id="tenant-plan" name="platform_plan_id" required class="block w-full rounded-md border-gray-300 shadow-sm">
+                                @foreach($plans as $plan)
+                                    <option value="{{ $plan->id }}" @selected((int) $tenant->platform_plan_id === $plan->id)>
+                                        {{ $plan->name }} — UGX {{ number_format((float) $plan->price) }}/mo
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label for="tenant-subscription-status" class="block text-sm font-medium text-gray-700 mb-1">Subscription status</label>
+                            <select id="tenant-subscription-status" name="subscription_status" required class="block w-full rounded-md border-gray-300 shadow-sm">
+                                @foreach(['trial' => 'Trial', 'active' => 'Active', 'past_due' => 'Past due', 'suspended' => 'Suspended'] as $value => $label)
+                                    <option value="{{ $value }}" @selected($tenant->subscription_status === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label for="tenant-subscription-ends" class="block text-sm font-medium text-gray-700 mb-1">Subscription ends</label>
+                            <input id="tenant-subscription-ends" type="date" name="subscription_ends_at" value="{{ $tenant->subscription_ends_at?->format('Y-m-d') }}" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div class="pt-4 flex justify-end gap-2 border-t border-gray-100">
+                            <button type="button" @click="showPlan = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg">Cancel</button>
+                            <button type="submit" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Update plan</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div x-show="showSuspend" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @keydown.escape.window="showSuspend = false">
+                <div class="absolute inset-0 bg-gray-900/50" @click="showSuspend = false"></div>
+                <div class="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                    <h2 class="text-lg font-bold text-gray-900 text-center mb-2">Suspend {{ $tenant->name }}?</h2>
+                    <p class="text-sm text-gray-500 text-center mb-6">The operator will lose access to their workspace. You can reactivate the tenant later.</p>
+                    <form method="POST" action="{{ route('platform.tenants.suspend', $tenant) }}" class="flex gap-3">
+                        @csrf
+                        <button type="button" @click="showSuspend = false" class="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium">Cancel</button>
+                        <button type="submit" class="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700">Suspend tenant</button>
+                    </form>
+                </div>
+            </div>
+
         </div>
     </div>
 </x-app-layout>
-

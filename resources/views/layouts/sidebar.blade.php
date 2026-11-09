@@ -110,6 +110,15 @@
                         <span x-show="!sidebarCollapsed">Revenue & Payouts</span>
                     </a>
 
+                    <!-- Refund requests -->
+                    <a href="{{ route('platform.refunds.index') }}"
+                       class="{{ request()->routeIs('platform.refunds.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.refunds.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 010 10H9M3 10l4-4M3 10l4 4"/>
+                        </svg>
+                        <span x-show="!sidebarCollapsed">Refund requests</span>
+                    </a>
+
                     <!-- Platform Configuration -->
                     <a href="{{ route('platform.configuration.index') }}" 
                        class="{{ request()->routeIs('platform.configuration.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
@@ -235,6 +244,17 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                             </svg>
                             <span x-show="!sidebarCollapsed">Wallet & Payouts</span>
+                        </div>
+                    </a>
+
+                    <!-- Refunds -->
+                    <a href="{{ route('operator.refunds.index') }}"
+                       class="{{ request()->routeIs('operator.refunds.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <div class="flex items-center gap-3">
+                            <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.refunds.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 010 10H9M3 10l4-4M3 10l4 4"/>
+                            </svg>
+                            <span x-show="!sidebarCollapsed">Refunds</span>
                         </div>
                     </a>
                 </div>

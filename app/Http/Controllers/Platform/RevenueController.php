@@ -8,9 +8,9 @@ use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\FlutterwaveWithdrawalService;
+use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class RevenueController extends Controller
 {
@@ -98,7 +98,13 @@ class RevenueController extends Controller
             }
 
             $locked->update(['status' => 'rejected']);
-            Tenant::query()->whereKey($locked->tenant_id)->increment('wallet_balance', $locked->amount);
+            app(WalletService::class)->apply(
+                $locked->tenant_id,
+                $locked->amount,
+                WalletService::WITHDRAWAL_REFUND,
+                $locked,
+                'Withdrawal rejected; funds returned',
+            );
 
             return null;
         });

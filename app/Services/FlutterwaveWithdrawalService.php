@@ -407,7 +407,13 @@ class FlutterwaveWithdrawalService
                 'status' => 'failed',
                 'meta' => array_merge($locked->meta ?? [], ['flutterwave_transfer_status' => 'FAILED']),
             ]);
-            Tenant::query()->whereKey($locked->tenant_id)->increment('wallet_balance', $locked->amount);
+            app(WalletService::class)->apply(
+                $locked->tenant_id,
+                $locked->amount,
+                WalletService::WITHDRAWAL_REFUND,
+                $locked,
+                'Withdrawal failed at the payment provider; funds returned',
+            );
 
             return ['ok' => true, 'message' => 'Flutterwave transfer failed; the withdrawal was refunded to the operator wallet.'];
         });

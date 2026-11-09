@@ -4,7 +4,9 @@ namespace Tests\Feature\Auth;
 
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\Policy\Policy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\RateLimiter;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -79,6 +81,25 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertGuest();
+    }
+
+    public function test_login_throttle_attempts_and_decay_follow_platform_policy(): void
+    {
+        Policy::set('security.login_throttle_attempts', 2);
+        Policy::set('security.login_throttle_decay', 1);
+        RateLimiter::clear('user@example.test|127.0.0.1');
+
+        User::factory()->create(['email' => 'user@example.test']);
+
+        $this->post('/login', ['email' => 'user@example.test', 'password' => 'wrong-password'])
+            ->assertSessionHasErrors('email');
+        $this->post('/login', ['email' => 'user@example.test', 'password' => 'wrong-password'])
+            ->assertSessionHasErrors('email');
+        $this->post('/login', ['email' => 'user@example.test', 'password' => 'wrong-password'])
+            ->assertSessionHasErrors('email');
+
+        $this->assertSame(2, RateLimiter::attempts('user@example.test|127.0.0.1'));
+        $this->assertGreaterThan(0, RateLimiter::availableIn('user@example.test|127.0.0.1'));
     }
 
     public function test_users_can_logout(): void

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Operator;
 
+use App\Services\WalletService;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Tenant;
@@ -63,8 +64,6 @@ class WithdrawalController extends Controller
                 return "The withdrawal amount cannot exceed your available wallet balance of {$currency} ".number_format($lockedTenant->wallet_balance).'.';
             }
 
-            $lockedTenant->decrement('wallet_balance', $request->amount);
-
             // Create the withdrawal transaction
             $withdrawal = Transaction::create([
                 'tenant_id' => $lockedTenant->id,
@@ -77,6 +76,14 @@ class WithdrawalController extends Controller
                 'description' => "Withdrawal to {$request->phone}",
                 'phone' => $request->phone,
             ]);
+
+            app(WalletService::class)->apply(
+                $lockedTenant,
+                -1 * (float) $request->amount,
+                WalletService::WITHDRAWAL_DEBIT,
+                $withdrawal,
+                "Withdrawal to {$request->phone}",
+            );
 
             AuditLog::record('withdrawal.requested', $withdrawal, [
                 'reference' => $withdrawal->reference,

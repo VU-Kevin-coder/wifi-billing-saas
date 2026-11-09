@@ -330,7 +330,16 @@ class PaymentService
                 'phone' => $phone,
             ]);
 
-            $tenant->increment('wallet_balance', $net);
+            app(WalletService::class)->apply(
+                $tenant,
+                $net,
+                WalletService::SALE_CREDIT,
+                $transaction,
+                "Sale: {$package->name}",
+                null,
+                null,
+                ['gross' => (float) $transaction->amount, 'platform_fee' => $fee, 'package_id' => $package->id],
+            );
 
             $batchCode = 'ONLINE-'.$tenant->id.'-'.$package->id;
             $batch = VoucherBatch::withoutTenancy()

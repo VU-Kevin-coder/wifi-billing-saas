@@ -27,6 +27,11 @@ Schedule::command('provisioning:watchdog')
 
 // Withdrawal reconciler (default: every 5 minutes)
 $withdrawalMinutes = max(1, (int) Policy::get('schedule.withdrawal_reconcile_minutes', 5));
+
+Schedule::command('wallet:reconcile')
+    ->hourly()
+    ->withoutOverlapping();
+
 Schedule::command('withdrawals:reconcile')
     ->cron("*/{$withdrawalMinutes} * * * *")
     ->withoutOverlapping();

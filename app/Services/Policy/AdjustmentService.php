@@ -7,6 +7,7 @@ use App\Models\PendingAdjustment;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\WalletService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -172,7 +173,16 @@ class AdjustmentService
                 'reference' => $reference,
             ]);
 
-            $locked->increment('wallet_balance', $amount);
+            app(WalletService::class)->apply(
+                $locked,
+                $amount,
+                WalletService::ADJUSTMENT,
+                $transaction,
+                $reason,
+                $reference,
+                $applier->id,
+                ['pending_adjustment_id' => $source?->id],
+            );
 
             AuditLog::record('wallet.adjusted', $locked, [
                 'reference' => $reference,
@@ -188,4 +198,3 @@ class AdjustmentService
         });
     }
 }
-

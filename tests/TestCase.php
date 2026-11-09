@@ -12,6 +12,10 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         Policy::flush();
+
+        // Pages call @vite(); without this, every page test would need a built
+        // public/build/manifest.json (and fail on a clean CI checkout).
+        $this->withoutVite();
     }
 
     protected function tearDown(): void

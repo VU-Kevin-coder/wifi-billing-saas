@@ -49,6 +49,8 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [\App\Http\Controllers\Platform\TenantController::class, 'store'])->name('tenants.store');
         Route::get('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'show'])->name('tenants.show');
+        Route::put('/tenants/{tenant}', [\App\Http\Controllers\Platform\TenantController::class, 'update'])->name('tenants.update');
+        Route::put('/tenants/{tenant}/plan', [\App\Http\Controllers\Platform\TenantController::class, 'changePlan'])->name('tenants.change-plan');
         Route::post('/tenants/{tenant}/suspend', [\App\Http\Controllers\Platform\TenantController::class, 'suspend'])->name('tenants.suspend');
         Route::post('/tenants/{tenant}/reactivate', [\App\Http\Controllers\Platform\TenantController::class, 'reactivate'])->name('tenants.reactivate');
         Route::post('/tenants/{tenant}/verify-kyc', [\App\Http\Controllers\Platform\TenantController::class, 'verifyKyc'])->name('tenants.verify-kyc');
@@ -61,6 +63,10 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::post('/revenue/{tenant}/adjust', [\App\Http\Controllers\Platform\AdjustmentController::class, 'store'])->middleware('mfa.recent')->name('revenue.adjust');
         Route::post('/revenue/adjustments/{adjustment}/approve', [\App\Http\Controllers\Platform\AdjustmentController::class, 'approve'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.approve');
         Route::post('/revenue/adjustments/{adjustment}/reject', [\App\Http\Controllers\Platform\AdjustmentController::class, 'reject'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.reject');
+
+        Route::get('/refunds', [\App\Http\Controllers\Platform\RefundController::class, 'index'])->name('refunds.index');
+        Route::post('/refunds/{refund}/approve', [\App\Http\Controllers\Platform\RefundController::class, 'approve'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.approve');
+        Route::post('/refunds/{refund}/reject', [\App\Http\Controllers\Platform\RefundController::class, 'reject'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.reject');
         Route::post('/plans', [\App\Http\Controllers\Platform\BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [\App\Http\Controllers\Platform\BillingController::class, 'destroyPlan'])->name('plans.destroy');
@@ -168,6 +174,13 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::post('/wallet/withdraw', [\App\Http\Controllers\Operator\WithdrawalController::class, 'store'])
                     ->middleware(['role:operator_admin|operator_finance', 'tenant.active:withdraw', 'mfa.recent'])
                     ->name('wallet.withdraw');
+
+                // Refund requests (the platform approves and pays the customer)
+                Route::middleware('role:operator_admin|operator_finance')->group(function () {
+                    Route::get('/refunds', [\App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
+                    Route::post('/refunds', [\App\Http\Controllers\Operator\RefundController::class, 'store'])->name('refunds.store');
+                    Route::post('/refunds/{refund}/cancel', [\App\Http\Controllers\Operator\RefundController::class, 'cancel'])->whereNumber('refund')->name('refunds.cancel');
+                });
 
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::get('/settings', [\App\Http\Controllers\Operator\SettingsController::class, 'index'])->name('settings.index');

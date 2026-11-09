@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Package;
+use App\Models\PlatformPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
@@ -147,5 +148,74 @@ class TenantLifecycleTest extends TestCase
 
         $this->assertSame('verified', $this->tenant->fresh()->kyc_status);
     }
-}
 
+    public function test_platform_admin_can_update_tenant_details(): void
+    {
+        Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
+        $admin = User::factory()->create(['tenant_id' => null]);
+        $admin->assignRole('platform_admin');
+
+        $this->actingAs($admin)
+            ->put(route('platform.tenants.update', $this->tenant), [
+                'name' => 'Acme Networks',
+                'legal_name' => 'Acme Networks Ltd',
+                'contact_name' => 'Jane Owner',
+                'contact_email' => 'jane@acme.test',
+                'contact_phone' => '+256700000001',
+                'address' => 'Kampala',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('Acme Networks', $this->tenant->fresh()->name);
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id' => $this->tenant->id,
+            'action' => 'tenant.updated',
+        ]);
+    }
+
+    public function test_platform_admin_can_change_tenant_plan(): void
+    {
+        Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
+        $admin = User::factory()->create(['tenant_id' => null]);
+        $admin->assignRole('platform_admin');
+        $plan = PlatformPlan::create([
+            'name' => 'Growth',
+            'price' => 180000,
+            'trial_days' => 14,
+            'max_customers' => 2000,
+            'max_routers' => 10,
+        ]);
+
+        $this->actingAs($admin)
+            ->put(route('platform.tenants.change-plan', $this->tenant), [
+                'platform_plan_id' => $plan->id,
+                'subscription_status' => 'active',
+                'subscription_ends_at' => now()->addMonth()->toDateString(),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($plan->id, $this->tenant->fresh()->platform_plan_id);
+        $this->assertSame('Growth', $this->tenant->fresh()->getRawOriginal('plan'));
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id' => $this->tenant->id,
+            'action' => 'tenant.plan_changed',
+        ]);
+    }
+
+    public function test_platform_admin_can_view_tenant_action_controls(): void
+    {
+        Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
+        $admin = User::factory()->create(['tenant_id' => null]);
+        $admin->assignRole('platform_admin');
+        $this->tenant->update(['kyc_status' => 'pending']);
+
+        $this->actingAs($admin)
+            ->get(route('platform.tenants.show', $this->tenant))
+            ->assertOk()
+            ->assertSee('Change plan')
+            ->assertSee('Suspend')
+            ->assertSee('Verify KYC')
+            ->assertSee('Reject KYC')
+            ->assertSee('Monthly revenue');
+    }
+}

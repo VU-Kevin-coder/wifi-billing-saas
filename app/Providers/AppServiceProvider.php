@@ -41,14 +41,6 @@ class AppServiceProvider extends ServiceProvider
         $this->registerAuthAuditing();
         $this->registerRateLimiters();
 
-        RateLimiter::for('login', function (Request $request) {
-            $attempts = (int) \App\Services\Policy\Policy::get('security.login_throttle_attempts', 6);
-            $decay = (int) \App\Services\Policy\Policy::get('security.login_throttle_decay', 1);
-
-            return Limit::perMinutes($decay, $attempts)
-                ->by($request->input('email').'|'.$request->ip());
-        });
-
         \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {
             return url(route('password.reset', [
                 'token' => $token,
