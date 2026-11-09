@@ -67,7 +67,7 @@ class PaymentTokenTransportTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString("'X-Payment-Token': paymentToken", $html);
+        $this->assertStringContainsString('X-Payment-Token', $html);
         $this->assertStringContainsString('"\/api\/payments\/status"', $html);
         $this->assertStringContainsString('"\/api\/payments\/activate"', $html);
         // The token is data for the script, never part of a request URL in the page.

@@ -23,6 +23,7 @@ use Mockery;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 use ZillEAli\MikrotikLaravel\Facades\MikroTik;
+use ZillEAli\MikrotikLaravel\Services\HotspotManager;
 
 class DataLimitEnforcementTest extends TestCase
 {
@@ -158,14 +159,13 @@ class DataLimitEnforcementTest extends TestCase
     public function test_the_agent_applies_the_cap_to_the_router_user(): void
     {
         config(['site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
-        $hotspot = Mockery::mock();
+        $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getUser')->once()->with('VOUCHER-1')->andReturn(null);
         $hotspot->shouldReceive('createUser')->once()->with(Mockery::on(
             fn (array $data) => $data['limit-bytes-total'] === 1073741824 && $data['name'] === 'VOUCHER-1'
         ));
-        $router = Mockery::mock();
-        $router->shouldReceive('hotspot')->andReturn($hotspot);
-        MikroTik::shouldReceive('router')->andReturn($router);
+        MikroTik::shouldReceive('router')->once()->with('site-agent-router-7')->andReturnSelf();
+        MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
 
         app(SiteAgentRouterService::class)->execute(7, 'provision_user', [
             'username' => 'VOUCHER-1', 'limit_bytes_total' => 1073741824,
@@ -177,12 +177,11 @@ class DataLimitEnforcementTest extends TestCase
     public function test_no_cap_means_the_router_user_has_no_byte_limit_field(): void
     {
         config(['site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
-        $hotspot = Mockery::mock();
+        $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getUser')->andReturn(null);
         $hotspot->shouldReceive('createUser')->once()->with(Mockery::on(fn (array $data) => ! array_key_exists('limit-bytes-total', $data)));
-        $router = Mockery::mock();
-        $router->shouldReceive('hotspot')->andReturn($hotspot);
-        MikroTik::shouldReceive('router')->andReturn($router);
+        MikroTik::shouldReceive('router')->once()->with('site-agent-router-7')->andReturnSelf();
+        MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
 
         app(SiteAgentRouterService::class)->execute(7, 'provision_user', ['username' => 'VOUCHER-2', 'limit_bytes_total' => null]);
 
