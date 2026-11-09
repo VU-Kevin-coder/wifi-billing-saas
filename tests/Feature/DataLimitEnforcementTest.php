@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 use ZillEAli\MikrotikLaravel\Facades\MikroTik;
@@ -31,9 +32,7 @@ class DataLimitEnforcementTest extends TestCase
 
     // ── Parsing ─────────────────────────────────────────────────────────────
 
-    /**
-     * @dataProvider validLimits
-     */
+    #[DataProvider('validLimits')]
     public function test_valid_limits_become_bytes(string $text, int $bytes): void
     {
         $this->assertSame($bytes, DataLimit::bytes($text));
@@ -53,9 +52,7 @@ class DataLimitEnforcementTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider unlimitedValues
-     */
+    #[DataProvider('unlimitedValues')]
     public function test_unlimited_values_mean_no_cap(?string $text): void
     {
         $this->assertNull(DataLimit::bytes($text));
@@ -67,9 +64,7 @@ class DataLimitEnforcementTest extends TestCase
         return [[null], [''], ['  '], ['Unlimited'], ['unlimited data'], ['No limit'], ['none']];
     }
 
-    /**
-     * @dataProvider invalidLimits
-     */
+    #[DataProvider('invalidLimits')]
     public function test_unclear_limits_are_rejected_not_guessed(string $text): void
     {
         $this->assertFalse(DataLimit::isValid($text));

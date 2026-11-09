@@ -13,6 +13,7 @@ use App\Models\VoucherBatch;
 use App\Support\HotspotLogin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\URL;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -43,9 +44,7 @@ class HotspotLoginUrlTest extends TestCase
         $this->assertSame('http://192.168.88.1/login?username=AB%20%26C', HotspotLogin::url($router, 'AB &C'));
     }
 
-    /**
-     * @dataProvider untrustedGateways
-     */
+    #[DataProvider('untrustedGateways')]
     public function test_a_gateway_that_is_not_a_plain_ipv4_address_is_never_used(mixed $gateway): void
     {
         config(['hotspot.default_gateway' => null]);

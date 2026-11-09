@@ -19,6 +19,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -125,9 +126,7 @@ class RefundFlowTest extends TestCase
         $this->assertEquals(0, app(RefundService::class)->refundable($sale->fresh()));
     }
 
-    /**
-     * @dataProvider invalidRequests
-     */
+    #[DataProvider('invalidRequests')]
     public function test_invalid_requests_are_refused(float $amount, string $reason): void
     {
         $this->request($this->sale(), $amount, $reason)->assertSessionHasErrors();

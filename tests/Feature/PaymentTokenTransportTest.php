@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
@@ -30,14 +31,16 @@ class PaymentTokenTransportTest extends TestCase
         ]);
     }
 
-    public function test_status_is_read_with_the_token_in_a_header(): void
+    #[Test]
+    public function statusIsReadWithTheTokenInAHeader(): void
     {
         $this->getJson('/api/payments/status', ['X-Payment-Token' => self::TOKEN])
             ->assertStatus(202)
             ->assertJson(['status' => 'pending']);
     }
 
-    public function test_activation_also_takes_the_token_from_a_header(): void
+    #[Test]
+    public function activationAlsoTakesTheTokenFromAHeader(): void
     {
         $this->postJson('/api/payments/activate', [], ['X-Payment-Token' => self::TOKEN])
             ->assertStatus(409)                                  // recognised, but not paid yet
@@ -46,13 +49,15 @@ class PaymentTokenTransportTest extends TestCase
         $this->postJson('/api/payments/activate', [])->assertNotFound();
     }
 
-    public function test_a_missing_or_wrong_token_is_not_found(): void
+    #[Test]
+    public function aMissingOrWrongTokenIsNotFound(): void
     {
         $this->getJson('/api/payments/status')->assertNotFound()->assertJson(['status' => 'not_found']);
         $this->getJson('/api/payments/status', ['X-Payment-Token' => 'wrong'])->assertNotFound();
     }
 
-    public function test_a_token_in_the_url_is_not_accepted(): void
+    #[Test]
+    public function aTokenInTheUrlIsNotAccepted(): void
     {
         $this->getJson('/api/payments/'.self::TOKEN)->assertNotFound();                          // old path style
         $this->postJson('/api/payments/'.self::TOKEN.'/activate')->assertNotFound();
@@ -60,12 +65,15 @@ class PaymentTokenTransportTest extends TestCase
         $this->getJson('/api/payments/status?X-Payment-Token='.self::TOKEN)->assertNotFound();
     }
 
-    public function test_the_success_page_sends_the_token_in_headers_and_keeps_it_out_of_urls(): void
+    #[Test]
+    public function theSuccessPageSendsTheTokenInHeadersAndKeepsItOutOfUrls(): void
     {
-        $html = $this->withSession(['payment_token' => self::TOKEN])
+        $response = $this->withSession(['payment_token' => self::TOKEN])
             ->get('http://acme.localhost/portal/success')
             ->assertOk()
-            ->getContent();
+            ->assertViewIs('portal.success')
+            ->assertViewHas('paymentToken', self::TOKEN);
+        $html = $response->getContent();
 
         $this->assertStringContainsString('X-Payment-Token', $html);
         $this->assertStringContainsString('"\/api\/payments\/status"', $html);
