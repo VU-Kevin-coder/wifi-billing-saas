@@ -65,7 +65,7 @@ class ReportingTimeTest extends TestCase
 
     private function redeemed(string $utcTime, string $code, ?float $snapshot = null): Voucher
     {
-        $batch = VoucherBatch::firstOrCreate(
+        $batch = VoucherBatch::withoutTenancy()->firstOrCreate(
             ['tenant_id' => $this->tenant->id, 'batch_code' => 'B-1'],
             ['package_id' => $this->package->id, 'quantity' => 5]
         );
