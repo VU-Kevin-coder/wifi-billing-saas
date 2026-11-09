@@ -10,8 +10,7 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800&display=swap" rel="stylesheet" />
 
-    <!-- Tailwind CDN (no build step required) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    @vite('resources/css/public.css')
     <style> body { font-family: 'Inter', sans-serif; } </style>
 </head>
 <body class="bg-gray-50 antialiased text-gray-900">

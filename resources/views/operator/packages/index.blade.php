@@ -522,7 +522,7 @@
                                             <!-- Data Limit & RADIUS -->
                                             <div>
                                                 <label class="block font-medium text-slate-700 mb-1">Data Limit</label>
-                                                <input type="text" name="data_limit" x-model="form.data_limit" placeholder="e.g. Unlimited data or 10GB" 
+                                                <input type="text" name="data_limit" x-model="form.data_limit" placeholder="e.g. Unlimited, 500 MB or 10 GB" 
                                                        class="block w-full rounded-lg border-slate-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                             </div>
                                             <div>

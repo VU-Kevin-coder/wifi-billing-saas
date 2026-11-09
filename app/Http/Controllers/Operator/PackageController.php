@@ -40,7 +40,11 @@ class PackageController extends Controller
             'duration_unit' => ['required', 'in:minutes,hours,days,weeks,months,years'],
             'speed_limit_mbps' => ['required', 'integer', 'min:1'],
             'device_limit' => ['required', 'integer', 'min:1'],
-            'data_limit' => ['nullable', 'string', 'max:50'],
+            'data_limit' => ['nullable', 'string', 'max:50', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! \App\Support\DataLimit::isValid($value)) {
+                    $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
+                }
+            }],
             'radius_profile_name' => ['nullable', 'string', 'max:50'],
             'is_published' => ['boolean'],
             'is_popular' => ['boolean'],
@@ -72,7 +76,11 @@ class PackageController extends Controller
             'duration_unit' => ['required', 'in:minutes,hours,days,weeks,months,years'],
             'speed_limit_mbps' => ['required', 'integer', 'min:1'],
             'device_limit' => ['required', 'integer', 'min:1'],
-            'data_limit' => ['nullable', 'string', 'max:50'],
+            'data_limit' => ['nullable', 'string', 'max:50', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! \App\Support\DataLimit::isValid($value)) {
+                    $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
+                }
+            }],
             'radius_profile_name' => ['nullable', 'string', 'max:50'],
             'is_published' => ['boolean'],
             'is_popular' => ['boolean'],

@@ -37,3 +37,13 @@ PROVISIONING_ALERT_AFTER_MINUTES=10
 PROVISIONING_MAX_REQUEUES=3
 PROVISIONING_COMPENSATE_DELAY=true
 PROVISIONING_GRACE_MINUTES=2
+
+# Money and refunds
+REFUND_WINDOW_DAYS=90
+MAX_WALLET_ADJUSTMENT=1000000
+
+# Customer payment polling asks MTN/Airtel at most this often per payment (seconds)
+PAYMENT_POLL_VERIFY_INTERVAL=10
+
+# Numeric vouchers shorter than this are guessable online
+VOUCHER_MIN_NUMERIC_LENGTH=8

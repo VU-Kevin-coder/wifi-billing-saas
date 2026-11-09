@@ -6,7 +6,7 @@
     <title>Connected — {{ $tenant->name }}</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    @vite('resources/css/public.css')
     <style>
         :root {
             --primary: {{ $tenant->settings['primary_color'] ?? '#3B82F6' }};
@@ -20,6 +20,7 @@
         .text-primary { color: var(--primary); }
     </style>
     <script>
+        const paymentToken = @json($paymentToken ?? null);
         const paymentStatusUrl = @json($paymentStatusUrl);
         const paymentActivationUrl = @json($paymentActivationUrl);
         const initialMikrotikUrl = @json($mikrotikUrl);
@@ -63,6 +64,7 @@
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
+                    'X-Payment-Token': paymentToken,
                 },
                 body: JSON.stringify({}),
                 cache: 'no-store',
@@ -80,7 +82,7 @@
         async function checkPaymentStatus() {
             try {
                 const response = await fetch(paymentStatusUrl, {
-                    headers: { Accept: 'application/json' },
+                    headers: { Accept: 'application/json', 'X-Payment-Token': paymentToken },
                     cache: 'no-store',
                 });
                 const payment = await response.json();

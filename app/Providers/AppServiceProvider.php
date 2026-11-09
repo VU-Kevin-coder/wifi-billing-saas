@@ -82,7 +82,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('portal-purchase', fn (Request $request) => Limit::perMinute(30)->by('purchase:'.$request->ip()));
 
         RateLimiter::for('payment-poll', function (Request $request) {
-            $payment = (string) ($request->route('token') ?? $request->route('transaction') ?? '');
+            $payment = (string) ($request->header('X-Payment-Token') ?: ($request->route('transaction') ?? ''));
 
             return [
                 Limit::perMinute(60)->by('poll:'.hash('sha256', $payment.'|'.$request->ip())),
@@ -91,7 +91,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('payment-activate', fn (Request $request) => [
-            Limit::perMinute(10)->by('activate:'.hash('sha256', (string) $request->route('token').'|'.$request->ip())),
+            Limit::perMinute(10)->by('activate:'.hash('sha256', (string) $request->header('X-Payment-Token').'|'.$request->ip())),
             Limit::perMinute(120)->by('activate-ip:'.$request->ip()),
         ]);
     }

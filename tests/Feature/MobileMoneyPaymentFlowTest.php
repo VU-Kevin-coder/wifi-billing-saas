@@ -381,7 +381,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
                 && $request->hasHeader('X-Country', 'UG');
         });
 
-        $statusResponse = $this->getJson('/api/payments/'.self::PAYMENT_STATUS_TOKEN);
+        $statusResponse = $this->getJson('/api/payments/status', ['X-Payment-Token' => self::PAYMENT_STATUS_TOKEN]);
         Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), '/standard/v1/payments/'));
         $statusResponse->assertOk()
             ->assertJsonPath('status', 'completed');

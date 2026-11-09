@@ -39,6 +39,7 @@ class SiteAgentRouterService
                 'limit-uptime' => $payload['limit_uptime'] ?? null,
                 'shared-users' => max(1, (int) ($payload['shared_users'] ?? 1)),
                 'rate-limit' => $payload['rate_limit'] ?? null,
+                'limit-bytes-total' => $payload['limit_bytes_total'] ?? null,
                 'comment' => 'Provisioned by Wi-Fi Billing site agent',
             ], static fn (mixed $value): bool => $value !== null && $value !== '');
 

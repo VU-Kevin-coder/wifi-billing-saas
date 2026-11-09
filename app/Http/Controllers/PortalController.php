@@ -260,13 +260,20 @@ class PortalController extends Controller
             'tenant' => $tenantModel,
             'mikrotikUrl' => $mikrotikUrl,
             'voucherCode' => $voucherCode,
+            'paymentToken' => $paymentToken,
             'paymentStatusUrl' => $paymentToken
-                ? route('api.payments.status', ['token' => $paymentToken], false)
+                ? route('api.payments.status', [], false)
                 : null,
             'paymentActivationUrl' => $paymentToken
-                ? route('api.payments.activate', ['token' => $paymentToken], false)
+                ? route('api.payments.activate', [], false)
                 : null,
         ]);
+    }
+
+    /** The bearer token comes from the header only; a query-string or path token is ignored on purpose. */
+    private function paymentToken(Request $request): string
+    {
+        return (string) $request->header('X-Payment-Token', '');
     }
 
     private function findSessionPayment(int $transactionId, Tenant $tenant): Transaction
@@ -321,10 +328,10 @@ class PortalController extends Controller
     }
 
     public function activatePayment(
-        string $token,
         Request $request,
         VoucherActivationService $activationService
     ): JsonResponse {
+        $token = $this->paymentToken($request);
         $transaction = Transaction::withoutTenancy()
             ->where('type', 'voucher_sale')
             ->where('payment_token_hash', hash('sha256', $token))
@@ -380,8 +387,9 @@ class PortalController extends Controller
         ]);
     }
 
-    public function paymentStatus(string $token, PaymentService $paymentService): JsonResponse
+    public function paymentStatus(Request $request, PaymentService $paymentService): JsonResponse
     {
+        $token = $this->paymentToken($request);
         $transaction = Transaction::withoutTenancy()
             ->where('type', 'voucher_sale')
             ->where('payment_token_hash', hash('sha256', $token))

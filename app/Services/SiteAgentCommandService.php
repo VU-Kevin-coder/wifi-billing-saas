@@ -31,6 +31,7 @@ class SiteAgentCommandService
                         ? ((int) $package->speed_limit_mbps).'M/'.((int) $package->speed_limit_mbps).'M'
                         : null,
                     'shared_users' => max(1, (int) ($package?->device_limit ?? 1)),
+                    'limit_bytes_total' => $this->dataLimitBytes($package),
                 ],
                 'status' => 'pending',
                 'attempts' => 0,
@@ -116,5 +117,24 @@ class SiteAgentCommandService
         $remainingSeconds = $seconds % 60;
 
         return sprintf('%02d:%02d:%02d', $hours, $minutes, $remainingSeconds);
+    }
+
+    /**
+     * The package's data allowance in bytes for the router, or null for unlimited.
+     * A legacy value that cannot be parsed is logged and treated as unlimited
+     * rather than blocking a paying customer's activation.
+     */
+    private function dataLimitBytes(?\App\Models\Package $package): ?int
+    {
+        try {
+            return \App\Support\DataLimit::bytes($package?->data_limit);
+        } catch (\InvalidArgumentException $exception) {
+            \Illuminate\Support\Facades\Log::warning('Package has an unparseable data limit; no byte cap applied.', [
+                'package_id' => $package?->id,
+                'data_limit' => $package?->data_limit,
+            ]);
+
+            return null;
+        }
     }
 }

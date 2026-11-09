@@ -26,11 +26,14 @@ Route::prefix('webhooks')->group(function () {
         ->name('api.webhooks.airtel');
 });
 
-Route::get('/payments/{token}', [PortalController::class, 'paymentStatus'])
+// The payment token is a bearer secret (it unlocks the voucher code), so it travels
+// in the X-Payment-Token header, never in the URL where proxies, access logs and
+// Referer headers would record it.
+Route::get('/payments/status', [PortalController::class, 'paymentStatus'])
     ->middleware('throttle:payment-poll')
     ->name('api.payments.status');
 
-Route::post('/payments/{token}/activate', [PortalController::class, 'activatePayment'])
+Route::post('/payments/activate', [PortalController::class, 'activatePayment'])
     ->middleware('throttle:payment-activate')
     ->name('api.payments.activate');
 
