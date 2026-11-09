@@ -148,7 +148,7 @@ jobs:
           cp /etc/nginx/fastcgi_params /tmp/ && cp docker/nginx/render.conf /tmp/site.conf
           printf 'events{}\nhttp{ include /etc/nginx/mime.types; include /tmp/site.conf; }\n' > /tmp/nginx.conf
           sudo mkdir -p /var/www/html/public
-          nginx -t -c /tmp/nginx.conf
+          sudo nginx -t -c /tmp/nginx.conf 
       - name: composer.json
         run: composer validate --no-check-publish
 
