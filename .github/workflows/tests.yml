@@ -51,13 +51,13 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: 8.3
-          extensions: mbstring, dom, fileinfo, mysql, pdo_mysql
+          extensions: mbstring, dom, fileinfo, mysql, pdo_mysql, sqlite3, pdo_sqlite
           coverage: none
 
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Prepare application
+      - name: Verify MySQL migrations
         run: |
           cp .env.example .env
           php artisan config:clear
