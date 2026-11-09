@@ -31,7 +31,7 @@
             </section>
 
             <section class="grid grid-cols-1 gap-5 lg:grid-cols-3">
-                <article class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
+                <x-ui.card class="p-5 lg:col-span-2">
                     <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h2 class="text-sm font-bold text-gray-900">Revenue trends</h2>
@@ -46,9 +46,9 @@
                         <canvas id="revenueChart" role="img" aria-label="Revenue and voucher redemptions over the last seven days"></canvas>
                         <p data-chart-fallback class="hidden mt-4 text-center text-xs text-amber-700">The chart library could not be loaded. Dashboard totals are still available.</p>
                     </div>
-                </article>
+                </x-ui.card>
 
-                <article class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <x-ui.card class="p-5">
                     <h2 class="text-sm font-bold text-gray-900">User status</h2>
                     <p class="mt-1 text-xs text-gray-500">Online sessions and registered customers</p>
                     <div class="relative mx-auto mt-3 h-40 max-w-48">
@@ -64,62 +64,33 @@
                         <div class="flex items-center justify-between"><span class="inline-flex items-center gap-2 text-gray-600"><span class="h-2 w-2 rounded-full bg-orange-500"></span>Offline</span><strong class="text-gray-900">{{ number_format($offlineCustomers) }}</strong></div>
                         <div class="flex items-center justify-between"><span class="inline-flex items-center gap-2 text-gray-600"><span class="h-2 w-2 rounded-full bg-purple-500"></span>All users</span><strong class="text-gray-900">{{ number_format($totalUsers) }}</strong></div>
                     </div>
-                </article>
+                </x-ui.card>
             </section>
 
             <section class="grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Business metrics">
-                <article class="rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-blue-100">Today's revenue</p><span class="text-blue-100" aria-hidden="true">↗</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">{{ $currency }} {{ number_format($todayRevenue) }}</p>
-                    <p class="mt-1 text-[11px] text-blue-100">Redeemed vouchers today</p>
-                </article>
-                <article class="rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-orange-100">Weekly revenue</p><span class="text-orange-100" aria-hidden="true">▥</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">{{ $currency }} {{ number_format($weeklyRevenue) }}</p>
-                    <p class="mt-1 text-[11px] text-orange-100">This week</p>
-                </article>
-                <article class="rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-blue-100">Monthly revenue</p><span class="text-blue-100" aria-hidden="true">⌁</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">{{ $currency }} {{ number_format($monthlyRevenue) }}</p>
-                    <p class="mt-1 text-[11px] text-blue-100">This month</p>
-                </article>
-                <article class="rounded-xl bg-gradient-to-br from-emerald-500 to-green-700 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-green-100">Active users</p><span class="text-green-100" aria-hidden="true">●</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">{{ number_format($activeSessions) }}</p>
-                    <p class="mt-1 text-[11px] text-green-100">{{ number_format($activeSessions) }} online · {{ number_format($offlineCustomers) }} offline</p>
-                </article>
-                <article class="rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-orange-100">Wallet balance</p><span class="text-orange-100" aria-hidden="true">▰</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">UGX {{ number_format((float) ($tenant->wallet_balance ?? 0)) }}</p>
-                    <a href="{{ route('operator.wallet.index') }}" class="mt-1 text-[11px] text-orange-100 underline hover:text-white flex items-center gap-1">Manage &amp; Withdraw &rarr;</a>
-                </article>
-                <article class="rounded-xl bg-gradient-to-br from-blue-500 to-indigo-700 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-blue-100">Total customers</p><span class="text-blue-100" aria-hidden="true">＋</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">{{ number_format($totalCustomers) }}</p>
-                    <p class="mt-1 text-[11px] text-blue-100">Registered customers</p>
-                </article>
-                <article class="rounded-xl bg-gradient-to-br from-blue-600 to-blue-900 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-blue-100">Router health</p><span class="text-blue-100" aria-hidden="true">▤</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">{{ number_format($onlineRouters) }} / {{ number_format($totalRouters) }}</p>
-                    <p class="mt-1 text-[11px] text-blue-100">{{ $totalRouters === 0 ? 'No routers connected' : 'Routers online' }}</p>
-                </article>
-                <article class="rounded-xl bg-gradient-to-br from-rose-500 to-red-700 p-4 text-white shadow-sm sm:p-5">
-                    <div class="flex items-start justify-between gap-2"><p class="text-xs font-medium text-red-100">Data usage</p><span class="text-red-100" aria-hidden="true">▰</span></div>
-                    <p class="mt-3 text-lg font-bold sm:text-2xl">{{ number_format($dataUsageGb, 2) }} GB</p>
-                    <p class="mt-1 text-[11px] text-red-100">Across active sessions</p>
-                </article>
+                <x-ui.stat-card label="Today's revenue" :value="$currency . ' ' . number_format($todayRevenue)" description="Redeemed vouchers today" tone="blue" class="p-4 sm:p-5" />
+                <x-ui.stat-card label="Weekly revenue" :value="$currency . ' ' . number_format($weeklyRevenue)" description="This week" tone="amber" class="p-4 sm:p-5" />
+                <x-ui.stat-card label="Monthly revenue" :value="$currency . ' ' . number_format($monthlyRevenue)" description="This month" tone="purple" class="p-4 sm:p-5" />
+                <x-ui.stat-card label="Active users" :value="number_format($activeSessions)" :description="number_format($activeSessions) . ' online · ' . number_format($offlineCustomers) . ' offline'" tone="green" class="p-4 sm:p-5" />
+                <x-ui.stat-card label="Wallet balance" :value="'UGX ' . number_format((float) ($tenant->wallet_balance ?? 0))" tone="amber" class="p-4 sm:p-5">
+                    <a href="{{ route('operator.wallet.index') }}" class="text-[11px] text-white/80 underline hover:text-white">Manage &amp; Withdraw &rarr;</a>
+                </x-ui.stat-card>
+                <x-ui.stat-card label="Total customers" :value="number_format($totalCustomers)" description="Registered customers" tone="blue" class="p-4 sm:p-5" />
+                <x-ui.stat-card label="Router health" :value="number_format($onlineRouters) . ' / ' . number_format($totalRouters)" :description="$totalRouters === 0 ? 'No routers connected' : 'Routers online'" tone="purple" class="p-4 sm:p-5" />
+                <x-ui.stat-card label="Data usage" :value="number_format($dataUsageGb, 2) . ' GB'" description="Across active sessions" tone="red" class="p-4 sm:p-5" />
             </section>
 
-            <section id="recent-packages" class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <x-ui.data-table id="recent-packages">
+                <x-slot:header>
+                    <div class="flex items-center justify-between">
                     <div>
                         <h2 class="text-sm font-bold text-gray-900">Recent packages</h2>
                         <p class="mt-1 text-xs text-gray-500">Latest packages configured for this workspace</p>
                     </div>
                     <a href="{{ route('operator.packages.index') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-800">View all</a>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-100 text-left text-xs">
+                    </div>
+                </x-slot:header>
+                <table class="min-w-full divide-y divide-gray-100 text-left text-xs">
                         <thead class="bg-gray-50 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                             <tr>
                                 <th scope="col" class="px-5 py-3">Name</th>
@@ -142,19 +113,18 @@
                                     <td class="whitespace-nowrap px-5 py-3.5 text-gray-400">Not configured</td>
                                     <td class="whitespace-nowrap px-5 py-3.5">
                                         @if ($package->is_published)
-                                            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold text-emerald-800"><span aria-hidden="true">✓</span> Active</span>
+                                            <x-ui.badge tone="green"><span aria-hidden="true">✓</span> Active</x-ui.badge>
                                         @else
-                                            <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-semibold text-gray-600">Draft</span>
+                                            <x-ui.badge>Draft</x-ui.badge>
                                         @endif
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="7" class="px-5 py-10 text-center text-sm text-gray-500">No packages have been created yet. <a href="{{ route('operator.packages.index') }}" class="font-semibold text-blue-600 hover:underline">Create a package</a>.</td></tr>
+                                <tr><td colspan="7"><x-ui.empty-state title="No packages yet" message="Create a package to start offering Wi-Fi access."><a href="{{ route('operator.packages.index') }}" class="inline-flex items-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">Create a package</a></x-ui.empty-state></td></tr>
                             @endforelse
                         </tbody>
-                    </table>
-                </div>
-            </section>
+                </table>
+            </x-ui.data-table>
         </div>
     </div>
 

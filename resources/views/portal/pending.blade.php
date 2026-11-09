@@ -6,7 +6,7 @@
     <title>Processing payment - {{ $tenant->name }}</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700&display=swap" rel="stylesheet">
-    @vite('resources/css/public.css')
+    @vite(['resources/css/public.css', 'resources/js/public.js'])
     <style>
         body { font-family: 'Figtree', sans-serif; }
     </style>
@@ -36,6 +36,8 @@
         </a>
     </main>
 
+    <x-ui.toast />
+
     <script>
         const checkUrl = @json($checkUrl);
         const successUrl = @json($successUrl);
@@ -44,11 +46,9 @@
 
         async function checkPayment() {
             try {
-                const response = await fetch(checkUrl, {
-                    headers: { Accept: 'application/json' },
+                const result = await window.apiFetch(checkUrl, {
                     cache: 'no-store',
                 });
-                const result = await response.json();
 
                 if (result.status === 'completed') {
                     statusElement.textContent = 'Payment successful. Redirecting…';
@@ -73,7 +73,7 @@
             window.setTimeout(checkPayment, 5000);
         }
 
-        checkPayment();
+        document.addEventListener('DOMContentLoaded', checkPayment, { once: true });
     </script>
 </body>
 </html>

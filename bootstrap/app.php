@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AuthenticateSiteAgent;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureIdempotencyKey;
 use App\Http\Middleware\EnsureTenantIsActive;
 use App\Http\Middleware\RequireRecentMfa;
 use App\Http\Middleware\RequireTwoFactor;
@@ -68,6 +69,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register the role alias
         $middleware->alias([
             'role' => EnsureRole::class,
+            'idempotency' => EnsureIdempotencyKey::class,
             'site-agent' => AuthenticateSiteAgent::class,
             'mfa.recent' => RequireRecentMfa::class,
             'tenant.active' => EnsureTenantIsActive::class,

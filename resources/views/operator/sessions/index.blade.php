@@ -646,19 +646,12 @@
                                     @click="
                                         loading = true;
                                         error = '';
-                                        fetch(session.disconnectUrl, {
-                                            method: 'POST',
-                                            headers: {
-                                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                                'Accept': 'application/json'
-                                            }
-                                        })
-                                        .then(r => r.json())
+                                        window.apiFetch(session.disconnectUrl, { method: 'POST' })
                                         .then(d => {
                                             if (d.success) { done = true; }
                                             else { error = d.message || 'Failed to disconnect.'; loading = false; confirming = false; }
                                         })
-                                        .catch(() => { error = 'Network error.'; loading = false; confirming = false; });
+                                        .catch(e => { error = e.message || 'Network error.'; loading = false; confirming = false; });
                                     "
                                     class="flex-1 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-xs font-semibold text-white disabled:opacity-50 flex items-center justify-center gap-1.5">
                                 <svg x-show="loading" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" x-cloak>

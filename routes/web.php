@@ -51,6 +51,7 @@ Route::prefix('portal')
             ->middleware('throttle:portal-redeem')
             ->name('redeem');
         Route::post('/{tenant?}/purchase', [PortalController::class, 'purchase'])
+            ->middleware('idempotency')
             ->middleware('throttle:portal-purchase')
             ->name('purchase');
         Route::get('/{tenant?}/success', [PortalController::class, 'success'])
@@ -87,15 +88,15 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
         Route::get('/revenue', [RevenueController::class, 'index'])->name('revenue.index');
         Route::get('/revenue/adjustments', [AdjustmentController::class, 'index'])->name('revenue.adjustments.index');
-        Route::post('/revenue/withdrawals/{transaction}/approve', [RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.approve');
-        Route::post('/revenue/withdrawals/{transaction}/reject', [RevenueController::class, 'rejectWithdrawal'])->whereNumber('transaction')->middleware('mfa.recent')->name('revenue.withdrawals.reject');
-        Route::post('/revenue/{tenant}/adjust', [AdjustmentController::class, 'store'])->middleware('mfa.recent')->name('revenue.adjust');
-        Route::post('/revenue/adjustments/{adjustment}/approve', [AdjustmentController::class, 'approve'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.approve');
-        Route::post('/revenue/adjustments/{adjustment}/reject', [AdjustmentController::class, 'reject'])->whereNumber('adjustment')->middleware('mfa.recent')->name('revenue.adjustments.reject');
+        Route::post('/revenue/withdrawals/{transaction}/approve', [RevenueController::class, 'approveWithdrawal'])->whereNumber('transaction')->middleware(['mfa.recent', 'idempotency'])->name('revenue.withdrawals.approve');
+        Route::post('/revenue/withdrawals/{transaction}/reject', [RevenueController::class, 'rejectWithdrawal'])->whereNumber('transaction')->middleware(['mfa.recent', 'idempotency'])->name('revenue.withdrawals.reject');
+        Route::post('/revenue/{tenant}/adjust', [AdjustmentController::class, 'store'])->middleware(['mfa.recent', 'idempotency'])->name('revenue.adjust');
+        Route::post('/revenue/adjustments/{adjustment}/approve', [AdjustmentController::class, 'approve'])->whereNumber('adjustment')->middleware(['mfa.recent', 'idempotency'])->name('revenue.adjustments.approve');
+        Route::post('/revenue/adjustments/{adjustment}/reject', [AdjustmentController::class, 'reject'])->whereNumber('adjustment')->middleware(['mfa.recent', 'idempotency'])->name('revenue.adjustments.reject');
 
         Route::get('/refunds', [RefundController::class, 'index'])->name('refunds.index');
-        Route::post('/refunds/{refund}/approve', [RefundController::class, 'approve'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.approve');
-        Route::post('/refunds/{refund}/reject', [RefundController::class, 'reject'])->whereNumber('refund')->middleware('mfa.recent')->name('refunds.reject');
+        Route::post('/refunds/{refund}/approve', [RefundController::class, 'approve'])->whereNumber('refund')->middleware(['mfa.recent', 'idempotency'])->name('refunds.approve');
+        Route::post('/refunds/{refund}/reject', [RefundController::class, 'reject'])->whereNumber('refund')->middleware(['mfa.recent', 'idempotency'])->name('refunds.reject');
         Route::post('/plans', [BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [BillingController::class, 'destroyPlan'])->name('plans.destroy');
@@ -133,6 +134,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->middleware('throttle:portal-redeem')
                     ->name('redeem');
                 Route::post('/purchase', [PortalController::class, 'purchase'])
+                    ->middleware('idempotency')
                     ->middleware('throttle:portal-purchase')
                     ->name('purchase');
                 Route::get('/success', [PortalController::class, 'success'])
@@ -163,7 +165,10 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
 
                 Route::middleware('role:operator_admin|operator_support')->group(function () {
                     Route::resource('customers', CustomerController::class)
-                        ->only(['index', 'show', 'store', 'update', 'destroy']);
+                        ->only(['index', 'show', 'update', 'destroy']);
+                    Route::post('/customers', [CustomerController::class, 'store'])
+                        ->middleware('idempotency')
+                        ->name('customers.store');
                 });
 
                 Route::middleware('role:operator_admin')->group(function () {
@@ -172,7 +177,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     // Vouchers: index + store are gated by the tenant lifecycle policy
                     Route::get('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'index'])->name('vouchers.index');
                     Route::post('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'store'])
-                        ->middleware('tenant.active:generate_vouchers')
+                        ->middleware(['tenant.active:generate_vouchers', 'idempotency'])
                         ->name('vouchers.store');
 
                     // Voucher void: admin-only, removes a voucher from circulation
@@ -191,7 +196,10 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::post('routers/{router}/provision', [RouterController::class, 'provision'])->name('routers.provision');
                     Route::post('routers/{router}/test', [RouterController::class, 'testConnection'])->name('routers.test');
                     Route::patch('routers/{router}/gateway', [RouterController::class, 'updateGateway'])->name('routers.gateway');
-                    Route::resource('routers', RouterController::class);
+                    Route::resource('routers', RouterController::class)->except(['store']);
+                    Route::post('/routers', [RouterController::class, 'store'])
+                        ->middleware('idempotency')
+                        ->name('routers.store');
                     Route::post('/sessions/{session}/disconnect', [LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
                     Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
                 });
@@ -208,14 +216,14 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->middleware('role:operator_admin|operator_finance')
                     ->name('wallet.index');
                 Route::post('/wallet/withdraw', [WithdrawalController::class, 'store'])
-                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:withdraw', 'mfa.recent'])
+                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:withdraw', 'mfa.recent', 'idempotency'])
                     ->name('wallet.withdraw');
 
                 // Refund requests (the platform approves and pays the customer)
                 Route::middleware('role:operator_admin|operator_finance')->group(function () {
                     Route::get('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
-                    Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->name('refunds.store');
-                    Route::post('/refunds/{refund}/cancel', [App\Http\Controllers\Operator\RefundController::class, 'cancel'])->whereNumber('refund')->name('refunds.cancel');
+                    Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->middleware('idempotency')->name('refunds.store');
+                    Route::post('/refunds/{refund}/cancel', [App\Http\Controllers\Operator\RefundController::class, 'cancel'])->whereNumber('refund')->middleware('idempotency')->name('refunds.cancel');
                 });
 
                 Route::middleware('role:operator_admin')->group(function () {

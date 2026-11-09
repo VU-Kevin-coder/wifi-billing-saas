@@ -42,11 +42,32 @@ class PaymentTokenTransportTest extends TestCase
     #[Test]
     public function activationAlsoTakesTheTokenFromAHeader(): void
     {
-        $this->postJson('/api/payments/activate', [], ['X-Payment-Token' => self::TOKEN])
+        $this->postJson('/api/payments/activate', [], [
+            'X-Payment-Token' => self::TOKEN,
+            'X-Idempotency-Key' => 'activation-key-transport-test-001',
+        ])
             ->assertStatus(409)                                  // recognised, but not paid yet
             ->assertJson(['status' => 'payment_not_completed']);
 
-        $this->postJson('/api/payments/activate', [])->assertNotFound();
+        $this->postJson('/api/payments/activate', [], [
+            'X-Idempotency-Key' => 'activation-key-transport-test-002',
+        ])->assertNotFound();
+    }
+
+    #[Test]
+    public function activationRequiresAndRejectsReusedIdempotencyKeys(): void
+    {
+        $this->postJson('/api/payments/activate')
+            ->assertUnprocessable()
+            ->assertJson(['message' => 'A valid idempotency key is required.']);
+        $this->postJson('/api/payments/activate?_idempotency_key=query-key-transport-test-001')
+            ->assertUnprocessable();
+
+        $headers = ['X-Idempotency-Key' => 'activation-key-reuse-test-001'];
+        $this->postJson('/api/payments/activate', [], $headers)->assertNotFound();
+        $this->postJson('/api/payments/activate', [], $headers)
+            ->assertStatus(409)
+            ->assertJson(['message' => 'This request has already been submitted. Refresh before trying again.']);
     }
 
     #[Test]

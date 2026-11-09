@@ -34,7 +34,7 @@ Route::get('/payments/status', [PortalController::class, 'paymentStatus'])
     ->name('api.payments.status');
 
 Route::post('/payments/activate', [PortalController::class, 'activatePayment'])
-    ->middleware('throttle:payment-activate')
+    ->middleware(['throttle:payment-activate', 'idempotency'])
     ->name('api.payments.activate');
 
 Route::prefix('site-agent')

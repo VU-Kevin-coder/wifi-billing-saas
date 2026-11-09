@@ -109,6 +109,7 @@ class TenantLifecycleTest extends TestCase
         $this->actingAs($user)
             ->post(route('operator.wallet.withdraw'), [
                 'amount' => 10000, 'phone' => '0771234567', 'password' => 'password',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertRedirect(); // redirected to billing
 

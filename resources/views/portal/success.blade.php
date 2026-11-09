@@ -6,7 +6,7 @@
     <title>Connected — {{ $tenant->name }}</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
-    @vite('resources/css/public.css')
+    @vite(['resources/css/public.css', 'resources/js/public.js'])
     <style>
         :root {
             --primary: {{ $tenant->settings['primary_color'] ?? '#3B82F6' }};
@@ -59,19 +59,16 @@
         }
 
         async function activatePaidVoucher(payment) {
-            const response = await fetch(paymentActivationUrl, {
+            const activation = await window.apiFetch(paymentActivationUrl, {
                 method: 'POST',
                 headers: {
-                    Accept: 'application/json',
                     'Content-Type': 'application/json',
                     'X-Payment-Token': paymentToken,
                 },
                 body: JSON.stringify({}),
                 cache: 'no-store',
             });
-            const activation = await response.json();
-
-            if (!response.ok || activation.status !== 'activated') {
+            if (activation.status !== 'activated') {
                 throw new Error(activation.message || 'Voucher activation failed.');
             }
 
@@ -81,11 +78,10 @@
 
         async function checkPaymentStatus() {
             try {
-                const response = await fetch(paymentStatusUrl, {
-                    headers: { Accept: 'application/json', 'X-Payment-Token': paymentToken },
+                const payment = await window.apiFetch(paymentStatusUrl, {
+                    headers: { 'X-Payment-Token': paymentToken },
                     cache: 'no-store',
                 });
-                const payment = await response.json();
 
                 if (payment.status === 'completed') {
                     try {
@@ -119,9 +115,9 @@
         }
 
         if (paymentStatusUrl) {
-            checkPaymentStatus();
+            document.addEventListener('DOMContentLoaded', checkPaymentStatus, { once: true });
         } else if (initialMikrotikUrl) {
-            connectToWifi(initialMikrotikUrl);
+            document.addEventListener('DOMContentLoaded', () => connectToWifi(initialMikrotikUrl), { once: true });
         }
 
         function retryActivation() {
@@ -166,5 +162,6 @@
             Connect now
         </a>
     </div>
+    <x-ui.toast />
 </body>
 </html>

@@ -103,6 +103,7 @@ class RouterManagementTest extends TestCase
                 'dns_servers' => '8.8.8.8,8.8.4.4',
                 'hotspot_domain' => 'hotspot.local',
                 'ethernet_ports' => ['ether2', 'ether3'],
+                '_idempotency_key' => $this->idempotencyKey(),
             ]);
 
         $response->assertRedirect();

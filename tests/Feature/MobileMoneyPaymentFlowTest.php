@@ -97,6 +97,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
         $response = $this->post('/portal/'.$tenant->slug.'/purchase', [
             'package_id' => $package->id,
             'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
         ]);
 
         $transaction = Transaction::withoutTenancy()
@@ -242,6 +243,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
         $this->post('http://'.$tenant->slug.'.localhost/portal/purchase', [
             'package_id' => $package->id,
             'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
         ])->assertRedirect(
             route('portal.pending', [
                 'tenant' => $tenant->slug,

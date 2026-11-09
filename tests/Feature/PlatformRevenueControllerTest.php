@@ -87,7 +87,7 @@ class PlatformRevenueControllerTest extends TestCase
         $tx = $this->withdrawal();
 
         $this->actingAs($this->admin)
-            ->post(route('platform.revenue.withdrawals.reject', $tx->id))
+            ->post(route('platform.revenue.withdrawals.reject', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertSessionHasNoErrors();
 
         $this->assertSame('rejected', Transaction::withoutTenancy()->find($tx->id)->status);
@@ -116,7 +116,7 @@ class PlatformRevenueControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->admin)
-            ->post(route('platform.revenue.withdrawals.approve', $tx->id))
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertSessionHasNoErrors();
 
         $this->assertSame('completed', Transaction::withoutTenancy()->find($tx->id)->status);
@@ -133,7 +133,7 @@ class PlatformRevenueControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->admin)
-            ->post(route('platform.revenue.withdrawals.reject', $sale->id))
+            ->post(route('platform.revenue.withdrawals.reject', $sale->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertNotFound();
     }
 
@@ -145,7 +145,7 @@ class PlatformRevenueControllerTest extends TestCase
         $operator->assignRole('operator_admin');
 
         $this->actingAs($operator)
-            ->post(route('platform.revenue.withdrawals.approve', $tx->id))
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertForbidden();
 
         $this->assertSame('pending', Transaction::withoutTenancy()->find($tx->id)->status);

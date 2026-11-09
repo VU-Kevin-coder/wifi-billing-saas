@@ -83,13 +83,17 @@ class RefundFlowTest extends TestCase
             'amount' => $amount,
             'reason' => $reason,
             'revoke_access' => $revoke ? 1 : 0,
+            '_idempotency_key' => $this->idempotencyKey(),
         ]);
     }
 
     private function approve(Refund $refund, string $payout = 'MTN-PAYOUT-123')
     {
         return $this->actingAs($this->platformAdmin)
-            ->post(route('platform.refunds.approve', $refund->id), ['payout_reference' => $payout]);
+            ->post(route('platform.refunds.approve', $refund->id), [
+                'payout_reference' => $payout,
+                '_idempotency_key' => $this->idempotencyKey(),
+            ]);
     }
 
     private function balance(): float
@@ -178,7 +182,12 @@ class RefundFlowTest extends TestCase
         $support = $this->userFor($this->tenant, 'operator_support');
 
         $this->actingAs($support)->get(route('operator.refunds.index'))->assertForbidden();
-        $this->actingAs($support)->post(route('operator.refunds.store'), ['transaction_id' => $sale->id, 'amount' => 100, 'reason' => 'Customer was charged twice'])->assertForbidden();
+        $this->actingAs($support)->post(route('operator.refunds.store'), [
+            'transaction_id' => $sale->id,
+            'amount' => 100,
+            'reason' => 'Customer was charged twice',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertForbidden();
     }
 
     // ── Approving ───────────────────────────────────────────────────────────
@@ -294,7 +303,10 @@ class RefundFlowTest extends TestCase
         $this->request($this->sale(), 400);
 
         $this->actingAs($this->platformAdmin)
-            ->post(route('platform.refunds.approve', Refund::sole()->id), ['payout_reference' => ''])
+            ->post(route('platform.refunds.approve', Refund::sole()->id), [
+                'payout_reference' => '',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasErrors('payout_reference');
 
         $this->assertSame('pending', Refund::sole()->status);
@@ -307,7 +319,10 @@ class RefundFlowTest extends TestCase
         $this->request($this->sale(), 400);
 
         $this->actingAs($this->platformAdmin)
-            ->post(route('platform.refunds.reject', Refund::sole()->id), ['note' => 'Customer already refunded by MTN'])
+            ->post(route('platform.refunds.reject', Refund::sole()->id), [
+                'note' => 'Customer already refunded by MTN',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
 
         $refund = Refund::sole();
@@ -324,11 +339,15 @@ class RefundFlowTest extends TestCase
         $this->request($sale, 200);
         [$first, $second] = Refund::orderBy('id')->get();
 
-        $this->actingAs($this->operator)->post(route('operator.refunds.cancel', $first->id))->assertSessionHasNoErrors();
+        $this->actingAs($this->operator)->post(route('operator.refunds.cancel', $first->id), [
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertSessionHasNoErrors();
         $this->assertSame('cancelled', $first->fresh()->status);
 
         $this->approve($second);
-        $this->actingAs($this->operator)->post(route('operator.refunds.cancel', $second->id))->assertSessionHasErrors('error');
+        $this->actingAs($this->operator)->post(route('operator.refunds.cancel', $second->id), [
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertSessionHasErrors('error');
         $this->assertSame('approved', $second->fresh()->status);
     }
 
@@ -339,7 +358,10 @@ class RefundFlowTest extends TestCase
         $this->request($this->sale(), 400);
         $admin = $this->userFor($this->tenant, 'operator_admin');
 
-        $this->actingAs($admin)->post(route('platform.refunds.approve', Refund::sole()->id), ['payout_reference' => 'SELF-APPROVED'])->assertForbidden();
+        $this->actingAs($admin)->post(route('platform.refunds.approve', Refund::sole()->id), [
+            'payout_reference' => 'SELF-APPROVED',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertForbidden();
 
         $this->assertSame('pending', Refund::sole()->status);
         $this->assertEquals(950, $this->balance());
@@ -354,7 +376,9 @@ class RefundFlowTest extends TestCase
         URL::defaults(['tenant' => 'beta']);
 
         $this->actingAs($outsider)->get(route('operator.refunds.index'))->assertOk()->assertDontSee('Customer was charged but could not connect');
-        $this->actingAs($outsider)->post(route('operator.refunds.cancel', $refund->id))->assertNotFound();
+        $this->actingAs($outsider)->post(route('operator.refunds.cancel', $refund->id), [
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertNotFound();
         $this->assertSame('pending', $refund->fresh()->status);
     }
 

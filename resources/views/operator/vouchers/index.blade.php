@@ -33,28 +33,28 @@
             @endif
 
             {{-- Page Header --}}
-            <div class="flex justify-between items-start mb-6">
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Vouchers</h1>
-                    <p class="text-sm text-gray-500 mt-1">Generate, distribute and track prepaid access without losing sight of your stock.</p>
-                </div>
-                <div class="flex items-center gap-3">
-                    <button type="button"
-                        class="inline-flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors">
+            <x-ui.page-header
+                title="Vouchers"
+                subtitle="Generate, distribute and track prepaid access without losing sight of your stock."
+                class="mb-6"
+            >
+                <x-slot:actions>
+                    <x-ui.button type="button" variant="secondary"
+                        class="shadow-sm"
+                    >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
                         </svg>
                         Print vouchers
-                    </button>
-                    <button type="button" @click="showOverlay = true"
-                        class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors">
+                    </x-ui.button>
+                    <x-ui.button type="button" @click="showOverlay = true">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
                         Generate vouchers
-                    </button>
-                </div>
-            </div>
+                    </x-ui.button>
+                </x-slot:actions>
+            </x-ui.page-header>
 
             {{-- KPI Cards --}}
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

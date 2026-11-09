@@ -160,11 +160,19 @@ class HotspotLoginUrlTest extends TestCase
         URL::defaults(['tenant' => 'acme']);
 
         $this->actingAs($user)
-            ->post(route('operator.routers.store'), ['name' => 'Bad', 'gateway_ip' => 'evil.example.com'])
+            ->post(route('operator.routers.store'), [
+                'name' => 'Bad',
+                'gateway_ip' => 'evil.example.com',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasErrors('gateway_ip');
 
         $this->actingAs($user)
-            ->post(route('operator.routers.store'), ['name' => 'Good', 'gateway_ip' => '192.168.88.1'])
+            ->post(route('operator.routers.store'), [
+                'name' => 'Good',
+                'gateway_ip' => '192.168.88.1',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
 
         $stored = Router::withoutTenancy()->where('name', 'Good')->firstOrFail();

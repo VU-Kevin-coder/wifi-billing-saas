@@ -23,4 +23,9 @@ abstract class TestCase extends BaseTestCase
         Policy::flush();
         parent::tearDown();
     }
+
+    protected function idempotencyKey(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
 }

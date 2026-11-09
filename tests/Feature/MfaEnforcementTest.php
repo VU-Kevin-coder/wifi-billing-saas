@@ -165,7 +165,7 @@ class MfaEnforcementTest extends TestCase
 
         $this->actingAs($this->platformAdmin)
             ->withSession($this->verifiedSession(minutesAgo: 30))
-            ->post(route('platform.revenue.withdrawals.reject', $tx->id))
+            ->post(route('platform.revenue.withdrawals.reject', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertRedirect(route('mfa.step-up'));
 
         $this->assertSame('pending', Transaction::withoutTenancy()->find($tx->id)->status);
@@ -179,7 +179,7 @@ class MfaEnforcementTest extends TestCase
 
         $this->actingAs($this->platformAdmin)
             ->withSession($this->verifiedSession(minutesAgo: 2))
-            ->post(route('platform.revenue.withdrawals.reject', $tx->id))
+            ->post(route('platform.revenue.withdrawals.reject', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertSessionHasNoErrors();
 
         $this->assertSame('rejected', Transaction::withoutTenancy()->find($tx->id)->status);
@@ -194,6 +194,7 @@ class MfaEnforcementTest extends TestCase
             ->post(route('platform.revenue.adjust', $this->tenant->id), [
                 'amount' => 5000,
                 'reason' => 'Router compensation credit',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertRedirect(route('mfa.step-up'));
 
@@ -235,7 +236,9 @@ class MfaEnforcementTest extends TestCase
 
         $this->assertSame(1, AuditLog::where('action', 'mfa.step_up.verified')->count());
 
-        $this->post(route('platform.revenue.withdrawals.reject', $tx->id))
+        $this->post(route('platform.revenue.withdrawals.reject', $tx->id), [
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])
             ->assertSessionHasNoErrors();
         $this->assertSame('rejected', Transaction::withoutTenancy()->find($tx->id)->status);
     }
@@ -276,6 +279,7 @@ class MfaEnforcementTest extends TestCase
                 'amount' => 10000,
                 'phone' => '0771234567',
                 'password' => 'password',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertRedirect(route('profile.security.index'));
 
@@ -293,6 +297,7 @@ class MfaEnforcementTest extends TestCase
                 'amount' => 10000,
                 'phone' => '0771234567',
                 'password' => 'password',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertRedirect(route('mfa.step-up'));
 
@@ -309,6 +314,7 @@ class MfaEnforcementTest extends TestCase
                 'amount' => 10000,
                 'phone' => '0771234567',
                 'password' => 'password',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertSessionHasNoErrors();
 

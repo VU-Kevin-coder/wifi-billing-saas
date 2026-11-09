@@ -6,8 +6,7 @@
     <title>{{ $tenant->name }} - Connect</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
-    @vite('resources/css/public.css')
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    @vite(['resources/css/public.css', 'resources/js/public.js'])
     <style>
         :root {
             --primary: {{ $tenant->settings['primary_color'] ?? '#3B82F6' }};
@@ -179,5 +178,6 @@
         </div>
     </div>
 
+            <x-ui.toast />
 </body>
 </html>

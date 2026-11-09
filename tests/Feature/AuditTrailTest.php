@@ -64,7 +64,9 @@ class AuditTrailTest extends TestCase
     private function adjust(array $payload)
     {
         return $this->actingAs($this->platformAdmin)
-            ->post(route('platform.revenue.adjust', $this->tenant->id), $payload);
+            ->post(route('platform.revenue.adjust', $this->tenant->id), $payload + [
+                '_idempotency_key' => $this->idempotencyKey(),
+            ]);
     }
 
     private function withdrawal(): Transaction
@@ -135,6 +137,7 @@ class AuditTrailTest extends TestCase
                 'amount' => 10000,
                 'phone' => '0771234567',
                 'password' => 'password',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertSessionHasNoErrors();
 
@@ -149,7 +152,7 @@ class AuditTrailTest extends TestCase
         $tx = $this->withdrawal();
 
         $this->actingAs($this->platformAdmin)
-            ->post(route('platform.revenue.withdrawals.reject', $tx->id))
+            ->post(route('platform.revenue.withdrawals.reject', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertSessionHasNoErrors();
 
         $log = AuditLog::where('action', 'withdrawal.rejected')->firstOrFail();
@@ -175,7 +178,7 @@ class AuditTrailTest extends TestCase
         ]);
 
         $this->actingAs($this->platformAdmin)
-            ->post(route('platform.revenue.withdrawals.approve', $tx->id));
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), ['_idempotency_key' => $this->idempotencyKey()]);
 
         $log = AuditLog::where('action', 'withdrawal.approved')->firstOrFail();
         $this->assertSame($tx->id, $log->auditable_id);
@@ -213,7 +216,11 @@ class AuditTrailTest extends TestCase
         ]);
 
         $this->actingAs($this->operatorAdmin)
-            ->post(route('operator.vouchers.store'), ['package_id' => $package->id, 'quantity' => 3])
+            ->post(route('operator.vouchers.store'), [
+                'package_id' => $package->id,
+                'quantity' => 3,
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
 
         $this->assertSame(3, (int) AuditLog::where('action', 'vouchers.generated')->firstOrFail()->meta['quantity']);
@@ -281,7 +288,10 @@ class AuditTrailTest extends TestCase
     public function test_router_creation_and_removal_are_audited(): void
     {
         $this->actingAs($this->operatorAdmin)
-            ->post(route('operator.routers.store'), ['name' => 'Main Router'])
+            ->post(route('operator.routers.store'), [
+                'name' => 'Main Router',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
 
         $router = Router::withoutTenancy()->where('name', 'Main Router')->firstOrFail();

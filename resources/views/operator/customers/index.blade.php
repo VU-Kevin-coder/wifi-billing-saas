@@ -43,10 +43,9 @@
             this.loadingView = true;
             this.customerHtml = '';
             this.showViewOverlay = true;
-            fetch('{{ url('/operator/customers') }}/' + id, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            window.apiFetch('{{ url('/operator/customers') }}/' + id, {
+                responseType: 'text',
             })
-            .then(res => res.text())
             .then(html => {
                 this.customerHtml = html;
                 this.loadingView = false;

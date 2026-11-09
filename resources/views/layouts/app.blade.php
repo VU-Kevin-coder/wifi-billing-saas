@@ -76,6 +76,7 @@
         </div>
 
         @stack('scripts')
+        <x-ui.toast />
     </body>
 
 </html>

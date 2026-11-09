@@ -512,21 +512,14 @@
                                                         @click="
                                                             testing = true;
                                                             result = null;
-                                                            fetch('{{ route('operator.routers.test', $router) }}', {
-                                                                method: 'POST',
-                                                                headers: {
-                                                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                                                    'Accept': 'application/json'
-                                                                }
-                                                            })
-                                                            .then(response => response.json())
+                                                            window.apiFetch('{{ route('operator.routers.test', $router) }}', { method: 'POST' })
                                                             .then(data => {
                                                                 result = data;
                                                                 alert((data.ok ? '✅ ' : '❌ ') + data.message);
                                                             })
-                                                            .catch(() => {
-                                                                result = { ok: false, message: 'Network Error' };
-                                                                alert('Network Error');
+                                                            .catch(error => {
+                                                                result = { ok: false, message: error.message || 'Network Error' };
+                                                                alert(error.message || 'Network Error');
                                                             })
                                                             .finally(() => testing = false);
                                                         "

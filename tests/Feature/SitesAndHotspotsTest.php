@@ -140,6 +140,7 @@ class SitesAndHotspotsTest extends TestCase
                 'api_port' => 8728,
                 'api_username' => 'router-api',
                 'api_password' => 'password123',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertSessionHasErrors('site_id');
 
@@ -151,6 +152,7 @@ class SitesAndHotspotsTest extends TestCase
                 'api_port' => 8728,
                 'api_username' => 'router-api',
                 'api_password' => 'password123',
+                '_idempotency_key' => $this->idempotencyKey(),
             ])
             ->assertRedirect();
 

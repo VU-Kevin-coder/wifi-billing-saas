@@ -123,19 +123,13 @@
                             @click="
                                 testing = true;
                                 testResult = null;
-                                fetch('{{ route('operator.routers.test', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                                window.apiFetch('{{ route('operator.routers.test', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
                                     method: 'POST',
-                                    headers: {
-                                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                        'Accept': 'application/json'
-                                    }
                                 })
-                                .then(async response => {
-                                    const data = await response.json();
-                                    if (!response.ok) throw new Error(data.message || 'The connection test failed.');
+                                .then(data => {
                                     testResult = data;
                                 })
-                                .catch(() => testResult = { ok: false, message: 'Network error: the connection test could not be completed.' })
+                                .catch(error => testResult = { ok: false, message: error.message || 'The connection test could not be completed.' })
                                 .finally(() => testing = false);
                             "
                             :disabled="testing"
@@ -176,20 +170,13 @@
                     this.deploying = true;
                     this.deployResult = null;
                     try {
-                        const res = await fetch('{{ route('operator.routers.provision', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                'Accept': 'application/json'
-                            }
-                        });
-                        const data = await res.json();
+                        const data = await window.apiFetch('{{ route('operator.routers.provision', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', { method: 'POST' });
                         this.deployResult = data;
                         if (data.ok) {
                             setTimeout(() => window.location.reload(), 1500);
                         }
-                    } catch (e) {
-                        this.deployResult = { ok: false, message: 'Network error communicating with router API.' };
+                    } catch (error) {
+                        this.deployResult = { ok: false, message: error.message || 'Network error communicating with router API.' };
                     } finally {
                         this.deploying = false;
                     }

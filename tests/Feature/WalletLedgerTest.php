@@ -164,7 +164,10 @@ class WalletLedgerTest extends TestCase
         $finance = $this->operator('operator_finance');
 
         $this->actingAs($finance)
-            ->post(route('operator.wallet.withdraw'), ['amount' => 10000, 'phone' => '0771234567', 'password' => 'password'])
+            ->post(route('operator.wallet.withdraw'), [
+                'amount' => 10000, 'phone' => '0771234567', 'password' => 'password',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
 
         $entry = WalletLedgerEntry::where('type', 'withdrawal_debit')->sole();
@@ -178,7 +181,10 @@ class WalletLedgerTest extends TestCase
     {
         $this->sale(20000);
         $this->actingAs($this->operator('operator_finance'))
-            ->post(route('operator.wallet.withdraw'), ['amount' => 10000, 'phone' => '0771234567', 'password' => 'password']);
+            ->post(route('operator.wallet.withdraw'), [
+                'amount' => 10000, 'phone' => '0771234567', 'password' => 'password',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ]);
         $withdrawal = Transaction::where('type', 'withdrawal')->firstOrFail();
 
         Role::findOrCreate('platform_admin', 'web');
@@ -186,7 +192,7 @@ class WalletLedgerTest extends TestCase
         $admin->assignRole('platform_admin');
 
         $this->actingAs($admin)
-            ->post(route('platform.revenue.withdrawals.reject', $withdrawal->id))
+            ->post(route('platform.revenue.withdrawals.reject', $withdrawal->id), ['_idempotency_key' => $this->idempotencyKey()])
             ->assertSessionHasNoErrors();
 
         $this->assertEquals(19000, $this->balance());
@@ -200,7 +206,11 @@ class WalletLedgerTest extends TestCase
         $admin->assignRole('platform_admin');
 
         $this->actingAs($admin)
-            ->post(route('platform.revenue.adjust', $this->tenant->id), ['amount' => 5000, 'reason' => 'Router compensation credit'])
+            ->post(route('platform.revenue.adjust', $this->tenant->id), [
+                'amount' => 5000,
+                'reason' => 'Router compensation credit',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
 
         $entry = WalletLedgerEntry::where('type', 'adjustment')->sole();

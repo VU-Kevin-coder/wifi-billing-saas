@@ -49,6 +49,7 @@ class VoucherGenerationTest extends TestCase
         return $this->actingAs($user)->post(route('operator.vouchers.store'), [
             'package_id' => $package->id,
             'quantity' => $quantity,
+            '_idempotency_key' => $this->idempotencyKey(),
         ]);
     }
 
@@ -169,11 +170,19 @@ class VoucherGenerationTest extends TestCase
         URL::defaults(['tenant' => $a->slug]);
 
         $this->actingAs($userA)
-            ->post(route('operator.customers.store'), ['name' => 'Jane', 'package_id' => $foreignPackage->id])
+            ->post(route('operator.customers.store'), [
+                'name' => 'Jane',
+                'package_id' => $foreignPackage->id,
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasErrors('package_id');
 
         $this->actingAs($userA)
-            ->post(route('operator.customers.store'), ['name' => 'Jane', 'package_id' => $ownPackage->id])
+            ->post(route('operator.customers.store'), [
+                'name' => 'Jane',
+                'package_id' => $ownPackage->id,
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
     }
 }
