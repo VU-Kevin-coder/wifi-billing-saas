@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Package;
 use App\Models\Site;
 use App\Services\Tenancy\TenantContext;
+use App\Support\ReportingTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -191,7 +192,7 @@ class SiteController extends Controller
             ->where('packages.currency', $currency)
             ->where('vouchers.status', 'redeemed')
             ->whereNotNull('vouchers.site_id')
-            ->whereBetween('vouchers.redeemed_at', \App\Support\ReportingTime::monthRange())
+            ->whereBetween('vouchers.redeemed_at', ReportingTime::monthRange())
             ->select('vouchers.site_id')
             ->selectRaw('SUM(COALESCE(vouchers.redeemed_price, packages.price)) as revenue')
             ->groupBy('vouchers.site_id')

@@ -12,8 +12,8 @@ class ConfirmDialogTest extends TestCase
 
         $this->assertStringContainsString('window.Swal?.fire', $script);
         $this->assertStringContainsString('window.confirm(message)', $script);
-        $this->assertStringContainsString("form.dataset.confirmAction", $script);
-        $this->assertStringContainsString("form.requestSubmit", $script);
+        $this->assertStringContainsString('form.dataset.confirmAction', $script);
+        $this->assertStringContainsString('form.requestSubmit', $script);
     }
 
     public function test_destructive_forms_no_longer_use_inline_native_confirm_handlers(): void

@@ -172,16 +172,16 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 });
 
                 Route::middleware('role:operator_admin')->group(function () {
-                    Route::resource('packages', \App\Http\Controllers\Operator\PackageController::class)->only(['index', 'store', 'update']);
+                    Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
 
                     // Vouchers: index + store are gated by the tenant lifecycle policy
-                    Route::get('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'index'])->name('vouchers.index');
-                    Route::post('/vouchers', [\App\Http\Controllers\Operator\VoucherController::class, 'store'])
+                    Route::get('/vouchers', [VoucherController::class, 'index'])->name('vouchers.index');
+                    Route::post('/vouchers', [VoucherController::class, 'store'])
                         ->middleware(['tenant.active:generate_vouchers', 'idempotency'])
                         ->name('vouchers.store');
 
                     // Voucher void: admin-only, removes a voucher from circulation
-                    Route::post('vouchers/{voucher}/void', [\App\Http\Controllers\Operator\VoucherController::class, 'void'])
+                    Route::post('vouchers/{voucher}/void', [VoucherController::class, 'void'])
                         ->whereNumber('voucher')
                         ->name('vouchers.void');
                 });

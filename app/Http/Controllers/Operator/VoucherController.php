@@ -8,8 +8,10 @@ use App\Models\Package;
 use App\Models\Tenant;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
+use App\Services\AccessRevoker;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
+use App\Support\ReportingTime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -19,10 +21,10 @@ class VoucherController extends Controller
     public function index(TenantContext $context)
     {
         // KPI Calculations (tenant-scoped via global scope)
-        $generatedThisMonth = Voucher::whereBetween('created_at', \App\Support\ReportingTime::monthRange())->count();
-        $unusedStock        = Voucher::where('status', 'unused')->count();
-        $redeemed           = Voucher::where('status', 'redeemed')->count();
-        $voided             = Voucher::where('status', 'voided')->count();
+        $generatedThisMonth = Voucher::whereBetween('created_at', ReportingTime::monthRange())->count();
+        $unusedStock = Voucher::where('status', 'unused')->count();
+        $redeemed = Voucher::where('status', 'redeemed')->count();
+        $voided = Voucher::where('status', 'voided')->count();
 
         // Paginated voucher list with eager-loaded relations
         $vouchers = Voucher::with(['package', 'batch'])
@@ -121,7 +123,7 @@ class VoucherController extends Controller
     /**
      * Take a voucher out of circulation. A redeemed voucher also loses its connection.
      */
-    public function void(Request $request, \App\Services\AccessRevoker $revoker, string $tenant, int $voucher)
+    public function void(Request $request, AccessRevoker $revoker, string $tenant, int $voucher)
     {
         $model = Voucher::findOrFail($voucher); // tenant-scoped
 

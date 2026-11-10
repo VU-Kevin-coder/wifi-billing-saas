@@ -2,12 +2,15 @@
 
 namespace App\Services;
 
+use App\Models\Package;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
 use App\Models\Voucher;
 use App\Services\Policy\Policy;
+use App\Support\DataLimit;
+use Illuminate\Support\Facades\Log;
 
 class SiteAgentCommandService
 {
@@ -124,12 +127,12 @@ class SiteAgentCommandService
      * A legacy value that cannot be parsed is logged and treated as unlimited
      * rather than blocking a paying customer's activation.
      */
-    private function dataLimitBytes(?\App\Models\Package $package): ?int
+    private function dataLimitBytes(?Package $package): ?int
     {
         try {
-            return \App\Support\DataLimit::bytes($package?->data_limit);
+            return DataLimit::bytes($package?->data_limit);
         } catch (\InvalidArgumentException $exception) {
-            \Illuminate\Support\Facades\Log::warning('Package has an unparseable data limit; no byte cap applied.', [
+            Log::warning('Package has an unparseable data limit; no byte cap applied.', [
                 'package_id' => $package?->id,
                 'data_limit' => $package?->data_limit,
             ]);

@@ -3,6 +3,7 @@
 use Laravel\Pulse\Http\Middleware\Authorize;
 use Laravel\Pulse\Pulse;
 use Laravel\Pulse\Recorders;
+use ZillEAli\MikrotikLaravel\Pulse\Recorders\RouterHealthRecorder;
 
 return [
 
@@ -235,7 +236,7 @@ return [
             ],
         ],
 
-        \ZillEAli\MikrotikLaravel\Pulse\Recorders\RouterHealthRecorder::class => [
+        RouterHealthRecorder::class => [
             'router_name' => env('PULSE_MIKROTIK_ROUTER', 'default'),
         ],
     ],

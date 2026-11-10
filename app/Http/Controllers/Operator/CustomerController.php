@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Package;
 use App\Services\Tenancy\TenantContext;
+use App\Support\ReportingTime;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +19,7 @@ class CustomerController extends Controller
         $totalCustomers = Customer::count();
         $activeCustomers = Customer::where('status', 'active')->count();
         $outstandingBalance = 0;    // TODO: wire up once balance tracking is connected
-        $newThisMonth = Customer::whereBetween('created_at', \App\Support\ReportingTime::monthRange())->count();
+        $newThisMonth = Customer::whereBetween('created_at', ReportingTime::monthRange())->count();
 
         // Paginated customer list with assigned package
         $customers = Customer::with('package')->orderBy('created_at', 'desc')->paginate(25);

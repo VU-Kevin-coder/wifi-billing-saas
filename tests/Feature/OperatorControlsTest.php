@@ -26,7 +26,9 @@ class OperatorControlsTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $admin;
+
     private Package $package;
 
     protected function setUp(): void

@@ -29,7 +29,9 @@ class ReportingTimeTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $operator;
+
     private Package $package;
 
     protected function setUp(): void

@@ -16,7 +16,7 @@ class UiComponentsTest extends TestCase
             'type' => 'submit',
             'variant' => 'primary',
             'loadingText' => 'Creating',
-            'attributes' => new ComponentAttributeBag(),
+            'attributes' => new ComponentAttributeBag,
             'slot' => new ComponentSlot('Create'),
         ])->render();
 
@@ -33,7 +33,7 @@ class UiComponentsTest extends TestCase
             'message' => 'Try adding an item.',
             'actionUrl' => null,
             'actionLabel' => null,
-            'attributes' => new ComponentAttributeBag(),
+            'attributes' => new ComponentAttributeBag,
             'slot' => new ComponentSlot('<a href="/items">Add item</a>'),
         ])->render();
 

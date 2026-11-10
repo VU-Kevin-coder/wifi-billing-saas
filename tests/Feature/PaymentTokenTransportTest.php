@@ -32,7 +32,7 @@ class PaymentTokenTransportTest extends TestCase
     }
 
     #[Test]
-    public function statusIsReadWithTheTokenInAHeader(): void
+    public function status_is_read_with_the_token_in_a_header(): void
     {
         $this->getJson('/api/payments/status', ['X-Payment-Token' => self::TOKEN])
             ->assertStatus(202)
@@ -40,7 +40,7 @@ class PaymentTokenTransportTest extends TestCase
     }
 
     #[Test]
-    public function activationAlsoTakesTheTokenFromAHeader(): void
+    public function activation_also_takes_the_token_from_a_header(): void
     {
         $this->postJson('/api/payments/activate', [], [
             'X-Payment-Token' => self::TOKEN,
@@ -55,7 +55,7 @@ class PaymentTokenTransportTest extends TestCase
     }
 
     #[Test]
-    public function activationRequiresAndRejectsReusedIdempotencyKeys(): void
+    public function activation_requires_and_rejects_reused_idempotency_keys(): void
     {
         $this->postJson('/api/payments/activate')
             ->assertUnprocessable()
@@ -71,14 +71,14 @@ class PaymentTokenTransportTest extends TestCase
     }
 
     #[Test]
-    public function aMissingOrWrongTokenIsNotFound(): void
+    public function a_missing_or_wrong_token_is_not_found(): void
     {
         $this->getJson('/api/payments/status')->assertNotFound()->assertJson(['status' => 'not_found']);
         $this->getJson('/api/payments/status', ['X-Payment-Token' => 'wrong'])->assertNotFound();
     }
 
     #[Test]
-    public function aTokenInTheUrlIsNotAccepted(): void
+    public function a_token_in_the_url_is_not_accepted(): void
     {
         $this->getJson('/api/payments/'.self::TOKEN)->assertNotFound();                          // old path style
         $this->postJson('/api/payments/'.self::TOKEN.'/activate')->assertNotFound();
@@ -87,7 +87,7 @@ class PaymentTokenTransportTest extends TestCase
     }
 
     #[Test]
-    public function theSuccessPageSendsTheTokenInHeadersAndKeepsItOutOfUrls(): void
+    public function the_success_page_sends_the_token_in_headers_and_keeps_it_out_of_urls(): void
     {
         $response = $this->withSession(['payment_token' => self::TOKEN])
             ->get('http://acme.localhost/portal/success')

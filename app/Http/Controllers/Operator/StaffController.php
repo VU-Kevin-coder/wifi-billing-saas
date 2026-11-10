@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Operator;
 
-use Illuminate\Validation\Rule;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
@@ -12,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class StaffController extends Controller
 {

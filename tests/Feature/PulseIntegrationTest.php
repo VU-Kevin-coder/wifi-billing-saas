@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
+use ZillEAli\MikrotikLaravel\Pulse\Recorders\RouterHealthRecorder;
 
 class PulseIntegrationTest extends TestCase
 {
@@ -29,7 +30,7 @@ class PulseIntegrationTest extends TestCase
 
     public function test_the_dashboard_registers_the_mikrotik_health_recorder_and_card(): void
     {
-        $recorder = \ZillEAli\MikrotikLaravel\Pulse\Recorders\RouterHealthRecorder::class;
+        $recorder = RouterHealthRecorder::class;
         $config = file_get_contents(config_path('pulse.php'));
         $dashboard = file_get_contents(resource_path('views/vendor/pulse/dashboard.blade.php'));
         $consoleRoutes = file_get_contents(base_path('routes/console.php'));

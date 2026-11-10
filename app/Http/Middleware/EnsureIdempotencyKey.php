@@ -4,9 +4,9 @@ namespace App\Http\Middleware;
 
 use App\Services\Tenancy\TenantContext;
 use Closure;
+use Illuminate\Contracts\Routing\UrlRoutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Contracts\Routing\UrlRoutable;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureIdempotencyKey

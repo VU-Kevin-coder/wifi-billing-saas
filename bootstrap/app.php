@@ -1,9 +1,10 @@
 <?php
 
 use App\Http\Middleware\AuthenticateSiteAgent;
-use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureIdempotencyKey;
+use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureTenantIsActive;
+use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RequireRecentMfa;
 use App\Http\Middleware\RequireTwoFactor;
 use App\Http\Middleware\SetTenantContext;
@@ -48,7 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Register the tenant context middleware globally for web routes
         $middleware->web(append: [
-            \App\Http\Middleware\EnsureUserIsActive::class,
+            EnsureUserIsActive::class,
             SetTenantContext::class,
             RequireTwoFactor::class,
         ]);

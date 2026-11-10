@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Package;
 use App\Services\Tenancy\TenantContext;
+use App\Support\DataLimit;
 use Illuminate\Http\Request;
 
 class PackageController extends Controller
@@ -41,7 +42,7 @@ class PackageController extends Controller
             'speed_limit_mbps' => ['required', 'integer', 'min:1'],
             'device_limit' => ['required', 'integer', 'min:1'],
             'data_limit' => ['nullable', 'string', 'max:50', function (string $attribute, mixed $value, \Closure $fail) {
-                if (! \App\Support\DataLimit::isValid($value)) {
+                if (! DataLimit::isValid($value)) {
                     $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
                 }
             }],
@@ -77,7 +78,7 @@ class PackageController extends Controller
             'speed_limit_mbps' => ['required', 'integer', 'min:1'],
             'device_limit' => ['required', 'integer', 'min:1'],
             'data_limit' => ['nullable', 'string', 'max:50', function (string $attribute, mixed $value, \Closure $fail) {
-                if (! \App\Support\DataLimit::isValid($value)) {
+                if (! DataLimit::isValid($value)) {
                     $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
                 }
             }],
