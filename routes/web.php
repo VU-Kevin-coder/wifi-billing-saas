@@ -46,7 +46,7 @@ Route::prefix('portal')
     ->name('portal.direct.')
     ->group(function () {
         Route::get('/{tenant?}', [PortalController::class, 'index'])
-            ->where('tenant', '(?!success$)[A-Za-z0-9-]+')
+            ->where('tenant', '(?!success$|plan$)[A-Za-z0-9-]+')
             ->middleware('throttle:portal-browse')
             ->name('index');
         Route::post('/{tenant?}/redeem', [PortalController::class, 'redeem'])

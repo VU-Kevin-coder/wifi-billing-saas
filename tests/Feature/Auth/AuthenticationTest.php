@@ -98,7 +98,7 @@ class AuthenticationTest extends TestCase
         $this->post('/login', ['email' => 'user@example.test', 'password' => 'wrong-password'])
             ->assertSessionHasErrors('email');
 
-        $this->assertSame(2, RateLimiter::attempts('user@example.test|127.0.0.1'));
+        $this->assertEquals(2, RateLimiter::attempts('user@example.test|127.0.0.1'));
         $this->assertGreaterThan(0, RateLimiter::availableIn('user@example.test|127.0.0.1'));
     }
 
