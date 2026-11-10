@@ -72,7 +72,7 @@ class OperatorAnalyticsTest extends TestCase
 
     private function redeemed(Package $package, string $utc, ?string $phone, ?float $snapshot = null, string $status = 'redeemed'): Voucher
     {
-        $batch = VoucherBatch::firstOrCreate(
+        $batch = VoucherBatch::withoutTenancy()->firstOrCreate(
             ['tenant_id' => $package->tenant_id, 'batch_code' => 'A-1'],
             ['package_id' => $package->id, 'quantity' => 99]
         );

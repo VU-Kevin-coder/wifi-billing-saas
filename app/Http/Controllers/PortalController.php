@@ -42,6 +42,7 @@ class PortalController extends Controller
         return view('portal.index', [
             'tenant' => $tenantModel,
             'packages' => $packages,
+            'purchaseKeys' => $packages->mapWithKeys(fn (Package $package) => [$package->id => Str::random(32)]),
             'routerId' => $request->query('router_id'),
             'routerIdentity' => $request->query('router'),
         ]);

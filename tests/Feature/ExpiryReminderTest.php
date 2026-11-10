@@ -66,7 +66,10 @@ class ExpiryReminderTest extends TestCase
             'price' => 1000, 'currency' => 'UGX', 'duration_value' => 2, 'duration_unit' => 'hours',
             'speed_limit_mbps' => 5, 'device_limit' => 1,
         ]);
-        $batch = VoucherBatch::firstOrCreate(['tenant_id' => $tenant->id, 'batch_code' => 'R-1'], ['package_id' => $package->id, 'quantity' => 50]);
+        $batch = VoucherBatch::withoutTenancy()->firstOrCreate(
+            ['tenant_id' => $tenant->id, 'batch_code' => 'R-1'],
+            ['package_id' => $package->id, 'quantity' => 50]
+        );
         $voucher = Voucher::create([
             'tenant_id' => $tenant->id, 'voucher_batch_id' => $batch->id, 'package_id' => $package->id,
             'code' => 'RM-'.uniqid(), 'status' => 'redeemed', 'redeemed_by' => $phone, 'redeemed_at' => now()->subMinutes($totalMinutes - $minutesLeft),

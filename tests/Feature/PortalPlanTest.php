@@ -39,7 +39,10 @@ class PortalPlanTest extends TestCase
 
     private function createSession(Tenant $tenant, Package $package, string $code, ?string $phone = '0771234567', int $minutesLeft = 90, string $status = 'active'): Session
     {
-        $batch = VoucherBatch::firstOrCreate(['tenant_id' => $tenant->id, 'batch_code' => 'P-1'], ['package_id' => $package->id, 'quantity' => 5]);
+        $batch = VoucherBatch::withoutTenancy()->firstOrCreate(
+            ['tenant_id' => $tenant->id, 'batch_code' => 'P-1'],
+            ['package_id' => $package->id, 'quantity' => 5]
+        );
         $voucher = Voucher::create([
             'tenant_id' => $tenant->id, 'voucher_batch_id' => $batch->id, 'package_id' => $package->id,
             'code' => $code, 'status' => 'redeemed', 'redeemed_by' => $phone,
@@ -174,10 +177,16 @@ class PortalPlanTest extends TestCase
         ]);
         $session = $this->createSession($this->tenant, $this->package, 'ACME-0007');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0007']);
-        $this->open($session)->assertOk();
+        $plan = $this->open($session)->assertOk();
+        preg_match('/name="_idempotency_key" value="([A-Za-z0-9._:-]{16,128})"/', $plan->getContent(), $matches);
+        $this->assertNotEmpty($matches[1] ?? null, 'the renewal form must include a valid idempotency key');
 
         // exactly what the form on the page submits
-        $this->post('http://acme.localhost/portal/purchase', ['package_id' => $this->package->id, 'phone' => '0771234567'])
+        $this->post('http://acme.localhost/portal/purchase', [
+            'package_id' => $this->package->id,
+            'phone' => '0771234567',
+            '_idempotency_key' => $matches[1],
+        ])
             ->assertSessionHasNoErrors();
 
         $sale = Transaction::withoutTenancy()->where('type', 'voucher_sale')->sole();

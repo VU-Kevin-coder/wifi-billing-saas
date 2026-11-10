@@ -168,7 +168,7 @@ class ExpiryReminderService
 
     private function timeLeft(Session $session): string
     {
-        $minutes = max(1, (int) floor(now()->diffInMinutes($session->expires_at)));
+        $minutes = max(1, (int) ceil(now()->diffInMinutes($session->expires_at)));
 
         return $minutes >= 90
             ? (int) round($minutes / 60).' hours'

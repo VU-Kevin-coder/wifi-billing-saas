@@ -127,6 +127,7 @@
                         <div x-show="buyingPackageId === {{ $pkg->id }}" x-cloak class="px-4 py-3 bg-blue-50/60 border-t border-blue-100">
                             <form method="POST" action="{{ route('portal.purchase', ['tenant' => $tenant->slug], false) }}">
                                 @csrf
+                                <input type="hidden" name="_idempotency_key" value="{{ $purchaseKeys[$pkg->id] }}">
                                 <input type="hidden" name="package_id" value="{{ $pkg->id }}">
                                 @if($routerId)
                                     <input type="hidden" name="router_id" value="{{ $routerId }}">

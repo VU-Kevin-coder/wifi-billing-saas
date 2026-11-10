@@ -37,6 +37,7 @@
         @if ($canRenew)
             <form method="POST" action="{{ route('portal.purchase', ['tenant' => $tenant->slug], false) }}" class="space-y-3">
                 @csrf
+                <input type="hidden" name="_idempotency_key" value="{{ $purchaseKey }}">
                 <input type="hidden" name="package_id" value="{{ $package->id }}">
                 <label for="phone" class="block text-sm font-medium text-gray-700">Mobile money number</label>
                 <input id="phone" name="phone" type="tel" inputmode="tel" required minlength="9" maxlength="15" value="{{ $phone }}"

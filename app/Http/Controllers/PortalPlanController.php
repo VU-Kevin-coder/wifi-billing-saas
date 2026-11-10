@@ -10,6 +10,7 @@ use App\Models\Voucher;
 use App\Services\RenewLink;
 use App\Support\ReportingTime;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * "My plan": a customer checks what they bought and renews in one step.
@@ -68,11 +69,12 @@ class PortalPlanController extends Controller
             'package' => $package,
             'active' => $active,
             'expiresAt' => $local($session->expires_at),
-            'minutesLeft' => $active ? (int) floor(now()->diffInMinutes($session->expires_at)) : 0,
+            'minutesLeft' => $active ? (int) ceil(now()->diffInMinutes($session->expires_at)) : 0,
             'bytesUsed' => (int) $session->bytes_in + (int) $session->bytes_out,
             'canRenew' => $package && $package->is_published,
             'phone' => (string) ($voucher?->redeemed_by ?? ''),
             'currency' => PlatformSetting::get('currency', 'UGX'),
+            'purchaseKey' => Str::random(32),
         ]);
     }
 
