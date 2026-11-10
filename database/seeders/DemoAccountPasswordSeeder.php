@@ -11,8 +11,18 @@ class DemoAccountPasswordSeeder extends Seeder
 {
     public function run(): void
     {
-        $adminPassword = $this->requiredPassword('SEED_ADMIN_PASSWORD');
-        $tenantPassword = $this->requiredPassword('SEED_TENANT_PASSWORD');
+        $adminPassword = $this->configuredPassword('SEED_ADMIN_PASSWORD');
+        $tenantPassword = $this->configuredPassword('SEED_TENANT_PASSWORD');
+
+        if ($adminPassword === '' && $tenantPassword === '') {
+            $this->command?->info('No demo account passwords configured; existing passwords were left unchanged.');
+
+            return;
+        }
+
+        if ($adminPassword === '' || $tenantPassword === '') {
+            throw new RuntimeException('SEED_ADMIN_PASSWORD and SEED_TENANT_PASSWORD must either both be set or both be empty.');
+        }
 
         $this->updatePassword('platform@hamnet.test', $adminPassword);
 
@@ -23,13 +33,9 @@ class DemoAccountPasswordSeeder extends Seeder
         $this->command?->info('Configured demo account passwords were applied.');
     }
 
-    private function requiredPassword(string $key): string
+    private function configuredPassword(string $key): string
     {
         $password = trim((string) env($key, ''));
-
-        if ($password === '') {
-            throw new RuntimeException("{$key} must be set to seed demo accounts.");
-        }
 
         return $password;
     }

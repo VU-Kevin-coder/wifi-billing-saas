@@ -29,8 +29,12 @@ class DatabaseSeeder extends Seeder
             throw new \RuntimeException($message);
         }
 
-        $adminPassword = $this->requiredPassword('SEED_ADMIN_PASSWORD');
-        $tenantPassword = $this->requiredPassword('SEED_TENANT_PASSWORD');
+        $adminPassword = trim((string) env('SEED_ADMIN_PASSWORD', ''));
+        $tenantPassword = trim((string) env('SEED_TENANT_PASSWORD', ''));
+
+        if (($adminPassword === '') !== ($tenantPassword === '')) {
+            throw new \RuntimeException('SEED_ADMIN_PASSWORD and SEED_TENANT_PASSWORD must either both be set or both be empty.');
+        }
 
         // ─── 1. ROLES ───────────────────────────────────────────
         $this->call(RoleSeeder::class);
@@ -87,7 +91,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Hamnet Platform Admin',
             'tenant_id' => null,
             'email_verified_at' => now(),
-        ], $adminPassword);
+        ], $adminPassword !== '' ? $adminPassword : null);
         $platformAdmin->syncRoles(['platform_admin']);
 
         $acmeAdmin = $this->seedUser('admin@acme.test', [
@@ -95,21 +99,21 @@ class DatabaseSeeder extends Seeder
             'tenant_id' => $acme->id,
             'phone' => '+256772411883',
             'email_verified_at' => now(),
-        ], $tenantPassword);
+        ], $tenantPassword !== '' ? $tenantPassword : null);
         $acmeAdmin->syncRoles(['operator_admin']);
 
         $acmeFinance = $this->seedUser('finance@acme.test', [
             'name' => 'Acme Finance',
             'tenant_id' => $acme->id,
             'email_verified_at' => now(),
-        ], $tenantPassword);
+        ], $tenantPassword !== '' ? $tenantPassword : null);
         $acmeFinance->syncRoles(['operator_finance']);
 
         $betaAdmin = $this->seedUser('admin@beta.test', [
             'name' => 'Peter Okello',
             'tenant_id' => $beta->id,
             'email_verified_at' => now(),
-        ], $tenantPassword);
+        ], $tenantPassword !== '' ? $tenantPassword : null);
         $betaAdmin->syncRoles(['operator_admin']);
 
         $this->call(DemoAccountPasswordSeeder::class);
@@ -263,24 +267,13 @@ class DatabaseSeeder extends Seeder
         $this->command->info('Database seeded successfully.');
     }
 
-    private function seedUser(string $email, array $attributes, string $password): User
+    private function seedUser(string $email, array $attributes, ?string $password): User
     {
         $user = User::withoutTenancy()->firstOrCreate(['email' => $email], [
             ...$attributes,
-            'password' => Hash::make($password),
+            'password' => Hash::make($password ?? Str::password(24)),
         ]);
 
         return $user;
-    }
-
-    private function requiredPassword(string $key): string
-    {
-        $password = trim((string) env($key, ''));
-
-        if ($password === '') {
-            throw new \RuntimeException("{$key} must be set to seed demo accounts.");
-        }
-
-        return $password;
     }
 }

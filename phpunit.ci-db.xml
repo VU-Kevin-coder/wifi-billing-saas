@@ -31,6 +31,8 @@
         <env name="MFA_STEP_UP_ENABLED" value="false"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SEED_ADMIN_PASSWORD" value="Platform-test-password-2026!"/>
+        <env name="SEED_TENANT_PASSWORD" value="Operator-test-password-2026!"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
     </php>
