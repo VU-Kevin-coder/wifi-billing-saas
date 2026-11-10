@@ -59,7 +59,7 @@ class ExpiryReminderTest extends TestCase
         return $tenant->fresh();
     }
 
-    private function session(?string $phone, int $minutesLeft, int $totalMinutes = 120, ?Tenant $tenant = null, string $status = 'active'): Session
+    private function createSession(?string $phone, int $minutesLeft, int $totalMinutes = 120, ?Tenant $tenant = null, string $status = 'active'): Session
     {
         $tenant ??= $this->tenant;
         $package = Package::firstOrCreate(['tenant_id' => $tenant->id, 'name' => 'Daily'], [
@@ -92,7 +92,7 @@ class ExpiryReminderTest extends TestCase
 
     public function test_a_customer_near_expiry_gets_one_reminder_with_their_renew_link(): void
     {
-        $session = $this->session('0771234567', minutesLeft: 20);
+        $session = $this->createSession('0771234567', minutesLeft: 20);
 
         $this->remind();
 
@@ -117,7 +117,7 @@ class ExpiryReminderTest extends TestCase
 
     public function test_nobody_is_reminded_twice(): void
     {
-        $this->session('0771234567', minutesLeft: 20);
+        $this->createSession('0771234567', minutesLeft: 20);
 
         $this->remind();
         $this->remind();
@@ -129,10 +129,10 @@ class ExpiryReminderTest extends TestCase
 
     public function test_only_sessions_inside_the_reminder_window_are_reminded(): void
     {
-        $this->session('0771000001', minutesLeft: 120, totalMinutes: 300);   // plenty left
-        $this->session('0771000002', minutesLeft: 20);                        // due
-        $this->session('0771000003', minutesLeft: -5, totalMinutes: 120);     // already expired
-        $this->session('0771000004', minutesLeft: 20, status: 'expired');     // not active
+        $this->createSession('0771000001', minutesLeft: 120, totalMinutes: 300);   // plenty left
+        $this->createSession('0771000002', minutesLeft: 20);                        // due
+        $this->createSession('0771000003', minutesLeft: -5, totalMinutes: 120);     // already expired
+        $this->createSession('0771000004', minutesLeft: 20, status: 'expired');     // not active
 
         $this->remind();
 
@@ -143,7 +143,7 @@ class ExpiryReminderTest extends TestCase
     public function test_the_window_follows_the_businesss_setting(): void
     {
         $this->tenant->update(['settings' => array_merge($this->tenant->settings, ['notify_expiry_reminder_mins' => 60])]);
-        $this->session('0771234567', minutesLeft: 45, totalMinutes: 300);
+        $this->createSession('0771234567', minutesLeft: 45, totalMinutes: 300);
 
         $this->remind();
 
@@ -152,8 +152,8 @@ class ExpiryReminderTest extends TestCase
 
     public function test_customers_without_a_phone_number_are_skipped(): void
     {
-        $this->session(null, minutesLeft: 20);
-        $this->session('Walk-in', minutesLeft: 20);
+        $this->createSession(null, minutesLeft: 20);
+        $this->createSession('Walk-in', minutesLeft: 20);
 
         $this->remind();
 
@@ -162,7 +162,7 @@ class ExpiryReminderTest extends TestCase
 
     public function test_a_package_shorter_than_the_window_is_not_reminded_at_purchase(): void
     {
-        $this->session('0771234567', minutesLeft: 25, totalMinutes: 30);   // a 30 minute package, window 30
+        $this->createSession('0771234567', minutesLeft: 25, totalMinutes: 30);   // a 30 minute package, window 30
 
         $this->remind();
 
@@ -173,8 +173,8 @@ class ExpiryReminderTest extends TestCase
     {
         $this->tenant->update(['settings' => array_merge($this->tenant->settings, ['sms_enabled' => false])]);
         $quiet = $this->makeTenant('quiet', ['notify_expiry_sms_reminder' => false]);
-        $this->session('0771000001', minutesLeft: 20);
-        $this->session('0771000002', minutesLeft: 20, tenant: $quiet);
+        $this->createSession('0771000001', minutesLeft: 20);
+        $this->createSession('0771000002', minutesLeft: 20, tenant: $quiet);
 
         $this->remind();
 
@@ -184,8 +184,8 @@ class ExpiryReminderTest extends TestCase
     public function test_each_business_is_reminded_with_its_own_name(): void
     {
         $other = $this->makeTenant('beta');
-        $this->session('0771000001', minutesLeft: 20);
-        $this->session('0772000002', minutesLeft: 20, tenant: $other);
+        $this->createSession('0771000001', minutesLeft: 20);
+        $this->createSession('0772000002', minutesLeft: 20, tenant: $other);
 
         $this->remind();
 
@@ -199,7 +199,7 @@ class ExpiryReminderTest extends TestCase
             'template_expiry_reminder' => "Hi from @company_name\nonly @hours_left left. Pay: @portal_url Help: @support_number",
             'support_phone' => '+256700111222',
         ])]);
-        $session = $this->session('0771234567', minutesLeft: 20);
+        $session = $this->createSession('0771234567', minutesLeft: 20);
 
         $this->remind();
 
@@ -213,8 +213,8 @@ class ExpiryReminderTest extends TestCase
     public function test_the_monthly_cap_stops_sending_and_leaves_the_rest_unclaimed(): void
     {
         config(['sms.monthly_cap_per_tenant' => 1]);
-        $first = $this->session('0771000001', minutesLeft: 10);
-        $second = $this->session('0771000002', minutesLeft: 20);
+        $first = $this->createSession('0771000001', minutesLeft: 10);
+        $second = $this->createSession('0771000002', minutesLeft: 20);
 
         $this->artisan('sessions:remind')->expectsOutputToContain('capped=1')->assertSuccessful();
 
@@ -226,7 +226,7 @@ class ExpiryReminderTest extends TestCase
     public function test_a_gateway_failure_is_logged_and_retried_a_limited_number_of_times(): void
     {
         $this->gatewayUp = false;
-        $session = $this->session('0771234567', minutesLeft: 20);
+        $session = $this->createSession('0771234567', minutesLeft: 20);
 
         $this->remind();
         $this->assertSame('failed', SmsMessage::withoutTenancy()->latest('id')->first()->status);
@@ -245,7 +245,7 @@ class ExpiryReminderTest extends TestCase
     {
         config(['sms.monthly_cap_per_tenant' => 1]);
         $this->gatewayUp = false;
-        $this->session('0771234567', minutesLeft: 20);
+        $this->createSession('0771234567', minutesLeft: 20);
         $this->remind();
 
         $this->gatewayUp = true;

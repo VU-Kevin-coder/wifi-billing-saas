@@ -37,7 +37,7 @@ class PortalPlanTest extends TestCase
         ]);
     }
 
-    private function session(Tenant $tenant, Package $package, string $code, ?string $phone = '0771234567', int $minutesLeft = 90, string $status = 'active'): Session
+    private function createSession(Tenant $tenant, Package $package, string $code, ?string $phone = '0771234567', int $minutesLeft = 90, string $status = 'active'): Session
     {
         $batch = VoucherBatch::firstOrCreate(['tenant_id' => $tenant->id, 'batch_code' => 'P-1'], ['package_id' => $package->id, 'quantity' => 5]);
         $voucher = Voucher::create([
@@ -60,7 +60,7 @@ class PortalPlanTest extends TestCase
 
     public function test_a_customer_finds_their_plan_with_their_voucher_code(): void
     {
-        $session = $this->session($this->tenant, $this->package, 'ACME-0001');
+        $session = $this->createSession($this->tenant, $this->package, 'ACME-0001');
 
         $response = $this->post('http://acme.localhost/portal/plan', ['voucher_code' => ' acme-0001 ']);
 
@@ -84,7 +84,7 @@ class PortalPlanTest extends TestCase
     public function test_a_code_from_another_business_finds_nothing(): void
     {
         $other = Tenant::create(['name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
-        $this->session($other, $this->package($other), 'BETA-0001');
+        $this->createSession($other, $this->package($other), 'BETA-0001');
 
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'BETA-0001'])->assertSessionHasErrors('voucher_code');
     }
@@ -98,7 +98,7 @@ class PortalPlanTest extends TestCase
 
     public function test_an_active_plan_shows_time_left_and_offers_renewal(): void
     {
-        $session = $this->session($this->tenant, $this->package, 'ACME-0002', minutesLeft: 90);
+        $session = $this->createSession($this->tenant, $this->package, 'ACME-0002', minutesLeft: 90);
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0002']);
 
         $this->open($session)
@@ -115,7 +115,7 @@ class PortalPlanTest extends TestCase
 
     public function test_an_expired_plan_says_so_and_offers_to_buy_again(): void
     {
-        $session = $this->session($this->tenant, $this->package, 'ACME-0003', minutesLeft: -30);
+        $session = $this->createSession($this->tenant, $this->package, 'ACME-0003', minutesLeft: -30);
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0003']);
 
         $this->open($session)->assertOk()->assertSee('Expired')->assertSee('Buy again');
@@ -124,7 +124,7 @@ class PortalPlanTest extends TestCase
     public function test_a_package_that_is_no_longer_sold_offers_the_catalogue_instead(): void
     {
         $retired = $this->package($this->tenant, published: false);
-        $session = $this->session($this->tenant, $retired, 'ACME-0004');
+        $session = $this->createSession($this->tenant, $retired, 'ACME-0004');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0004']);
 
         $this->open($session)
@@ -137,7 +137,7 @@ class PortalPlanTest extends TestCase
     public function test_a_link_only_works_for_the_business_it_belongs_to(): void
     {
         $other = Tenant::create(['name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
-        $session = $this->session($this->tenant, $this->package, 'ACME-0005');
+        $session = $this->createSession($this->tenant, $this->package, 'ACME-0005');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0005']);
 
         $this->open($session, host: 'beta')->assertNotFound();
@@ -154,7 +154,7 @@ class PortalPlanTest extends TestCase
 
     public function test_the_page_is_not_indexed_by_search_engines(): void
     {
-        $session = $this->session($this->tenant, $this->package, 'ACME-0006');
+        $session = $this->createSession($this->tenant, $this->package, 'ACME-0006');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0006']);
 
         $this->open($session)->assertSee('<meta name="robots" content="noindex">', false);
@@ -172,7 +172,7 @@ class PortalPlanTest extends TestCase
             'https://sandbox.momodeveloper.mtn.com/collection/token/' => Http::response(['access_token' => 't']),
             'https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay' => Http::response([], 202),
         ]);
-        $session = $this->session($this->tenant, $this->package, 'ACME-0007');
+        $session = $this->createSession($this->tenant, $this->package, 'ACME-0007');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0007']);
         $this->open($session)->assertOk();
 
