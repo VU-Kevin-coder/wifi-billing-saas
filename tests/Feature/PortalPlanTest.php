@@ -18,6 +18,7 @@ class PortalPlanTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private Package $package;
 
     protected function setUp(): void

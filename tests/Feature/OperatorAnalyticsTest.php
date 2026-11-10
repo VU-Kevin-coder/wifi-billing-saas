@@ -25,8 +25,11 @@ class OperatorAnalyticsTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $admin;
+
     private Package $daily;
+
     private Package $weekly;
 
     protected function setUp(): void

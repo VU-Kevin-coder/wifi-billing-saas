@@ -10,7 +10,6 @@ use App\Services\Tenancy\TenantContext;
 use App\Support\ReportingTime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Sales analytics for one business, in the operator's own timezone.

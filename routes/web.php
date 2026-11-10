@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Operator\AnalyticsController;
 use App\Http\Controllers\Operator\CustomerController;
 use App\Http\Controllers\Operator\DashboardController as OperatorDashboard;
 use App\Http\Controllers\Operator\LiveSessionController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Platform\RefundController;
 use App\Http\Controllers\Platform\RevenueController;
 use App\Http\Controllers\Platform\TenantController;
 use App\Http\Controllers\PortalController;
+use App\Http\Controllers\PortalPlanController;
 use App\Http\Controllers\Profile\SecurityController;
 use App\Http\Controllers\ProfileController;
 use App\Models\Package;
@@ -153,9 +155,9 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->name('check');
 
                 // Customer self-service: check a plan and renew it
-                Route::get('/plan', [\App\Http\Controllers\PortalPlanController::class, 'form'])->middleware('throttle:portal-browse')->name('plan');
-                Route::post('/plan', [\App\Http\Controllers\PortalPlanController::class, 'lookup'])->middleware('throttle:portal-redeem')->name('plan.lookup');
-                Route::get('/r/{token}', [\App\Http\Controllers\PortalPlanController::class, 'show'])
+                Route::get('/plan', [PortalPlanController::class, 'form'])->middleware('throttle:portal-browse')->name('plan');
+                Route::post('/plan', [PortalPlanController::class, 'lookup'])->middleware('throttle:portal-redeem')->name('plan.lookup');
+                Route::get('/r/{token}', [PortalPlanController::class, 'show'])
                     ->where('token', '[a-z0-9]{12}')
                     ->middleware('throttle:portal-redeem')
                     ->name('plan.show');
@@ -230,7 +232,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 // Refund requests (the platform approves and pays the customer)
                 Route::middleware('role:operator_admin|operator_finance')->group(function () {
                     // Analytics (read-only sales reporting)
-                    Route::get('/analytics', [App\Http\Controllers\Operator\AnalyticsController::class, 'index'])->name('analytics');
+                    Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 
                     Route::get('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
                     Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->middleware('idempotency')->name('refunds.store');

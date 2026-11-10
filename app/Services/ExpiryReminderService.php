@@ -81,11 +81,13 @@ class ExpiryReminderService
             $duration = $session->started_at ? $session->started_at->diffInMinutes($session->expires_at) : 0;
             if (! $phone || $duration <= $lead + 5) {
                 $counts['skipped']++;
+
                 continue;
             }
 
             if ($cap > 0 && $sentThisMonth >= $cap) {
                 $counts['capped']++;
+
                 continue;
             }
 
