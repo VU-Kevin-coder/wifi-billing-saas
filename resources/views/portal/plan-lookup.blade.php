@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>Check your plan · {{ $tenant->settings['portal_title'] ?: $tenant->name }}</title>
+    <title>Check my plan · {{ $tenant->settings['portal_title'] ?: $tenant->name }}</title>
     @vite('resources/css/public.css')
     <style>
         :root { --paper:#f2eee6; --panel:#fbf9f4; --ink:#1c1a17; --muted:#6f6a60; --line:#ddd6c8; --accent:{{ $tenant->settings['primary_color'] ?? '#3B82F6' }}; --accent-dark:color-mix(in srgb,var(--accent),black 18%); }
