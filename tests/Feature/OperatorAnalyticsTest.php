@@ -159,6 +159,15 @@ class OperatorAnalyticsTest extends TestCase
         $this->assertCount(30, $daily);
     }
 
+    public function test_revenue_per_day_bars_render_daily_revenue(): void
+    {
+        $this->seedSales();
+
+        $this->page()->assertOk()
+            ->assertSee('11 Mar: UGX 1,000 (1 vouchers)')
+            ->assertSee('min-w-[10px] flex-1 h-full', false);
+    }
+
     // ── Customers and packages ──────────────────────────────────────────────
 
     public function test_repeat_customers_are_counted_across_phone_formats(): void

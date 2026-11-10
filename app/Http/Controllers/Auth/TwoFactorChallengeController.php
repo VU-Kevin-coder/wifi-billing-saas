@@ -27,7 +27,11 @@ class TwoFactorChallengeController extends Controller
             return redirect()->route('dashboard');
         }
 
-        return view('auth.two-factor-challenge');
+        $mfaMode = $request->session()->get('mfa_mode', $request->query('mode', 'totp'));
+
+        return view('auth.two-factor-challenge', [
+            'mfaMode' => $mfaMode === 'recovery' ? 'recovery' : 'totp',
+        ]);
     }
 
     public function store(Request $request, AuthenticatedSessionController $sessionController): RedirectResponse
@@ -45,7 +49,7 @@ class TwoFactorChallengeController extends Controller
         if (! $verified) {
             return back()->withErrors([
                 'code' => 'The authentication or recovery code is invalid.',
-            ]);
+            ])->with('mfa_mode', preg_match('/^\d{6}$/', $code) === 1 ? 'totp' : 'recovery');
         }
 
         $request->session()->regenerate();

@@ -42,6 +42,7 @@ class PortalController extends Controller
         return view('portal.index', [
             'tenant' => $tenantModel,
             'packages' => $packages,
+            'currency' => PlatformSetting::get('currency', 'UGX'),
             'purchaseKeys' => $packages->mapWithKeys(fn (Package $package) => [$package->id => Str::random(32)]),
             'routerId' => $request->query('router_id'),
             'routerIdentity' => $request->query('router'),
@@ -189,6 +190,7 @@ class PortalController extends Controller
         return view('portal.pending', [
             'tenant' => $tenantModel,
             'transaction' => $payment,
+            'currency' => PlatformSetting::get('currency', 'UGX'),
             'checkUrl' => $this->portalUrl($request, 'check', $tenantModel, $payment),
             'successUrl' => $this->portalUrl($request, 'success', $tenantModel),
             'portalUrl' => $this->portalUrl($request, 'index', $tenantModel),

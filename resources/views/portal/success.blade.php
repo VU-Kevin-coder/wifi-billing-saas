@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connected — {{ $tenant->name }}</title>
+    <title>Connected · {{ $tenant->settings['portal_title'] ?: $tenant->name }}</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
     @vite('resources/css/public.css')
@@ -13,12 +13,28 @@
             --primary: {{ $tenant->settings['primary_color'] ?? '#3B82F6' }};
             --primary-dark: color-mix(in srgb, var(--primary), black 18%);
             --primary-light: color-mix(in srgb, var(--primary), white 88%);
+            --paper: #f2eee6;
+            --panel: #fbf9f4;
+            --line: #ddd6c8;
         }
+        * { box-sizing: border-box; }
         body {
+            background: var(--paper);
             font-family: 'Figtree', sans-serif;
         }
         .bg-primary { background-color: var(--primary); }
         .text-primary { color: var(--primary); }
+        .portal-card { border-color: var(--line); background: var(--panel); }
+        .portal-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; text-align: left; }
+        .portal-brand-mark { display: grid; width: 48px; height: 48px; flex: 0 0 48px; place-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: white; color: var(--primary); }
+        .portal-brand-mark img { width: 100%; height: 100%; padding: 5px; object-fit: contain; }
+        .portal-brand-fallback { width: 28px; height: 28px; }
+        .portal-brand strong, .portal-brand span { display: block; }
+        .portal-brand strong { font-family: Georgia, "Times New Roman", serif; font-size: 1.12rem; font-weight: 600; }
+        .portal-brand span { margin-top: 3px; color: #6f6a60; font-size: .82rem; }
+        .voucher-panel { border-color: color-mix(in srgb, var(--primary), white 65%); background: var(--primary-light); }
+        .voucher-label, .voucher-note { color: var(--primary-dark); }
+        .voucher-code { color: var(--primary); }
     </style>
     <script>
         const paymentToken = @json($paymentToken ?? null);
@@ -127,8 +143,9 @@
         }
     </script>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
-    <div class="w-full max-w-sm bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center">
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="portal-card w-full max-w-sm rounded-3xl shadow-xl border p-8 text-center">
+        @include('portal.partials.brand')
         <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
             <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
@@ -141,12 +158,12 @@
             {{ $paymentStatusUrl ? 'Approve the payment prompt on your phone. This page will connect you once the payment is confirmed.' : 'Your Wi-Fi access is now activated.' }}
         </p>
 
-        <div id="voucher-panel" class="mb-5 bg-blue-50 border border-blue-200 rounded-2xl p-4 {{ $voucherCode ? '' : 'hidden' }}">
-                <span class="text-xs uppercase font-semibold text-blue-700 tracking-wider">Your Voucher Code</span>
-                <div id="voucher-code" class="text-2xl font-extrabold text-blue-900 tracking-widest mt-1 select-all font-mono">
+        <div id="voucher-panel" class="voucher-panel mb-5 border rounded-2xl p-4 {{ $voucherCode ? '' : 'hidden' }}">
+                <span class="voucher-label text-xs uppercase font-semibold tracking-wider">Your Voucher Code</span>
+                <div id="voucher-code" class="voucher-code text-2xl font-extrabold tracking-widest mt-1 select-all font-mono">
                     {{ $voucherCode ?? '' }}
                 </div>
-                <p class="text-[11px] text-blue-600 mt-1">Keep this code handy in case your device reconnects.</p>
+                <p class="voucher-note text-[11px] mt-1">Keep this code handy in case your device reconnects.</p>
         </div>
         
         <div id="payment-spinner" class="mb-5 flex items-center justify-center space-x-2 text-xs text-gray-400 {{ $paymentStatusUrl ? '' : 'hidden' }}">

@@ -118,12 +118,20 @@ class SettingsController extends Controller
             'sms_api_key' => ['nullable', 'string', 'max:2048'],
             'sms_sender_id' => ['nullable', 'string', 'max:11'],
             'sms_enabled' => ['sometimes', 'boolean'],
+            'notify_expiry_sms_reminder' => ['sometimes', 'boolean'],
+            'notify_expiry_reminder_mins' => ['required', 'integer', 'min:1', 'max:43200'],
+            'template_expiry_reminder' => ['required', 'string', 'max:2000'],
         ]);
 
         $settings = array_merge($tenant->settings, [
             'sms_enabled' => $request->boolean('sms_enabled'),
             'sms_gateway' => $validated['sms_gateway'],
             'sms_sender_id' => $validated['sms_sender_id'] ?? '',
+            'notify_expiry_sms_reminder' => array_key_exists('notify_expiry_sms_reminder', $validated)
+                ? $request->boolean('notify_expiry_sms_reminder')
+                : $tenant->settings['notify_expiry_sms_reminder'],
+            'notify_expiry_reminder_mins' => (int) $validated['notify_expiry_reminder_mins'],
+            'template_expiry_reminder' => $validated['template_expiry_reminder'],
         ]);
 
         if ($request->filled('sms_api_key')) {
@@ -181,15 +189,12 @@ class SettingsController extends Controller
         abort_unless($tenant, 404, 'Tenant not found');
 
         $validated = $request->validate([
-            'notify_expiry_reminder_mins' => ['required', 'integer', 'in:30,60,1440'],
             'template_voucher' => ['required', 'string', 'max:2000'],
             'template_expiry' => ['required', 'string', 'max:2000'],
-            'template_expiry_reminder' => ['required', 'string', 'max:2000'],
             'notify_voucher_sms' => ['sometimes', 'boolean'],
             'notify_credentials_sms' => ['sometimes', 'boolean'],
             'notify_receipt_sms' => ['sometimes', 'boolean'],
             'notify_expiry_sms' => ['sometimes', 'boolean'],
-            'notify_expiry_sms_reminder' => ['sometimes', 'boolean'],
         ]);
 
         foreach ([
@@ -197,7 +202,6 @@ class SettingsController extends Controller
             'notify_credentials_sms',
             'notify_receipt_sms',
             'notify_expiry_sms',
-            'notify_expiry_sms_reminder',
         ] as $setting) {
             $validated[$setting] = $request->boolean($setting);
         }

@@ -42,6 +42,42 @@
         </div>
     </section>
 
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div class="p-6 border-b border-gray-100">
+            <h3 class="text-lg font-semibold text-gray-900">Expiry Reminder Notifications</h3>
+            <p class="text-sm text-gray-500 mt-1">Send customers an SMS shortly before their active internet plan expires.</p>
+        </div>
+        <div class="p-6 space-y-5">
+            <label class="flex items-start gap-3">
+                <input type="hidden" name="notify_expiry_sms_reminder" value="0">
+                <input type="checkbox" name="notify_expiry_sms_reminder" value="1" @checked(old('notify_expiry_sms_reminder', $settings['notify_expiry_sms_reminder'])) class="mt-1 rounded border-gray-300 text-blue-600 shadow-sm">
+                <span>
+                    <span class="block text-sm font-medium text-gray-900">Enable expiry reminder SMS</span>
+                    <span class="block text-xs text-gray-500 mt-1">Send a reminder using the configured SMS gateway and this business's SMS opt-in.</span>
+                </span>
+            </label>
+
+            <div>
+                <label for="notify_expiry_reminder_mins" class="block text-sm font-medium text-gray-700 mb-1">Send reminder before expiry</label>
+                <input id="notify_expiry_reminder_mins" name="notify_expiry_reminder_mins" type="number" min="1" max="43200" step="1" list="expiry-reminder-minute-presets" value="{{ old('notify_expiry_reminder_mins', $settings['notify_expiry_reminder_mins']) }}" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                <datalist id="expiry-reminder-minute-presets">
+                    <option value="30">30 minutes</option>
+                    <option value="60">1 hour</option>
+                    <option value="1440">24 hours</option>
+                </datalist>
+                <p class="text-xs text-gray-500 mt-1">Enter minutes (1–43,200). Common choices: 30, 60, or 1,440 minutes; custom values are supported.</p>
+                @error('notify_expiry_reminder_mins') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label for="template_expiry_reminder" class="block text-sm font-medium text-gray-700 mb-1">Expiry reminder message</label>
+                <textarea id="template_expiry_reminder" name="template_expiry_reminder" rows="5" required maxlength="2000" class="block w-full rounded-md border-gray-300 shadow-sm font-mono text-sm">{{ old('template_expiry_reminder', $settings['template_expiry_reminder']) }}</textarea>
+                <p class="text-xs text-gray-500 mt-1">Placeholders: @company_name, @package_name, @hours_left, @expiry_date, @portal_url, @support_number</p>
+                @error('template_expiry_reminder') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
+            </div>
+        </div>
+    </section>
+
     <div x-show="hasChanges" x-transition class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-6">
         <div>
             <p class="text-sm font-bold">Unsaved changes</p>

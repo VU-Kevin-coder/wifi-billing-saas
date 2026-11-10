@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<title>FreeFi · Guest Wi-Fi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f2eee6;
+    --panel: #fbf9f4;
+    --field: #fffdf9;
+    --ink: #1c1a17;
+    --ink-soft: #3d3932;
+    --muted: #6f6a60;
+    --line: #ddd6c8;
+    --accent: #1f5f4a;
+    --accent-soft: #e2eee8;
+    --bad: #b4372b;
+    --bad-soft: #f7e3df;
+    --serif: "Fraunces", Georgia, "Times New Roman", serif;
+    --sans: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --ease: cubic-bezier(.22, .9, .3, 1);
+    /* Own photo or texture? Set --bg-image: url("your-file.jpg"); */
+    --bg-image: none;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  body { margin: 0; min-height: 100dvh; background: var(--paper); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+  input { font-family: inherit; }
+  [hidden] { display: none !important; }
+
+  /* ───────── Background ───────── */
+  .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden;
+    background: radial-gradient(ellipse 70% 60% at 50% 40%, #f8f5ee 0%, transparent 70%), var(--bg-image) center / cover no-repeat, var(--paper); }
+  .bg svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .drift { transform-box: fill-box; transform-origin: center; animation: drift 90s ease-in-out infinite alternate; }
+  .drift.b { animation-duration: 120s; animation-direction: alternate-reverse; }
+  @keyframes drift { from { transform: rotate(-2deg) scale(1); } to { transform: rotate(3deg) scale(1.03); } }
+
+  /* ───────── Shell ───────── */
+  .shell { position: relative; z-index: 1; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+  .panel { width: 100%; max-width: 440px; background: rgba(251, 249, 244, .96); border: 1px solid var(--line); border-radius: 18px;
+    overflow: hidden; box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 18px 40px -22px rgba(60, 50, 30, .35); animation: rise .7s var(--ease) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .progress { height: 3px; background: var(--line); }
+  .progress i { display: block; height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .6s var(--ease); }
+  .inner { padding: 24px 30px 22px; }
+
+  /* ───────── New header ───────── */
+  .hero { background: #0d4f3a; padding: 26px 20px 30px; text-align: center; color: #fff; margin: -24px -30px 24px; }
+  .hero .wifi-mark { width: 52px; height: 52px; margin: 0 auto 12px; display: block; }
+  .hero .wifi-mark .a { fill: none; stroke: rgba(255,255,255,.95); stroke-width: 3.2; stroke-linecap: round; }
+  .hero .wifi-mark .dot { fill: rgba(255,255,255,.95); }
+  .hero h1 { margin: 0 0 2px; font-family: var(--serif); font-weight: 500; font-size: 1.7rem; letter-spacing: -.02em; color: #fff; }
+  .hero p { margin: 0; font-size: .92rem; color: rgba(255,255,255,.8); }
+
+  /* ───────── Plans ───────── */
+  .plans { display: grid; gap: 10px; margin-top: 0; }
+  .section-label { display: flex; align-items: center; gap: 12px; margin: 26px 0 18px; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .section-label::before, .section-label::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  .plan { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; padding: 15px 16px; text-align: left;
+    background: var(--field); border: 1.5px solid var(--line); border-radius: 14px; color: inherit; cursor: pointer;
+    transition: border-color .2s, box-shadow .25s, transform .25s var(--ease), background .25s; }
+  .plan:hover { border-color: #b9b09c; transform: translateY(-1px); }
+  .plan:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(31, 95, 74, .15); }
+  .plan[aria-checked="true"] { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 4px rgba(31, 95, 74, .1); }
+
+  .plan .txt { flex: 1; min-width: 0; }
+  .plan b { display: block; font-size: .98rem; font-weight: 600; }
+  .plan small { display: block; margin-top: 2px; color: var(--muted); font-size: .82rem; }
+  .plan .price { font-family: var(--serif); font-size: 1.25rem; font-weight: 500; white-space: nowrap; }
+  .plan .price span { font-family: var(--sans); font-size: .75rem; color: var(--muted); margin-right: 3px; }
+  .pill { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: .68rem; font-weight: 600; letter-spacing: .03em; vertical-align: 1px; }
+
+  /* buy button inside plan */
+  .buy-btn { flex: 0 0 auto; padding: 8px 18px; border: 0; border-radius: 8px; background: #0d4f3a; color: #fff; font-size: .78rem; font-weight: 600; letter-spacing: .03em; cursor: pointer;
+    transition: background .2s, transform .15s var(--ease); }
+  .buy-btn:hover { background: #083c2b; }
+  .buy-btn:active { transform: scale(.96); }
+
+  /* ───────── Buttons / links ───────── */
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 18px; padding: 14px 16px;
+    background: var(--ink); color: var(--paper); border: 0; border-radius: 12px; font-size: .95rem; font-weight: 600; cursor: pointer;
+    transition: background .25s, transform .15s var(--ease), opacity .2s; }
+  .btn:hover:not(:disabled) { background: #000; }
+  .btn:active:not(:disabled) { transform: scale(.985); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.green { background: var(--accent); } .btn.green:hover:not(:disabled) { background: #174c3b; }
+  .btn.done { background: var(--accent); opacity: 1; }
+  .link { background: none; border: 0; padding: 0; color: var(--accent); font-size: inherit; font-weight: 600; cursor: pointer;
+    text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color .2s; }
+  .link:hover { text-decoration-color: currentColor; }
+  .alt { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: .9rem; color: var(--muted); }
+  .back { display: block; margin: 16px auto 0; background: none; border: 0; color: var(--muted); font-size: .88rem; cursor: pointer; transition: color .2s; }
+  .back:hover { color: var(--ink); }
+  .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: turn .7s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+
+  /* ───────── New voucher row & outer links ───────── */
+  .voucher-row { margin-top: 20px; }
+  .voucher-row .lbl-sm { display: block; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .voucher-box { display: flex; align-items: center; gap: 0; background: var(--field); border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; transition: border-color .2s, box-shadow .25s; }
+  .voucher-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(31, 95, 74, .12); }
+  .voucher-box .icon { padding: 0 10px 0 14px; color: var(--muted); display: flex; align-items: center; }
+  .voucher-box input { flex: 1; border: 0; background: transparent; padding: 14px 12px 14px 0; font-size: .95rem; color: var(--ink); outline: none; text-transform: uppercase; }
+  .voucher-box input::placeholder { color: #b8b0a0; text-transform: none; }
+
+  .connect-btn { display: flex; align-items: center; justify-content: center; width: 100%; margin-top: 14px; padding: 14px 16px;
+    background: #0d4f3a; color: #fff; border: 0; border-radius: 12px; font-size: .95rem; font-weight: 600; cursor: pointer;
+    transition: background .25s, transform .15s var(--ease); }
+  .connect-btn:hover { background: #083c2b; }
+  .connect-btn:active { transform: scale(.985); }
+
+  .outline-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; padding: 13px 16px;
+    background: transparent; color: #0d4f3a; border: 2px solid #0d4f3a; border-radius: 12px; font-size: .9rem; font-weight: 600; cursor: pointer;
+    transition: background .2s, transform .15s var(--ease); }
+  .outline-btn:hover { background: #f0f7f4; }
+  .outline-btn:active { transform: scale(.985); }
+
+  .info-card { margin-top: 18px; background: #f3edf9; border: 1px solid #e2d5ef; border-radius: 12px; padding: 14px 16px; font-size: .86rem; color: #5a3e7a; line-height: 1.5; display: flex; gap: 10px; align-items: flex-start; }
+  .info-card .ic { flex: 0 0 20px; margin-top: 1px; }
+  .info-card a { color: #6b3fa0; font-weight: 600; text-decoration: none; }
+  .info-card a:hover { text-decoration: underline; }
+
+  .issues-row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding: 14px 16px; background: var(--field); border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color .2s; }
+  .issues-row:hover { border-color: #b9b09c; }
+  .issues-row span { font-size: .9rem; color: var(--ink-soft); }
+  .issues-row .arrow { color: var(--muted); font-size: .8rem; transition: transform .3s var(--ease); }
+  .issues-row.open .arrow { transform: rotate(180deg); }
+  .issues-body { max-height: 0; overflow: hidden; transition: max-height .35s var(--ease); font-size: .86rem; color: var(--muted); line-height: 1.6; }
+  .issues-body.open { max-height: 200px; padding-top: 10px; }
+
+  .help-foot { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); text-align: center; font-size: .82rem; color: var(--muted); line-height: 1.7; }
+  .help-foot a { color: #0d4f3a; font-weight: 600; text-decoration: none; }
+  .help-foot a:hover { text-decoration: underline; }
+
+  /* ───────── Payment ───────── */
+  .seg { position: relative; display: grid; grid-template-columns: 1fr 1fr; margin-top: 24px; padding: 4px; background: #ebe5d8; border-radius: 12px; }
+  .seg::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: var(--field); border-radius: 9px;
+    box-shadow: 0 1px 3px rgba(60, 50, 30, .18); transition: transform .35s var(--ease); }
+  .seg[data-i="1"]::before { transform: translateX(100%); }
+  .seg button { position: relative; padding: 10px; background: none; border: 0; font-size: .9rem; font-weight: 600; color: var(--muted); cursor: pointer; transition: color .2s; }
+  .seg button[aria-selected="true"] { color: var(--ink); }
+  .fields { margin-top: 18px; }
+  label.lbl { display: block; margin-bottom: 7px; font-size: .8rem; font-weight: 600; color: var(--ink-soft); }
+  .input { width: 100%; padding: 14px 15px; font-size: 1rem; color: var(--ink); background: var(--field); border: 1.5px solid var(--line); border-radius: 12px; outline: none;
+    transition: border-color .2s, box-shadow .25s, background .25s; }
+  .input::placeholder { color: #b8b0a0; }
+  .input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(31, 95, 74, .12); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .help { margin: 10px 0 0; font-size: .84rem; color: var(--muted); line-height: 1.5; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--line); font-size: .92rem; color: var(--muted); }
+  .total b { font-family: var(--serif); font-size: 1.35rem; font-weight: 500; color: var(--ink); }
+  .status { min-height: 1.4em; margin: 12px 0 0; text-align: center; font-size: .86rem; color: var(--muted); }
+  .status.err { color: var(--bad); animation: swap .3s var(--ease); }
+  .shake { animation: shake .45s cubic-bezier(.36, .07, .19, .97); }
+  @keyframes shake { 15% { transform: translateX(-8px); } 30% { transform: translateX(7px); } 45% { transform: translateX(-5px); } 60% { transform: translateX(4px); } 80% { transform: translateX(-2px); } }
+  .input.bad { border-color: var(--bad); background: var(--bad-soft); }
+
+  /* ───────── Voucher code cells ───────── */
+  .otp { position: relative; margin-top: 26px; }
+  .cells { display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .cell { position: relative; flex: 1; max-width: 41px; aspect-ratio: 41 / 54; display: grid; place-items: center; background: var(--field); border: 1.5px solid var(--line); border-radius: 10px;
+    font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: var(--ink);
+    transition: border-color .2s, background .3s, color .3s, box-shadow .25s, transform .25s var(--ease); }
+  .dash { flex: 0 0 12px; height: 2px; margin: 0 2px; border-radius: 2px; background: #b9b09c; }
+  .cell.filled { border-color: #b9b09c; }
+  .cell.active { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(31, 95, 74, .12); transform: translateY(-2px); }
+  .cell.active::after { content: ""; width: 2px; height: 24px; border-radius: 2px; background: var(--accent); animation: blink 1.05s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .d { display: block; }
+  .d.pop { animation: digit .42s var(--ease); }
+  @keyframes digit { 0% { opacity: 0; transform: translateY(-14px) scale(.6); filter: blur(3px); } 55% { opacity: 1; transform: translateY(2px) scale(1.1); filter: blur(0); } 100% { transform: none; } }
+  .otp-input { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; opacity: 0; border: 0; font-size: 16px; cursor: text; caret-color: transparent; text-transform: uppercase; }
+  .track { height: 3px; margin-top: 18px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar { height: 100%; width: 100%; background: var(--accent); transform: scaleX(var(--p, 0)); transform-origin: left; transition: transform .35s var(--ease), background .3s; }
+  .otp.is-bad .cells { animation: shake .45s cubic-bezier(.36, .07, .19, .97); }
+  .otp.is-bad .cell { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); box-shadow: none; }
+  .otp.is-bad .bar { background: var(--bad); transform: scaleX(1); }
+
+  /* ───────── Verifying ───────── */
+  .center { text-align: center; padding: 14px 0 4px; }
+  .center .wifi { width: 76px; height: 76px; margin: 0 auto 20px; }
+  .center h1 { font-size: 1.6rem; }
+  .steps { margin: 26px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; text-align: left; }
+  .steps li { display: flex; align-items: center; gap: 12px; font-size: .92rem; color: var(--muted); transition: color .3s; }
+  .steps .mk { flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line); display: grid; place-items: center; transition: background .3s, border-color .3s; }
+  .steps .mk svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 18; stroke-dashoffset: 18; transition: stroke-dashoffset .35s .1s var(--ease); }
+  .steps li.done { color: var(--ink); }
+  .steps li.done .mk { background: var(--accent); border-color: var(--accent); }
+  .steps li.done .mk svg { stroke-dashoffset: 0; }
+  .steps li.now .mk { border-color: var(--accent); border-top-color: transparent; animation: turn .8s linear infinite; }
+
+  /* ───────── Success: ticket ───────── */
+  .ticket { position: relative; margin-top: 24px; background: var(--field); border: 1.5px solid var(--line); border-radius: 16px; animation: swap .6s .1s var(--ease) both; }
+  .ticket .top-part { padding: 20px 20px 18px; text-align: center; }
+  .ticket .lb { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .code { display: flex; justify-content: center; margin: 10px 0 6px; font-family: var(--mono); font-size: 1.85rem; font-weight: 600; letter-spacing: .08em; color: var(--accent); }
+  .code span { display: inline-block; animation: digit .5s var(--ease) both; animation-delay: calc(var(--i) * 55ms + 250ms); }
+  .ticket .meta { font-size: .86rem; color: var(--muted); }
+  .perf { position: relative; border-top: 2px dashed var(--line); margin: 0 14px; }
+  .perf::before, .perf::after { content: ""; position: absolute; top: -11px; width: 20px; height: 20px; border-radius: 50%; background: #faf8f2; border: 1.5px solid var(--line); }
+  .perf::before { left: -25px; clip-path: inset(0 0 0 50%); } .perf::after { right: -25px; clip-path: inset(0 50% 0 0); }
+  .ticket .bottom { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px 16px; font-size: .84rem; color: var(--muted); }
+  .ticket .bottom b { color: var(--ink-soft); font-weight: 600; }
+  .conn { display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 14px 16px; border-radius: 12px; background: #ebe5d8; font-size: .92rem; transition: background .4s; }
+  .conn .wifi { width: 28px; height: 28px; flex: 0 0 28px; }
+  .conn.online { background: var(--accent-soft); }
+  .conn .st { font-weight: 600; } .conn.online .st { color: var(--accent); }
+  .conn small { display: block; color: var(--muted); font-weight: 400; font-size: .8rem; }
+
+  .foot { margin: 20px 0 0; text-align: center; font-size: .78rem; color: var(--muted); }
+  .toast { position: fixed; left: 50%; bottom: 28px; z-index: 5; padding: 11px 16px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: .86rem;
+    transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: transform .35s var(--ease), opacity .3s; }
+  .toast.show { transform: translate(-50%, 0); opacity: 1; }
+
+  @media (max-width: 420px) {
+    .inner { padding: 20px 20px 18px; }
+    .hero { margin: -20px -20px 20px; }
+    h1 { font-size: 1.7rem; }
+    .cell { font-size: 1.1rem; border-radius: 8px; }
+    .cells { gap: 4px; }
+    .code { font-size: 1.55rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/>
+        <feColorMatrix values="0 0 0 0 .32  0 0 0 0 .27  0 0 0 0 .2  0 0 0 .55 0"/>
+      </filter>
+    </defs>
+    <g id="topoA" class="drift"></g>
+    <g id="topoB" class="drift b"></g>
+    <rect width="1440" height="900" filter="url(#grain)" opacity=".22"/>
+  </svg>
+</div>
+
+<!-- Reusable Wi-Fi mark -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="wifi-mark" viewBox="0 0 48 48">
+    <path class="a a3" d="M6 17.5a26 26 0 0 1 36 0"/>
+    <path class="a a2" d="M11.5 23.5a18 18 0 0 1 25 0"/>
+    <path class="a a1" d="M17 29.5a10 10 0 0 1 14 0"/>
+    <circle class="dot" cx="24" cy="36" r="2.8"/>
+  </symbol>
+</svg>
+
+<main class="shell">
+  <section class="panel">
+    <div class="progress"><i id="bar"></i></div>
+    <div class="inner">
+
+      <!-- PLANS -->
+      <div class="stage" id="stage-plans">
+
+        <!-- new hero header -->
+        <div class="hero">
+          <svg class="wifi-mark" viewBox="0 0 48 48">
+            <use href="#wifi-mark"/>
+          </svg>
+          <h1>jdoe</h1>
+          <p>Connect to the internet</p>
+        </div>
+
+        <div class="section-label">or purchase a package</div>
+
+        <div class="plans" id="planList" role="radiogroup" aria-label="Access plans">
+          <div class="plan" role="radio" aria-checked="true" data-plan="Daily" data-price="1000" data-hours="24">
+            <span class="txt"><b>Daily</b><small>1 Day</small></span>
+            <span class="price" style="font-size:1rem;margin-right:8px">Ush 1,000</span>
+            <button type="button" class="buy-btn" tabindex="-1">BUY</button>
+          </div>
+          <div class="plan" role="radio" aria-checked="false" data-plan="1 Week" data-price="6000" data-hours="168">
+            <span class="txt"><b>1 Week</b><small>7 Days</small></span>
+            <span class="price" style="font-size:1rem;margin-right:8px">Ush 6,000</span>
+            <button type="button" class="buy-btn" tabindex="-1">BUY</button>
+          </div>
+          <div class="plan" role="radio" aria-checked="false" data-plan="1 Month" data-price="20000" data-hours="720">
+            <span class="txt"><b>1 Month</b><small>1 Month</small></span>
+            <span class="price" style="font-size:1rem;margin-right:8px">Ush 20,000</span>
+            <button type="button" class="buy-btn" tabindex="-1">BUY</button>
+          </div>
+        </div>
+
+        <!-- voucher label & box -->
+        <div class="voucher-row">
+          <span class="lbl-sm">Have a voucher?</span>
+          <div class="voucher-box">
+            <span class="icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </span>
+            <input id="quickVoucher" type="text" placeholder="Enter voucher code" maxlength="9" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+
+        <!-- connect (jumps to voucher or pay) -->
+        <button class="connect-btn" id="toVoucher" type="button">Connect</button>
+
+        <button class="outline-btn" id="findVoucher" type="button">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Already bought? Find your voucher
+        </button>
+
+        <!-- info card -->
+        <div class="info-card">
+          <span class="ic">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </span>
+          <span>Smart TV or Console? <a href="#">Buy for TV</a> / <a href="#">another device</a> or <a href="#">Register here</a></span>
+        </div>
+
+        <!-- issues -->
+        <div class="issues-row" id="issuesToggle">
+          <span>Connection Issues?</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="issues-body" id="issuesBody">
+          If you're having trouble connecting, try moving closer to the access point, restarting your device, or contacting support below.
+        </div>
+
+        <!-- help foot -->
+        <div class="help-foot">
+          Need help? Call <a href="tel:256791346328">256791346328</a><br>
+          Powered by <a href="#">SopraEnt</a> © 2026
+        </div>
+
+        <p class="foot">Secure connection · No browsing data is logged</p>
+      </div>
+
+      <!-- PAYMENT -->
+      <div class="stage" id="stage-payment" hidden>
+        <h1 id="payTitle">Pay for 1 hour</h1>
+        <p class="lede">You'll get a voucher code as soon as payment clears.</p>
+
+        <div class="seg" id="seg" data-i="0" role="tablist" aria-label="Payment method">
+          <button type="button" role="tab" aria-selected="true" data-method="M-Pesa">Mobile money</button>
+          <button type="button" role="tab" aria-selected="false" data-method="Card">Card</button>
+        </div>
+
+        <form id="payForm" class="fields" autocomplete="off" novalidate>
+          <div id="mpesaFields">
+            <label class="lbl" for="phone">Phone number</label>
+            <input class="input" id="phone" type="tel" placeholder="0712 345 678" inputmode="tel" maxlength="16">
+            <p class="help">A prompt will appear on this phone. Enter your PIN to approve.</p>
+          </div>
+          <div id="cardFields" hidden>
+            <label class="lbl" for="cardNum">Card number</label>
+            <input class="input" id="cardNum" type="text" placeholder="4242 4242 4242 4242" inputmode="numeric" maxlength="19" autocomplete="off">
+            <div class="row">
+              <div><label class="lbl" for="exp">Expiry</label><input class="input" id="exp" type="text" placeholder="MM/YY" inputmode="numeric" maxlength="5"></div>
+              <div><label class="lbl" for="cvv">CVV</label><input class="input" id="cvv" type="password" placeholder="•••" inputmode="numeric" maxlength="4"></div>
+            </div>
+          </div>
+
+          <div class="total"><span>Total for <span id="sumPlan">1 hour</span></span><b id="sumPrice">KSh 20</b></div>
+          <button class="btn" type="submit" id="payBtn">Pay KSh 20</button>
+          <p class="status" id="payErr" role="status" aria-live="polite"></p>
+        </form>
+        <button type="button" class="back" id="backToPlans">← Change plan</button>
+        <div class="alt" style="margin-top:14px"><span>Already have a voucher?</span><button class="link" id="toVoucherFromPay" type="button">Enter it</button></div>
+      </div>
+
+      <!-- VOUCHER -->
+      <div class="stage" id="stage-voucher" hidden>
+        <h1>Enter your voucher</h1>
+        <p class="lede">It came by SMS or is printed on your receipt. Looks like <b style="font-family:var(--mono);letter-spacing:.05em">AB12-CD34</b>.</p>
+
+        <form id="voucherForm" autocomplete="off">
+          <div class="otp" id="vOtp">
+            <div class="cells" id="vCells"></div>
+            <div class="track"><div class="bar"></div></div>
+            <input class="otp-input" id="voucherInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="8-character voucher code">
+          </div>
+          <p class="status" id="voucherErr" role="status" aria-live="polite"></p>
+          <button class="btn green" type="submit" id="redeemBtn" disabled style="margin-top:6px">Redeem voucher</button>
+        </form>
+        <button type="button" class="back" id="backFromVoucher">← Back</button>
+      </div>
+
+      <!-- VERIFY -->
+      <div class="stage" id="stage-verify" hidden>
+        <div class="center">
+          <svg class="wifi busy" aria-hidden="true"><use href="#wifi-mark"/></svg>
+          <h1 id="verifyTitle">Checking payment</h1>
+          <p class="lede" id="verifySub">Hang tight, this only takes a moment.</p>
+        </div>
+        <ul class="steps" id="steps">
+          <li><span class="mk"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.6 2.6L10 3.5"/></svg></span><span data-step="1"></span></li>
+          <li><span class="mk"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.6 2.6L10 3.5"/></svg></span><span data-step="2"></span></li>
+          <li><span class="mk"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.6 2.6L10 3.5"/></svg></span><span data-step="3"></span></li>
+          <li><span class="mk"><svg viewBox="0 0 12 12"><path d="M2 6.5l2.6 2.6L10 3.5"/></svg></span><span data-step="4"></span></li>
+        </ul>
+      </div>
+
+      <!-- SUCCESS -->
+      <div class="stage" id="stage-success" hidden>
+        <h1 id="successTitle">You're all set</h1>
+        <p class="lede" id="successSub">Your voucher is ready to use.</p>
+
+        <div class="ticket">
+          <div class="top-part">
+            <div class="lb" id="voucherLbl">Your voucher</div>
+            <div class="code" id="voucherCode" aria-live="polite">----</div>
+            <div class="meta" id="voucherMeta">1 hour · KSh 20</div>
+          </div>
+          <div class="perf"></div>
+          <div class="bottom">
+            <span>Valid until <b id="validUntil">—</b></span>
+            <button class="link" id="copyBtn" type="button">Copy code</button>
+          </div>
+        </div>
+
+        <div class="conn" id="conn">
+          <svg class="wifi" id="connIcon" aria-hidden="true"><use href="#wifi-mark"/></svg>
+          <div><span class="st" id="connStatus">Not connected yet</span><small id="connSub">Tap connect to start your session</small></div>
+        </div>
+        <button class="btn green" id="connectBtn" type="button">Connect to internet</button>
+        <button type="button" class="back" id="backFromSuccess">← Back to start</button>
+      </div>
+
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  /* ═════════ Background contours ═════════ */
+  (function topo() {
+    const NS = 'http://www.w3.org/2000/svg';
+    [{ g: 'topoA', cx: 1180, cy: 270, n: 16, d: 'M1180 140 C1260 128 1352 190 1362 282 C1372 374 1290 436 1198 446 C1106 456 1012 404 996 312 C980 220 1100 152 1180 140 Z' },
+     { g: 'topoB', cx: 230, cy: 720, n: 14, d: 'M230 590 C320 570 412 640 408 732 C404 824 312 874 226 864 C140 854 66 794 70 714 C74 634 150 606 230 590 Z' }].forEach(c => {
+      const g = $(c.g);
+      for (let k = 0; k < c.n; k++) {
+        const p = document.createElementNS(NS, 'path');
+        p.setAttribute('d', c.d);
+        p.setAttribute('transform', `translate(${c.cx} ${c.cy}) rotate(${k * 3.2}) scale(${0.14 + k * 0.125}) translate(${-c.cx} ${-c.cy})`);
+        p.setAttribute('fill', 'none'); p.setAttribute('stroke', '#1f5f4a');
+        p.setAttribute('stroke-width', k % 4 === 0 ? '1.6' : '1');
+        p.setAttribute('stroke-opacity', (0.28 - (k / c.n) * 0.2).toFixed(3));
+        p.setAttribute('vector-effect', 'non-scaling-stroke');
+        g.appendChild(p);
+      }
+    });
+  })();
+
+  /* ═════════ State + navigation ═════════ */
+  const state = { plan: 'Daily', price: 1000, hours: 24, method: 'M-Pesa', voucher: null, flow: 'buy' };
+  const STAGES = ['plans', 'payment', 'voucher', 'verify', 'success'];
+
+  function go(name, progress) {
+    STAGES.forEach(s => { $('stage-' + s).hidden = s !== name; });
+    const el = $('stage-' + name);
+    el.classList.remove('stage'); void el.offsetWidth; el.classList.add('stage');
+    $('bar').style.transform = `scaleX(${progress / 100})`;
+    if (name === 'voucher') setTimeout(() => $('voucherInput').focus(), 60);
+    if (name === 'payment') setTimeout(() => (state.method === 'M-Pesa' ? $('phone') : $('cardNum')).focus(), 60);
+  }
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  const hoursLabel = h => (h === 24 ? 'full day' : h === 168 ? '1 week' : h === 720 ? '1 month' : h === 1 ? '1 hour' : h + ' hours');
+
+  /* ═════════ Plans ═════════ */
+  document.querySelectorAll('.plan').forEach(p => p.addEventListener('click', (e) => {
+    // ignore clicks on the inner buy button (it has tabindex -1 so it won't focus)
+    if (e.target.closest('.buy-btn')) return;
+    document.querySelectorAll('.plan').forEach(x => x.setAttribute('aria-checked', 'false'));
+    p.setAttribute('aria-checked', 'true');
+    state.plan = p.dataset.plan; state.price = +p.dataset.price; state.hours = +p.dataset.hours;
+  }));
+
+  // buy buttons trigger the payment flow directly
+  document.querySelectorAll('.buy-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const plan = btn.closest('.plan');
+      if (plan) {
+        document.querySelectorAll('.plan').forEach(x => x.setAttribute('aria-checked', 'false'));
+        plan.setAttribute('aria-checked', 'true');
+        state.plan = plan.dataset.plan; state.price = +plan.dataset.price; state.hours = +plan.dataset.hours;
+        // go to payment
+        state.flow = 'buy';
+        $('payTitle').textContent = 'Pay for ' + hoursLabel(state.hours);
+        $('sumPlan').textContent = hoursLabel(state.hours);
+        $('sumPrice').textContent = 'Ush ' + state.price.toLocaleString();
+        $('payBtn').textContent = 'Pay Ush ' + state.price.toLocaleString();
+        go('payment', 30);
+      }
+    });
+  });
+
+  $('toVoucher').onclick = () => { vSet(''); $('voucherErr').textContent = ''; go('voucher', 30); };
+  $('toVoucherFromPay').onclick = () => { vSet(''); $('voucherErr').textContent = ''; go('voucher', 30); };
+  $('findVoucher').onclick = () => { vSet(''); $('voucherErr').textContent = ''; go('voucher', 30); };
+  $('backToPlans').onclick = () => go('plans', 0);
+  $('backFromVoucher').onclick = () => go('plans', 0);
+
+  // quick voucher input — just a simple field that triggers voucher flow when submitted via the connect button
+  $('quickVoucher').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const raw = $('quickVoucher').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+      if (raw.length === 8) {
+        state.flow = 'redeem';
+        state.voucher = raw.slice(0, 4) + '-' + raw.slice(4);
+        startVerification();
+      } else {
+        toast('Enter an 8-character voucher code');
+        $('quickVoucher').focus();
+      }
+    }
+  });
+
+  // issues toggle
+  $('issuesToggle').onclick = () => {
+    $('issuesToggle').classList.toggle('open');
+    $('issuesBody').classList.toggle('open');
+  };
+
+  /* ═════════ Payment ═════════ */
+  const seg = $('seg');
+  seg.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => {
+    seg.dataset.i = i;
+    seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', x === b));
+    state.method = b.dataset.method;
+    $('mpesaFields').hidden = state.method !== 'M-Pesa';
+    $('cardFields').hidden = state.method !== 'Card';
+    $('payErr').textContent = ''; $('payErr').classList.remove('err');
+    (state.method === 'M-Pesa' ? $('phone') : $('cardNum')).focus();
+  }));
+
+  $('phone').addEventListener('input', e => {
+    const raw = e.target.value, plus = raw.trim().startsWith('+');
+    const d = raw.replace(/\D/g, '').slice(0, 12);
+    e.target.value = plus ? '+' + d : d.startsWith('0') ? [d.slice(0, 4), d.slice(4, 7), d.slice(7, 10)].filter(Boolean).join(' ') : d;
+  });
+  $('cardNum').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim(); });
+  $('exp').addEventListener('input', e => { let v = e.target.value.replace(/\D/g, '').slice(0, 4); if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2); e.target.value = v; });
+  $('cvv').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); });
+
+  function payProblem() {
+    if (state.method === 'M-Pesa') {
+      const n = $('phone').value.replace(/\D/g, '').length;
+      return n >= 9 && n <= 12 ? null : ['phone', 'Enter the phone number that should receive the payment prompt.'];
+    }
+    if ($('cardNum').value.replace(/\s/g, '').length !== 16) return ['cardNum', 'Check the card number, it should be 16 digits.'];
+    if (!/^\d{2}\/\d{2}$/.test($('exp').value)) return ['exp', 'Expiry should look like 08/28.'];
+    if ($('cvv').value.length < 3) return ['cvv', 'Enter the 3 or 4 digit security code.'];
+    return null;
+  }
+  $('payForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const bad = payProblem();
+    if (bad) {
+      const f = $(bad[0]); f.classList.add('bad', 'shake'); f.focus();
+      $('payErr').textContent = bad[1]; $('payErr').classList.add('err');
+      setTimeout(() => f.classList.remove('shake'), 500);
+      return;
+    }
+    state.flow = 'buy';
+    startVerification();
+  });
+  document.querySelectorAll('#payForm .input').forEach(i => i.addEventListener('input', () => {
+    i.classList.remove('bad'); $('payErr').textContent = ''; $('payErr').classList.remove('err');
+  }));
+
+  /* ═════════ Voucher: segmented code input ═════════ */
+  const vInput = $('voucherInput'), vOtp = $('vOtp'), vCells = [];
+  (function buildCells() {
+    const wrap = $('vCells');
+    for (let i = 0; i < 8; i++) {
+      if (i === 4) { const d = document.createElement('span'); d.className = 'dash'; wrap.appendChild(d); }
+      const c = document.createElement('div'); c.className = 'cell'; c.innerHTML = '<span class="d"></span>';
+      wrap.appendChild(c); vCells.push(c);
+    }
+  })();
+  function vRender() {
+    const v = vInput.value;
+    vCells.forEach((c, i) => {
+      const d = c.firstChild, ch = v[i] || '';
+      if (d.textContent !== ch) {
+        d.textContent = ch; c.classList.toggle('filled', !!ch);
+        if (ch) { d.classList.remove('pop'); void d.offsetWidth; d.classList.add('pop'); }
+      }
+      c.classList.toggle('active', document.activeElement === vInput && v.length < 8 && i === v.length);
+    });
+    vOtp.style.setProperty('--p', v.length / 8);
+    $('redeemBtn').disabled = v.length !== 8;
+  }
+  function vSet(val) { vInput.value = val; vRender(); }
+  const vToEnd = () => { const n = vInput.value.length; try { vInput.setSelectionRange(n, n); } catch (e) {} };
+  vInput.addEventListener('input', () => {
+    vInput.value = vInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    vOtp.classList.remove('is-bad'); $('voucherErr').textContent = ''; $('voucherErr').classList.remove('err');
+    vRender();
+  });
+  vInput.addEventListener('focus', () => { vRender(); vToEnd(); });
+  vInput.addEventListener('blur', vRender);
+  vInput.addEventListener('click', vToEnd);
+  vInput.addEventListener('keydown', e => { if (e.key.startsWith('Arrow') || e.key === 'Home') e.preventDefault(); });
+  $('vCells').addEventListener('click', () => vInput.focus());
+
+  $('voucherForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const raw = vInput.value;
+    if (raw.length !== 8) {
+      vOtp.classList.add('is-bad'); $('voucherErr').textContent = 'A voucher has 8 characters, e.g. AB12-CD34.'; $('voucherErr').classList.add('err');
+      setTimeout(() => vOtp.classList.remove('is-bad'), 800);
+      return;
+    }
+    state.flow = 'redeem';
+    state.voucher = raw.slice(0, 4) + '-' + raw.slice(4);
+    startVerification();
+  });
+
+  /* ═════════ Verification (simulated, swap for real API calls) ═════════ */
+  const COPY = {
+    buy:    { title: 'Checking payment',  sub: 'Hang tight, this only takes a moment.', steps: ['Request sent to payment provider', 'Waiting for your approval', 'Confirming the transaction', 'Creating your voucher'] },
+    redeem: { title: 'Checking voucher',  sub: 'Looking up your code.',                 steps: ['Code received', 'Searching voucher records', 'Voucher found, activating', 'Preparing your access'] }
+  };
+
+  async function startVerification() {
+    const c = COPY[state.flow];
+    $('verifyTitle').textContent = c.title; $('verifySub').textContent = c.sub;
+    c.steps.forEach((t, i) => { document.querySelector(`[data-step="${i + 1}"]`).textContent = t; });
+    const lis = [...document.querySelectorAll('#steps li')];
+    lis.forEach(li => li.classList.remove('done', 'now'));
+    go('verify', 55);
+
+    await sleep(500);
+    for (let i = 0; i < lis.length; i++) {
+      lis[i].classList.add('now');
+      await sleep(850);
+      lis[i].classList.remove('now'); lis[i].classList.add('done');
+      $('bar').style.transform = `scaleX(${(55 + (i + 1) * 10) / 100})`;
+    }
+    await sleep(600);
+    finishFlow();
+  }
+
+  /* ═════════ Success ═════════ */
+  function generateVoucher() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const pick = n => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return pick(4) + '-' + pick(4);
+  }
+  function finishFlow() {
+    const buy = state.flow === 'buy';
+    if (buy) {
+      state.voucher = generateVoucher();
+      $('successTitle').textContent = 'Payment received';
+      $('successSub').textContent = 'Your voucher is ready to use.';
+      $('voucherLbl').textContent = 'Your voucher';
+      $('voucherMeta').textContent = hoursLabel(state.hours) + ' · Ush ' + state.price.toLocaleString();
+    } else {
+      $('successTitle').textContent = 'Voucher accepted';
+      $('successSub').textContent = 'Your access is ready to switch on.';
+      $('voucherLbl').textContent = 'Active voucher';
+      $('voucherMeta').textContent = 'Access voucher · verified';
+    }
+    const hours = buy ? state.hours : 1;
+    $('validUntil').textContent = new Date(Date.now() + hours * 3600e3).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+    $('voucherCode').innerHTML = [...state.voucher].map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
+    resetConnect();
+    go('success', 100);
+  }
+
+  $('copyBtn').onclick = async () => {
+    try { await navigator.clipboard.writeText(state.voucher); toast('Code copied'); $('copyBtn').textContent = 'Copied'; }
+    catch { toast(state.voucher); }
+    setTimeout(() => { $('copyBtn').textContent = 'Copy code'; }, 1600);
+  };
+
+  function resetConnect() {
+    const ic = $('connIcon'); ic.classList.remove('busy', 'on');
+    $('conn').classList.remove('online');
+    $('connStatus').textContent = 'Not connected yet'; $('connSub').textContent = 'Tap connect to start your session';
+    const b = $('connectBtn'); b.disabled = false; b.classList.remove('done'); b.textContent = 'Connect to internet';
+  }
+  $('connectBtn').onclick = async () => {
+    const b = $('connectBtn'), ic = $('connIcon');
+    b.disabled = true; b.innerHTML = '<span class="spin"></span> Connecting';
+    ic.classList.add('busy'); $('connStatus').textContent = 'Connecting…'; $('connSub').textContent = 'Authorising this device';
+    await sleep(1800);
+    ic.classList.remove('busy'); ic.classList.add('on');
+    $('conn').classList.add('online');
+    $('connStatus').textContent = "You're online"; $('connSub').textContent = 'Enjoy your session';
+    b.textContent = 'Connected'; b.classList.add('done');
+  };
+
+  $('backFromSuccess').onclick = () => {
+    state.flow = 'buy'; state.voucher = null; vSet(''); resetConnect(); go('plans', 0);
+  };
+
+  go('plans', 0);
+})();
+</script>
+</body>
+</html>

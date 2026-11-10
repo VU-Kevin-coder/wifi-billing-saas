@@ -141,14 +141,12 @@ class RouterConnectionService
     {
         $key = 'lan-demo-router-'.$router->getKey();
 
-        config([
-            "mikrotik.routers.{$key}" => [
-                'host' => $router->management_ip,
-                'username' => $router->api_username,
-                'password' => $router->api_password,
-                'port' => (int) ($router->api_port ?: 8728),
-                'timeout' => 5,
-            ],
+        DynamicMikrotikRouterConfig::set($key, [
+            'host' => $router->management_ip,
+            'username' => $router->api_username,
+            'password' => $router->api_password,
+            'port' => (int) ($router->api_port ?: 8728),
+            'timeout' => 5,
         ]);
 
         return $key;

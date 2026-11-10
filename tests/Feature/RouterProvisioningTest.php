@@ -6,12 +6,14 @@ use App\Models\Package;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\DynamicMikrotikRouterConfig;
 use App\Services\RouterConnectionService;
 use App\Services\RouterProvisioningService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
+use ZillEAli\MikrotikLaravel\MikrotikManager;
 use ZillEAli\MikrotikLaravel\Testing\MikrotikFake;
 
 class RouterProvisioningTest extends TestCase
@@ -93,6 +95,24 @@ class RouterProvisioningTest extends TestCase
         $this->assertStringContainsString('/ip hotspot user profile add name="Daily_Pass" rate-limit="15M/15M" shared-users=2', $script);
     }
 
+    public function test_dynamic_router_configuration_refreshes_the_resolved_manager(): void
+    {
+        $original = app(MikrotikManager::class);
+        $key = 'test-router-'.$this->router->id;
+
+        DynamicMikrotikRouterConfig::set($key, [
+            'host' => $this->router->management_ip,
+            'username' => $this->router->api_username,
+            'password' => $this->router->api_password,
+            'port' => $this->router->api_port,
+        ]);
+
+        $manager = app(MikrotikManager::class);
+
+        $this->assertNotSame($original, $manager);
+        $this->assertContains($key, $manager->getRouterNames());
+    }
+
     public function test_operator_can_download_provisioning_script(): void
     {
         $response = $this->actingAs($this->operatorAdmin)
@@ -137,6 +157,8 @@ class RouterProvisioningTest extends TestCase
 
     public function test_automated_provisioning_deploys_to_mikrotik_via_api(): void
     {
+        $key = 'provision-router-'.$this->router->id;
+        config(["mikrotik.routers.{$key}" => []]);
         $fake = MikrotikFake::fake([
             '/system/resource/print' => [
                 ['uptime' => '5d', 'cpu-load' => 10, 'free-memory' => 100000000, 'total-memory' => 256000000],

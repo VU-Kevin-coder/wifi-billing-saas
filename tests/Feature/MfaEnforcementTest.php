@@ -137,6 +137,22 @@ class MfaEnforcementTest extends TestCase
             ->assertRedirect(route('two-factor.challenge'));
     }
 
+    public function test_mfa_challenge_supports_authenticator_and_recovery_code_modes(): void
+    {
+        $this->enableMfa($this->platformAdmin);
+
+        $this->actingAs($this->platformAdmin)
+            ->get(route('two-factor.challenge'))
+            ->assertOk()
+            ->assertSee('Authenticator code')
+            ->assertSee('Use a recovery code');
+
+        $this->get(route('two-factor.challenge', ['mode' => 'recovery']))
+            ->assertOk()
+            ->assertSee('Recovery code')
+            ->assertSee('Use an authenticator code');
+    }
+
     public function test_platform_admin_with_verified_mfa_can_use_the_platform(): void
     {
         $this->enableMfa($this->platformAdmin);

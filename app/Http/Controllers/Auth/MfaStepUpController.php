@@ -19,7 +19,11 @@ class MfaStepUpController extends Controller
                 ->with('error', 'Enable Two-Factor Authentication to perform this action.');
         }
 
-        return view('auth.mfa-step-up');
+        $mfaMode = $request->session()->get('mfa_mode', $request->query('mode', 'totp'));
+
+        return view('auth.mfa-step-up', [
+            'mfaMode' => $mfaMode === 'recovery' ? 'recovery' : 'totp',
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -40,7 +44,7 @@ class MfaStepUpController extends Controller
 
             return back()->withErrors([
                 'code' => 'The authentication or recovery code is invalid.',
-            ]);
+            ])->with('mfa_mode', preg_match('/^\d{6}$/', $code) === 1 ? 'totp' : 'recovery');
         }
 
         MfaSession::markVerified($request);

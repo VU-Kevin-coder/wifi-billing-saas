@@ -64,14 +64,12 @@ class RouterService
     protected function getHotspotManager()
     {
         if ($this->tenant && $this->tenant->mikrotik_host) {
-            config([
-                "mikrotik.routers.{$this->tenant->slug}" => [
-                    'host' => $this->tenant->mikrotik_host,
-                    'username' => $this->tenant->mikrotik_username ?? 'admin',
-                    'password' => $this->tenant->mikrotik_password ?? '',
-                    'port' => (int) ($this->tenant->mikrotik_port ?? 8728),
-                    'timeout' => 10,
-                ],
+            DynamicMikrotikRouterConfig::set($this->tenant->slug, [
+                'host' => $this->tenant->mikrotik_host,
+                'username' => $this->tenant->mikrotik_username ?? 'admin',
+                'password' => $this->tenant->mikrotik_password ?? '',
+                'port' => (int) ($this->tenant->mikrotik_port ?? 8728),
+                'timeout' => 10,
             ]);
 
             return MikroTik::router($this->tenant->slug)->hotspot();

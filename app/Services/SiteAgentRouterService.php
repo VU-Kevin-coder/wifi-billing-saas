@@ -18,13 +18,13 @@ class SiteAgentRouterService
         }
 
         $key = 'site-agent-router-'.$routerId;
-        config(["mikrotik.routers.{$key}" => [
+        DynamicMikrotikRouterConfig::set($key, [
             'host' => $router['host'],
             'username' => $router['username'],
             'password' => $router['password'],
             'port' => (int) ($router['port'] ?? 8728),
             'timeout' => 5,
-        ]]);
+        ]);
         $hotspot = MikroTik::router($key)->hotspot();
         $username = $payload['username'] ?? null;
         if (! is_string($username) || $username === '') {

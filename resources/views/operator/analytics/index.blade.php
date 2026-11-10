@@ -30,7 +30,7 @@
                 <h2 class="font-bold text-gray-900">Revenue per day</h2>
                 <div class="mt-4 flex h-40 items-end gap-1 overflow-x-auto" role="img" aria-label="Daily revenue bars">
                     @foreach ($daily as $day)
-                        <div class="flex min-w-[10px] flex-1 flex-col items-center justify-end" title="{{ $day['label'] }}: {{ $currency }} {{ number_format($day['revenue'], 0) }} ({{ $day['count'] }} vouchers)">
+                        <div class="flex min-w-[10px] flex-1 h-full flex-col items-center justify-end" title="{{ $day['label'] }}: {{ $currency }} {{ number_format($day['revenue'], 0) }} ({{ $day['count'] }} vouchers)">
                             <div class="w-full rounded-t bg-blue-500" style="height: {{ max(1, round($day['revenue'] / $maxDaily * 100)) }}%"></div>
                         </div>
                     @endforeach

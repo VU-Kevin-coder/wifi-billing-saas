@@ -133,14 +133,12 @@ class RouterProvisioningService
         }
 
         $key = 'provision-router-'.$router->id;
-        config([
-            "mikrotik.routers.{$key}" => [
-                'host' => $router->management_ip,
-                'username' => $router->api_username,
-                'password' => $router->api_password,
-                'port' => (int) ($router->api_port ?: 8728),
-                'timeout' => 8,
-            ],
+        DynamicMikrotikRouterConfig::set($key, [
+            'host' => $router->management_ip,
+            'username' => $router->api_username,
+            'password' => $router->api_password,
+            'port' => (int) ($router->api_port ?: 8728),
+            'timeout' => 8,
         ]);
 
         try {

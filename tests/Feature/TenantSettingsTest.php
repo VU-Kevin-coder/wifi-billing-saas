@@ -156,6 +156,12 @@ class TenantSettingsTest extends TestCase
             ->get('http://acme.localhost/operator/settings?tab=sms')
             ->assertOk()
             ->assertSee('SMS Gateway Configuration')
+            ->assertSee('name="sms_enabled"', false)
+            ->assertSee('name="notify_expiry_sms_reminder"', false)
+            ->assertSee('name="notify_expiry_reminder_mins"', false)
+            ->assertSee('min="1" max="43200"', false)
+            ->assertSee('name="template_expiry_reminder"', false)
+            ->assertSee('@company_name, @package_name, @hours_left, @expiry_date, @portal_url, @support_number')
             ->assertSee('aria-current="page"', false)
             ->assertDontSee('sms-secret-value');
 
@@ -169,8 +175,8 @@ class TenantSettingsTest extends TestCase
         $this->actingAs($operator)
             ->get('http://acme.localhost/operator/settings?tab=notifications')
             ->assertOk()
-            ->assertSee('Expiry Reminder Notifications')
-            ->assertSee('name="notify_expiry_sms_reminder"', false);
+            ->assertSee('Voucher and Payment Notifications')
+            ->assertDontSee('name="notify_expiry_sms_reminder"', false);
 
         $this->actingAs($operator)
             ->put('http://acme.localhost/operator/settings/sms', [
@@ -178,6 +184,9 @@ class TenantSettingsTest extends TestCase
                 'sms_gateway' => 'africastalking',
                 'sms_sender_id' => 'ACME',
                 'sms_api_key' => '',
+                'notify_expiry_sms_reminder' => '1',
+                'notify_expiry_reminder_mins' => '90',
+                'template_expiry_reminder' => 'Hi @company_name: @package_name expires @expiry_date. @hours_left left. Renew @portal_url Help @support_number',
             ])
             ->assertRedirect(route('operator.settings.index', [
                 'tenant' => $tenant->slug,
@@ -200,10 +209,8 @@ class TenantSettingsTest extends TestCase
 
         $this->actingAs($operator)
             ->put('http://acme.localhost/operator/settings/notifications', [
-                'notify_expiry_reminder_mins' => 60,
                 'template_voucher' => 'Voucher: @password',
                 'template_expiry' => 'Expired: @package_name',
-                'template_expiry_reminder' => 'Expires in @hours_left',
                 'notify_voucher_sms' => '1',
                 'notify_receipt_sms' => '1',
             ])
@@ -227,9 +234,27 @@ class TenantSettingsTest extends TestCase
         $this->assertFalse($settings['notify_credentials_sms']);
         $this->assertTrue($settings['notify_receipt_sms']);
         $this->assertFalse($settings['notify_expiry_sms']);
-        $this->assertFalse($settings['notify_expiry_sms_reminder']);
-        $this->assertSame(60, $settings['notify_expiry_reminder_mins']);
+        $this->assertTrue($settings['notify_expiry_sms_reminder']);
+        $this->assertSame(90, $settings['notify_expiry_reminder_mins']);
+        $this->assertSame('Hi @company_name: @package_name expires @expiry_date. @hours_left left. Renew @portal_url Help @support_number', $settings['template_expiry_reminder']);
         $this->assertSame('Voucher: @password', $settings['template_voucher']);
+
+        $this->actingAs($operator)
+            ->put('http://acme.localhost/operator/settings/sms', [
+                'sms_enabled' => '1',
+                'sms_gateway' => 'africastalking',
+                'sms_sender_id' => 'ACME',
+                'notify_expiry_sms_reminder' => '0',
+                'notify_expiry_reminder_mins' => '1440',
+                'template_expiry_reminder' => $settings['template_expiry_reminder'],
+            ])
+            ->assertRedirect(route('operator.settings.index', [
+                'tenant' => $tenant->slug,
+                'tab' => 'sms',
+            ]));
+
+        $this->assertFalse($tenant->fresh()->settings['notify_expiry_sms_reminder']);
+        $this->assertSame(1440, $tenant->fresh()->settings['notify_expiry_reminder_mins']);
     }
 
     public function test_operator_can_configure_workspace_two_factor_enforcement(): void
@@ -283,12 +308,37 @@ class TenantSettingsTest extends TestCase
             'settings' => [
                 'brand_name' => 'Acme Networks',
                 'logo_path' => 'logos/acme-logo.png',
+                'portal_title' => 'Acme Guest Wi-Fi',
+                'portal_subtitle' => 'Fast, reliable guest access',
+                'primary_color' => '#123456',
             ],
         ]);
 
         $this->get('http://acme.localhost/portal')
             ->assertOk()
             ->assertSee('storage/logos/acme-logo.png')
-            ->assertSee('Acme Networks logo');
+            ->assertSee('Acme Networks logo')
+            ->assertSee('Acme Guest Wi-Fi')
+            ->assertSee('Fast, reliable guest access')
+            ->assertSee('--accent: #123456', false)
+            ->assertSee('id="voucher-checking"', false)
+            ->assertSee('Searching voucher records')
+            ->assertSee('Voucher found, activating')
+            ->assertSee('flex: 0 0 20px', false);
+    }
+
+    public function test_captive_portal_uses_the_dynamic_fallback_when_no_logo_is_configured(): void
+    {
+        Tenant::create([
+            'name' => 'Acme Wi-Fi',
+            'slug' => 'acme',
+            'settings' => ['primary_color' => '#123456'],
+        ]);
+
+        $this->get('http://acme.localhost/portal')
+            ->assertOk()
+            ->assertSee('portal-logo-fallback', false)
+            ->assertSee('Acme Wi-Fi')
+            ->assertSee('--accent: #123456', false);
     }
 }
