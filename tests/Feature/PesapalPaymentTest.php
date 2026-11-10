@@ -101,6 +101,7 @@ class PesapalPaymentTest extends TestCase
         $response = $this->post(route('portal.direct.purchase', ['tenant' => $this->tenant->slug]), [
             'package_id' => $this->package->id,
             'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
         ]);
 
         $response->assertRedirect('https://cybqa.pesapal.com/pesapalv3/checkout?orderTrackingId=trk-12345-67890');

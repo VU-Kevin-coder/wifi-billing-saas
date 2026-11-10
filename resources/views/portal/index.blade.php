@@ -6,7 +6,8 @@
     <title>{{ $tenant->name }} - Connect</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
-    @vite(['resources/css/public.css', 'resources/js/public.js'])
+    @vite('resources/css/public.css')
+    @vite('resources/js/public.js')
     <style>
         :root {
             --primary: {{ $tenant->settings['primary_color'] ?? '#3B82F6' }};
