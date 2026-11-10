@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Auth\TenantAwareEloquentUserProvider;
 use App\Models\AuditLog;
+use App\Models\User;
 use App\Services\PlatformMailService;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
@@ -16,6 +17,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
@@ -32,6 +34,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Gate::define('viewPulse', fn (User $user): bool => $user->isPlatformAdmin());
+
         Auth::provider('tenant-aware-eloquent', function ($app, array $config) {
             return new TenantAwareEloquentUserProvider(
                 $app['hash'],

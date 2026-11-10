@@ -41,3 +41,9 @@ $adjustmentMinutes = max(1, (int) Policy::get('schedule.adjustment_expiry_minute
 Schedule::command('adjustments:expire')
     ->cron("*/{$adjustmentMinutes} * * * *")
     ->withoutOverlapping();
+
+if (config('pulse.enabled')) {
+    Schedule::command('pulse:check --once')
+        ->everyMinute()
+        ->withoutOverlapping();
+}
