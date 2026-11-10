@@ -33,7 +33,7 @@
 <body>
     <main class="portal-card">
         @include('portal.partials.brand')
-        <h1>Check your plan</h1>
+        <h1>Check my plan</h1>
         <p class="lede">Enter the voucher code you used to connect. We’ll find the matching plan so you can check its status or renew.</p>
 
         @if ($errors->any())
