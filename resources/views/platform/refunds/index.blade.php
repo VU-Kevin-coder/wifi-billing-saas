@@ -37,13 +37,13 @@
                                     <td class="px-4 py-3">{{ $currency }} {{ number_format($refund->amount, 0) }}<br><span class="text-xs text-gray-500">of {{ number_format($refund->transaction?->amount ?? 0, 0) }}{{ $refund->revoke_access ? ', remove access' : '' }}</span></td>
                                     <td class="px-4 py-3">{{ $refund->reason }}</td>
                                     <td class="px-4 py-3">
-                                        <form method="POST" action="{{ route('platform.refunds.approve', $refund->id) }}" class="mb-2 flex items-center gap-2">
+                                        <form method="POST" action="{{ route('platform.refunds.approve', $refund->id) }}" class="mb-2 flex items-center gap-2" data-confirm-action="Approve this refund and issue the recorded payout?">
                                             @csrf
                                             <label class="sr-only" for="payout-{{ $refund->id }}">Payout reference</label>
                                             <input id="payout-{{ $refund->id }}" name="payout_reference" type="text" required minlength="3" maxlength="100" placeholder="Provider payout reference" class="w-52 rounded-lg border border-gray-300 px-2 py-1 text-sm">
                                             <button type="submit" class="rounded-lg bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700">Approve</button>
                                         </form>
-                                        <form method="POST" action="{{ route('platform.refunds.reject', $refund->id) }}" class="flex items-center gap-2">
+                                        <form method="POST" action="{{ route('platform.refunds.reject', $refund->id) }}" class="flex items-center gap-2" data-confirm-action="Reject this refund request?">
                                             @csrf
                                             <label class="sr-only" for="note-{{ $refund->id }}">Note</label>
                                             <input id="note-{{ $refund->id }}" name="note" type="text" maxlength="500" placeholder="Reason for rejecting (optional)" class="w-52 rounded-lg border border-gray-300 px-2 py-1 text-sm">

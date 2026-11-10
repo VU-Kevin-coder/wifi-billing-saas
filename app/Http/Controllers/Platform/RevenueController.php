@@ -7,11 +7,17 @@ use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
+use App\Models\User;
+use App\Notifications\WithdrawalApproved;
+use App\Notifications\WithdrawalRejected;
 use App\Services\FlutterwaveWithdrawalService;
 use App\Services\Policy\AdjustmentService;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Throwable;
 
 class RevenueController extends Controller
 {
@@ -77,6 +83,8 @@ class RevenueController extends Controller
             return back()->withErrors(['error' => $result['message']]);
         }
 
+        $this->notifyOperatorAdmins($transaction, true);
+
         return back()->with('status', $result['message']);
     }
 
@@ -118,8 +126,44 @@ class RevenueController extends Controller
             'reference' => $transaction->reference,
             'amount' => (float) $transaction->amount,
         ]);
+        $this->notifyOperatorAdmins($transaction, false);
 
         return back()->with('status', 'Withdrawal rejected. Funds returned to operator wallet.');
+    }
+
+    private function notifyOperatorAdmins(Transaction $transaction, bool $approved): void
+    {
+        try {
+            $tenant = Tenant::query()->find($transaction->tenant_id);
+            if (! $tenant) {
+                Log::warning('Unable to notify operator admins about a withdrawal without a tenant.', [
+                    'withdrawal_id' => $transaction->id,
+                ]);
+
+                return;
+            }
+
+            $admins = User::withoutTenancy()
+                ->where('tenant_id', $tenant->id)
+                ->role('operator_admin')
+                ->get();
+
+            if ($admins->isEmpty()) {
+                return;
+            }
+
+            $amount = PlatformSetting::get('currency', 'UGX').' '.number_format((float) $transaction->amount);
+            $url = route('operator.wallet.index', ['tenant' => $tenant->slug]);
+            $notification = $approved
+                ? new WithdrawalApproved((int) $tenant->id, $amount, $transaction->reference, $url)
+                : new WithdrawalRejected((int) $tenant->id, $amount, $transaction->reference, $url);
+            Notification::send($admins, $notification);
+        } catch (Throwable $exception) {
+            Log::error('Unable to notify operator admins about a withdrawal decision.', [
+                'withdrawal_id' => $transaction->id,
+                'exception' => $exception::class,
+            ]);
+        }
     }
 
     public function adjustBalance(Request $request, Tenant $tenant, AdjustmentService $service)

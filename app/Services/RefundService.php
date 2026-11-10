@@ -252,7 +252,7 @@ class RefundService
 
             $url = null;
             try {
-                $url = route('platform.refunds.index');
+                $url = rtrim((string) config('app.url'), '/').route('platform.refunds.index', [], false);
             } catch (Throwable) {
             }
 
@@ -263,6 +263,7 @@ class RefundService
                 $sale?->reference ?? '#'.$refund->transaction_id,
                 $refund->reason,
                 $url,
+                (int) $refund->tenant_id,
             ));
         } catch (Throwable $exception) {
             Log::error('Unable to notify platform admins of a refund request.', ['exception' => $exception::class]);

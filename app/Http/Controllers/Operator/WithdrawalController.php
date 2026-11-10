@@ -7,13 +7,18 @@ use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
+use App\Models\User;
+use App\Notifications\WithdrawalRequested;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
+use Throwable;
 
 class WithdrawalController extends Controller
 {
@@ -50,7 +55,7 @@ class WithdrawalController extends Controller
             return back()->withErrors(['password' => 'The provided password does not match our records.']);
         }
 
-        $error = DB::transaction(function () use ($tenant, $request, $currency, $limit) {
+        $result = DB::transaction(function () use ($tenant, $request, $currency, $limit): Transaction|string {
             $lockedTenant = Tenant::query()->lockForUpdate()->findOrFail($tenant->id);
             $existingPending = Transaction::where('tenant_id', $lockedTenant->id)
                 ->where('type', 'withdrawal')
@@ -92,11 +97,27 @@ class WithdrawalController extends Controller
                 'destination_phone' => $request->phone,
             ], auth()->user(), $lockedTenant);
 
-            return null;
+            return $withdrawal;
         });
 
-        if ($error) {
-            return back()->withErrors(['amount' => $error]);
+        if (is_string($result)) {
+            return back()->withErrors(['amount' => $result]);
+        }
+
+        try {
+            $admins = User::withoutTenancy()->role('platform_admin')->get();
+            Notification::send($admins, new WithdrawalRequested(
+                (int) $tenant->id,
+                $tenant->name,
+                PlatformSetting::get('currency', 'UGX').' '.number_format((float) $result->amount),
+                $result->reference,
+                rtrim((string) config('app.url'), '/').route('platform.revenue.index', [], false),
+            ));
+        } catch (Throwable $exception) {
+            Log::error('Unable to notify platform admins of a withdrawal request.', [
+                'withdrawal_id' => $result->id,
+                'exception' => $exception::class,
+            ]);
         }
 
         return redirect()->route('operator.wallet.index', ['tenant' => $tenant->slug])

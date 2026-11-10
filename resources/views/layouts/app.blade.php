@@ -12,6 +12,11 @@
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
+        @auth
+            <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"
+                    integrity="sha384-YB/DdIkloKoRpclWB8bNcYXWakt57USgtQPDzvnIDHYU0lasD5eWlXVo1S4ODukY"
+                    crossorigin="anonymous"></script>
+        @endauth
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased h-full text-gray-900 bg-[#f8fafc]" 
@@ -76,7 +81,10 @@
         </div>
 
         @stack('scripts')
-        <x-ui.toast />
+        @auth
+            @include('partials.swal-flash')
+        @endauth
+        <x-ui.toast :show-initial="false" />
     </body>
 
 </html>

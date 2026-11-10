@@ -6,8 +6,11 @@ use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Notifications\WithdrawalApproved;
+use App\Notifications\WithdrawalRejected;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -29,6 +32,7 @@ class PlatformRevenueControllerTest extends TestCase
     {
         parent::setUp();
 
+        Notification::fake();
         Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
         $this->admin = User::factory()->create(['tenant_id' => null]);
         $this->admin->assignRole('platform_admin');
@@ -85,6 +89,7 @@ class PlatformRevenueControllerTest extends TestCase
     public function test_platform_admin_can_reject_a_withdrawal_over_http_and_funds_are_returned(): void
     {
         $tx = $this->withdrawal();
+        $operatorAdmin = $this->operatorAdmin();
 
         $this->actingAs($this->admin)
             ->post(route('platform.revenue.withdrawals.reject', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
@@ -92,11 +97,13 @@ class PlatformRevenueControllerTest extends TestCase
 
         $this->assertSame('rejected', Transaction::withoutTenancy()->find($tx->id)->status);
         $this->assertEquals(50000, (float) $this->tenant->fresh()->wallet_balance);
+        Notification::assertSentTo($operatorAdmin, WithdrawalRejected::class);
     }
 
     public function test_platform_admin_can_approve_a_withdrawal_over_http(): void
     {
         $tx = $this->withdrawal();
+        $operatorAdmin = $this->operatorAdmin();
 
         Http::fake([
             self::API_URL.'/transfers' => Http::response([
@@ -120,6 +127,7 @@ class PlatformRevenueControllerTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame('completed', Transaction::withoutTenancy()->find($tx->id)->status);
+        Notification::assertSentTo($operatorAdmin, WithdrawalApproved::class);
     }
 
     public function test_only_withdrawals_can_be_targeted_by_the_withdrawal_routes(): void
@@ -149,5 +157,14 @@ class PlatformRevenueControllerTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame('pending', Transaction::withoutTenancy()->find($tx->id)->status);
+    }
+
+    private function operatorAdmin(): User
+    {
+        Role::findOrCreate('operator_admin', 'web');
+        $user = User::factory()->create(['tenant_id' => $this->tenant->id]);
+        $user->assignRole('operator_admin');
+
+        return $user;
     }
 }

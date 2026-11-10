@@ -19,11 +19,24 @@ class ProvisioningStuck extends Notification
         public readonly ?string $routerName,
         public readonly bool $expired,
         public readonly ?string $url = null,
+        public readonly ?int $tenantId = null,
     ) {}
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['mail', 'database'];
+    }
+
+    public function toDatabase(object $notifiable): array
+    {
+        return [
+            'title' => 'Customer access is not active',
+            'message' => ($this->packageName ? "A customer paid for {$this->packageName}" : 'A customer paid')
+                ." but access is not active. {$this->reason} Waiting {$this->minutes} minute(s).",
+            'action_url' => $this->url,
+            'tenant_id' => $this->tenantId,
+            'session_id' => $this->sessionId,
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage

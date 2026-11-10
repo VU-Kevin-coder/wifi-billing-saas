@@ -242,6 +242,7 @@ class ProvisioningWatchdog
                 $router?->name,
                 $expired,
                 $url,
+                (int) $session->tenant_id,
             ));
         } catch (Throwable $exception) {
             Log::error('Unable to notify operators about a stuck session.', [

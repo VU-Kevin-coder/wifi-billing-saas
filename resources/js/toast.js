@@ -30,7 +30,24 @@ function uiToast(initial = {}) {
 }
 
 window.uiToast = uiToast;
+
+function showToast(type, message) {
+    if (window.Swal?.fire) {
+        return window.Swal.fire({
+            toast: true,
+            position: 'bottom-end',
+            icon: type,
+            title: String(message),
+            showConfirmButton: false,
+            timer: type === 'error' ? 6000 : 4000,
+            timerProgressBar: true,
+        });
+    }
+
+    window.dispatchEvent(new CustomEvent('ui-toast', { detail: { type, message } }));
+}
+
 window.toast = Object.fromEntries(['success', 'error', 'warning', 'info'].map((type) => [
     type,
-    (message) => window.dispatchEvent(new CustomEvent('ui-toast', { detail: { type, message } })),
+    (message) => showToast(type, message),
 ]));

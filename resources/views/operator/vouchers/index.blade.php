@@ -261,7 +261,7 @@
                                         </button>
                                         @if(in_array($voucher->status, ['unused', 'redeemed'], true))
                                             <form method="POST" action="{{ route('operator.vouchers.void', ['tenant' => request()->route('tenant'), 'voucher' => $voucher->id]) }}"
-                                                  onsubmit="return confirm('Void this voucher? It can no longer be used, and a connected customer will be disconnected.')">
+                                                  data-confirm-action="Void this voucher? It can no longer be used, and a connected customer will be disconnected.">
                                                 @csrf
                                                 <button type="submit" class="w-full text-left px-3.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
                                                     Void voucher

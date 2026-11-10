@@ -196,15 +196,15 @@
                                             </div>
                                             
                                             <div class="pt-2 flex gap-3 border-t border-gray-200">
-                                                <form method="POST" action="{{ route('platform.revenue.withdrawals.reject', $pendingTx->id) }}" class="flex-1">
+                                                <form method="POST" action="{{ route('platform.revenue.withdrawals.reject', $pendingTx->id) }}" class="flex-1" data-confirm-action="Reject this withdrawal and refund funds to the operator?">
                                                     @csrf
-                                                    <button type="submit" onclick="return confirm('Reject this withdrawal and refund funds to the operator?')" class="w-full bg-white border border-red-300 text-red-600 py-2 rounded-xl text-xs font-bold hover:bg-red-50 transition-colors">
+                                                    <button type="submit" class="w-full bg-white border border-red-300 text-red-600 py-2 rounded-xl text-xs font-bold hover:bg-red-50 transition-colors">
                                                         Reject &amp; Refund
                                                     </button>
                                                 </form>
-                                                <form method="POST" action="{{ route('platform.revenue.withdrawals.approve', $pendingTx->id) }}" class="flex-1">
+                                                <form method="POST" action="{{ route('platform.revenue.withdrawals.approve', $pendingTx->id) }}" class="flex-1" data-confirm-action="Approve and release funds for this withdrawal?">
                                                     @csrf
-                                                    <button type="submit" onclick="return confirm('Approve and release funds for this withdrawal?')" class="w-full bg-green-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm">
+                                                    <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm">
                                                         Approve Payout
                                                     </button>
                                                 </form>
@@ -270,4 +270,3 @@
 
     </div>
 </x-app-layout>
-

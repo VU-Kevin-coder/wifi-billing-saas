@@ -197,7 +197,7 @@
                                     Edit plan
                                 </button>
 
-                                <form action="{{ route('platform.plans.destroy', $plan) }}" method="POST" onsubmit="return confirm('Delete plan \'{{ $plan->name }}\'? {{ $plan->tenants_count > 0 ? 'This will unlink ' . $plan->tenants_count . ' operator tenant(s) from this plan.' : '' }}')">
+                                <form action="{{ route('platform.plans.destroy', $plan) }}" method="POST" data-confirm-action="Delete plan '{{ addslashes($plan->name) }}'? {{ $plan->tenants_count > 0 ? 'This will unlink ' . $plan->tenants_count . ' operator tenant(s) from this plan.' : '' }}">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" 

@@ -219,7 +219,7 @@
 
                                                 <div class="border-t border-gray-100 my-1"></div>
 
-                                                <form action="{{ route('operator.customers.destroy', $customer) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete customer {{ addslashes($customer->name) }}?');">
+                                                <form action="{{ route('operator.customers.destroy', $customer) }}" method="POST" data-confirm-action="Are you sure you want to delete customer {{ addslashes($customer->name) }}?">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" 

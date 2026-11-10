@@ -75,7 +75,7 @@
                                                 </form>
                                             @else
                                                 <form method="POST" action="{{ route('operator.staff.deactivate', ['tenant' => request()->route('tenant'), 'staff' => $member->id]) }}"
-                                                      onsubmit="return confirm('Deactivate {{ addslashes($member->name) }}? They are signed out immediately and cannot sign in again.')">
+                                                      data-confirm-action="Deactivate {{ addslashes($member->name) }}? They are signed out immediately and cannot sign in again.">
                                                     @csrf
                                                     <button type="submit" class="text-xs font-medium text-red-600 hover:underline">Deactivate</button>
                                                 </form>

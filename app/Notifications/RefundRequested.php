@@ -14,11 +14,22 @@ class RefundRequested extends Notification
         public readonly string $saleReference,
         public readonly string $reason,
         public readonly ?string $url = null,
+        public readonly ?int $tenantId = null,
     ) {}
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['mail', 'database'];
+    }
+
+    public function toDatabase(object $notifiable): array
+    {
+        return [
+            'title' => "Refund request from {$this->tenantName}",
+            'message' => "Refund {$this->amount} requested for sale {$this->saleReference}: {$this->reason}",
+            'action_url' => $this->url,
+            'tenant_id' => $this->tenantId,
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage

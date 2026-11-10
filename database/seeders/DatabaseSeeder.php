@@ -80,46 +80,36 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // ─── 5. USERS (Platform Admin + Operators) ──────────────
-        // Never seed a known password. Set SEED_ADMIN_PASSWORD explicitly
-        // when provisioning demo accounts; otherwise a random password is
-        // generated and must be reset through the normal flow.
-        $seedPassword = (string) env('SEED_ADMIN_PASSWORD', '');
-        if ($seedPassword === '') {
-            $seedPassword = Str::password(24);
-        }
-
-        $platformAdmin = User::firstOrCreate(['email' => 'platform@hamnet.test'], [
+        $platformAdmin = $this->seedUser('platform@hamnet.test', [
             'name' => 'Hamnet Platform Admin',
-            'password' => Hash::make($seedPassword),
             'tenant_id' => null,
             'email_verified_at' => now(),
         ]);
         $platformAdmin->syncRoles(['platform_admin']);
 
-        $acmeAdmin = User::firstOrCreate(['email' => 'admin@acme.test'], [
+        $acmeAdmin = $this->seedUser('admin@acme.test', [
             'name' => 'Sarah Nakato',
-            'password' => Hash::make($seedPassword),
             'tenant_id' => $acme->id,
             'phone' => '+256772411883',
             'email_verified_at' => now(),
         ]);
         $acmeAdmin->syncRoles(['operator_admin']);
 
-        $acmeFinance = User::firstOrCreate(['email' => 'finance@acme.test'], [
+        $acmeFinance = $this->seedUser('finance@acme.test', [
             'name' => 'Acme Finance',
-            'password' => Hash::make($seedPassword),
             'tenant_id' => $acme->id,
             'email_verified_at' => now(),
         ]);
         $acmeFinance->syncRoles(['operator_finance']);
 
-        $betaAdmin = User::firstOrCreate(['email' => 'admin@beta.test'], [
+        $betaAdmin = $this->seedUser('admin@beta.test', [
             'name' => 'Peter Okello',
-            'password' => Hash::make($seedPassword),
             'tenant_id' => $beta->id,
             'email_verified_at' => now(),
         ]);
         $betaAdmin->syncRoles(['operator_admin']);
+
+        $this->call(DemoAccountPasswordSeeder::class);
 
         // ─── 6. SITES ───────────────────────────────────────────
         $sites = [
@@ -268,6 +258,16 @@ class DatabaseSeeder extends Seeder
         $this->call(PolicySeeder::class);
 
         $this->command->info('Database seeded successfully.');
-        $this->command->info('Seeded accounts use SEED_ADMIN_PASSWORD when set; otherwise a random password is generated.');
+        $this->command->info('Seeded platform and operator account passwords are random unless SEED_ADMIN_PASSWORD or SEED_TENANT_PASSWORD is configured.');
+    }
+
+    private function seedUser(string $email, array $attributes): User
+    {
+        $user = User::withoutTenancy()->firstOrCreate(['email' => $email], [
+            ...$attributes,
+            'password' => Hash::make(Str::password(24)),
+        ]);
+
+        return $user;
     }
 }
