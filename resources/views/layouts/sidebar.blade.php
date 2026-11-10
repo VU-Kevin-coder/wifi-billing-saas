@@ -257,6 +257,17 @@
                             <span x-show="!sidebarCollapsed">Refunds</span>
                         </div>
                     </a>
+
+                    <!-- Analytics -->
+                    <a href="{{ route('operator.analytics') }}"
+                       class="{{ request()->routeIs('operator.analytics') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <div class="flex items-center gap-3">
+                            <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.analytics') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6m6 13V10M3 19V13m18 6H3"/>
+                            </svg>
+                            <span x-show="!sidebarCollapsed">Analytics</span>
+                        </div>
+                    </a>
                 </div>
             </div>
 

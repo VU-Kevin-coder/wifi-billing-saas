@@ -47,3 +47,7 @@ PAYMENT_POLL_VERIFY_INTERVAL=10
 
 # Numeric vouchers shorter than this are guessable online
 VOUCHER_MIN_NUMERIC_LENGTH=8
+
+# SMS sent on a business's behalf (the platform pays): monthly ceiling per business, retries per reminder
+SMS_MONTHLY_CAP=300
+SMS_MAX_ATTEMPTS=3

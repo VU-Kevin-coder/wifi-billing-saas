@@ -172,6 +172,10 @@
                 Need help? Call <span class="font-bold text-primary">{{ $tenant->settings['support_phone'] ?? '+256 700000000' }}</span>
             </div>
 
+            <div class="text-center text-xs">
+                <a href="{{ route('portal.plan', ['tenant' => $tenant->slug], false) }}" class="font-semibold text-primary">Already have a voucher? Check my plan</a>
+            </div>
+
             <div class="text-center text-[11px] text-gray-400">
                 Powered by <span class="font-semibold text-gray-500">{{ config('app.name') }}</span> &copy; {{ date('Y') }}
             </div>

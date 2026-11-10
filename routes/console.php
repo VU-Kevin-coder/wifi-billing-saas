@@ -21,6 +21,11 @@ Schedule::command('payments:reconcile')
 
 // Provisioning watchdog (default: every minute)
 $watchdogMinutes = max(1, (int) Policy::get('schedule.provisioning_watchdog_minutes', 1));
+
+Schedule::command('sessions:remind')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
 Schedule::command('provisioning:watchdog')
     ->cron("*/{$watchdogMinutes} * * * *")
     ->withoutOverlapping();

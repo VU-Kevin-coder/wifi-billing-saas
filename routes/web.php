@@ -151,6 +151,14 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     ->whereNumber('transaction')
                     ->middleware('throttle:payment-poll')
                     ->name('check');
+
+                // Customer self-service: check a plan and renew it
+                Route::get('/plan', [\App\Http\Controllers\PortalPlanController::class, 'form'])->middleware('throttle:portal-browse')->name('plan');
+                Route::post('/plan', [\App\Http\Controllers\PortalPlanController::class, 'lookup'])->middleware('throttle:portal-redeem')->name('plan.lookup');
+                Route::get('/r/{token}', [\App\Http\Controllers\PortalPlanController::class, 'show'])
+                    ->where('token', '[a-z0-9]{12}')
+                    ->middleware('throttle:portal-redeem')
+                    ->name('plan.show');
             });
 
         // Secure single-use SSO transfer for cross-domain login
@@ -221,6 +229,9 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
 
                 // Refund requests (the platform approves and pays the customer)
                 Route::middleware('role:operator_admin|operator_finance')->group(function () {
+                    // Analytics (read-only sales reporting)
+                    Route::get('/analytics', [App\Http\Controllers\Operator\AnalyticsController::class, 'index'])->name('analytics');
+
                     Route::get('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
                     Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->middleware('idempotency')->name('refunds.store');
                     Route::post('/refunds/{refund}/cancel', [App\Http\Controllers\Operator\RefundController::class, 'cancel'])->whereNumber('refund')->middleware('idempotency')->name('refunds.cancel');
