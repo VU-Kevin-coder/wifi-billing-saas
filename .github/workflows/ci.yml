@@ -152,12 +152,11 @@ jobs:
       - name: composer.json
         run: composer validate --no-check-publish
 
-  # Informational at first: triage findings, then remove continue-on-error.
+  # Dependency audits are blocking so network or audit failures cannot be hidden.
   dependency-audit:
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -175,7 +174,6 @@ jobs:
     name: Code style (Pint)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true # the existing code base is not formatted yet; make blocking after one formatting commit
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -190,7 +188,7 @@ jobs:
   ci-success:
     name: CI passed
     if: always()
-    needs: [tests-sqlite, tests-mysql, tests-postgres, assets, static]
+    needs: [tests-sqlite, tests-mysql, tests-postgres, assets, static, dependency-audit, style]
     runs-on: ubuntu-latest
     steps:
       - run: |

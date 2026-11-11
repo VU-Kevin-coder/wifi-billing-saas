@@ -22,7 +22,7 @@ class ProductionHardeningTest extends TestCase
         'TENANT_BASE_DOMAIN' => 'wifi.example.com',
         'SITE_AGENT_REQUIRED' => 'true',
         'MAIL_MAILER' => 'smtp',
-        'TRUSTED_PROXIES' => '*',
+        'TRUSTED_PROXIES' => '127.0.0.1',
     ];
 
     private function shellBinary(): string
@@ -85,6 +85,8 @@ class ProductionHardeningTest extends TestCase
             'site agent disabled' => [['SITE_AGENT_REQUIRED' => 'false'], 'SITE_AGENT_REQUIRED'],
             'array sessions' => [['SESSION_DRIVER' => 'array'], 'SESSION_DRIVER=array'],
             'missing app key' => [['APP_KEY' => ''], 'APP_KEY is not set'],
+            'wildcard trusted proxies' => [['TRUSTED_PROXIES' => '*'], 'must not trust every source'],
+            'missing trusted proxies' => [['TRUSTED_PROXIES' => ''], 'must contain the exact trusted proxy'],
         ];
     }
 
@@ -119,7 +121,15 @@ class ProductionHardeningTest extends TestCase
         $this->assertMatchesRegularExpression('/key: SESSION_DRIVER\s+value: redis/', $yaml);
         $this->assertMatchesRegularExpression('/key: SESSION_SECURE_COOKIE\s+value: "true"/', $yaml);
         $this->assertMatchesRegularExpression('/key: SITE_AGENT_REQUIRED\s+value: "true"/', $yaml);
+        $this->assertStringContainsString('key: TRUSTED_PROXIES', $yaml);
+        $this->assertStringNotContainsString('value: "*"', $yaml);
+        $this->assertSame(2, substr_count($yaml, 'key: MAIL_MAILER'), 'web and scheduler must both configure mail');
+        $this->assertStringContainsString('key: MAIL_FROM_NAME', $yaml);
         $this->assertSame(2, substr_count($yaml, 'ipAllowList: []'), 'database and key-value must not be public');
+        $compose = file_get_contents(base_path('docker-compose.yml'));
+        $this->assertStringNotContainsString('evilfreelancer/docker-routeros:latest', $compose);
+        $this->assertStringContainsString('127.0.0.1:8728:8728', $compose);
+        $this->assertStringContainsString('127.0.0.1:2222:22', $compose);
     }
 
     public function test_web_container_no_longer_hosts_the_scheduler(): void

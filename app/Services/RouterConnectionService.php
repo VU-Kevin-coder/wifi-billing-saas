@@ -63,6 +63,32 @@ class RouterConnectionService
 
     public function liveStatus(Router $router): array
     {
+        if (config('site_agent.required')) {
+            if (! $router->telemetry_at) {
+                return [
+                    'ok' => false,
+                    'message' => 'No router telemetry has been reported by the site agent yet.',
+                    'cpu_load' => 0,
+                    'memory_usage' => 0,
+                    'uptime' => 'N/A',
+                    'active_users' => null,
+                ];
+            }
+
+            $fresh = $router->telemetry_at->greaterThanOrEqualTo(now()->subMinutes(2));
+
+            return [
+                'ok' => $fresh,
+                'message' => $fresh
+                    ? 'Router telemetry reported by the paired site agent '.$router->telemetry_at->diffForHumans().'.'
+                    : 'Router telemetry is stale; last reported by the paired site agent '.$router->telemetry_at->diffForHumans().'.',
+                'cpu_load' => $router->cpu_usage,
+                'memory_usage' => $router->memory_usage,
+                'uptime' => $router->uptime ?: 'N/A',
+                'active_users' => $router->active_users,
+            ];
+        }
+
         $status = [
             'ok' => false,
             'message' => 'Live router metrics are unavailable.',

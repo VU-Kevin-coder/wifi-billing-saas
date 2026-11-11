@@ -234,26 +234,12 @@ class PortalController extends Controller
         abort_unless($tenantModel, 404);
 
         $mikrotikUrl = session('mikrotik_url');
-        $voucherCode = $request->query('voucher') ?? session('voucher_code');
-        $paymentToken = session('payment_token');
-
         if ($request->query->has('voucher')) {
-            $transaction = $paymentToken
-                ? Transaction::withoutTenancy()
-                    ->where('tenant_id', $tenantModel->id)
-                    ->where('type', 'voucher_sale')
-                    ->where('payment_token_hash', hash('sha256', $paymentToken))
-                    ->where('status', 'completed')
-                    ->first()
-                : null;
-            $voucherId = $transaction?->meta['voucher_id'] ?? null;
-            $voucher = $voucherId
-                ? Voucher::withoutTenancy()->where('tenant_id', $tenantModel->id)->find($voucherId)
-                : null;
-
-            abort_unless($voucher && hash_equals($voucher->code, (string) $voucherCode), 404);
-            $voucherCode = $voucher->code;
+            return redirect()->to($this->portalUrl($request, 'success', $tenantModel));
         }
+
+        $voucherCode = session('voucher_code');
+        $paymentToken = session('payment_token');
 
         if (! $mikrotikUrl && ! $paymentToken && ! $voucherCode) {
             return redirect()->route('portal.index', ['tenant' => $tenantModel->slug]);

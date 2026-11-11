@@ -42,7 +42,11 @@ if [ "$ROLE" = "web" ]; then
     esac
 
     [ "${PLATFORM_ADMIN_MFA_REQUIRED:-true}" = "false" ] && warn "PLATFORM_ADMIN_MFA_REQUIRED=false: platform admins are not forced to use 2FA."
-    [ -z "${TRUSTED_PROXIES:-}" ] && warn "TRUSTED_PROXIES is empty: client IPs (and rate limits) will be the proxy's address."
+    if [ -z "${TRUSTED_PROXIES:-}" ]; then
+        fail "TRUSTED_PROXIES must contain the exact trusted proxy IPs/CIDRs."
+    elif [ "${TRUSTED_PROXIES}" = "*" ]; then
+        fail "TRUSTED_PROXIES must not trust every source; use the exact proxy IPs/CIDRs."
+    fi
 fi
 
 if [ "$FAIL" -ne 0 ]; then

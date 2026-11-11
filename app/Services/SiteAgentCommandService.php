@@ -90,11 +90,21 @@ class SiteAgentCommandService
 
     public function testConnection(Router $router): SiteAgentCommand
     {
+        return $this->queueRouterCheck($router, 'test_connection');
+    }
+
+    public function telemetry(Router $router): SiteAgentCommand
+    {
+        return $this->queueRouterCheck($router, 'telemetry');
+    }
+
+    private function queueRouterCheck(Router $router, string $operation): SiteAgentCommand
+    {
         $agent = $this->agentFor($router);
         $command = SiteAgentCommand::query()
             ->where('router_id', $router->id)
             ->whereNull('session_id')
-            ->where('operation', 'test_connection')
+            ->where('operation', $operation)
             ->whereIn('status', ['pending', 'claimed'])
             ->latest('id')
             ->first();
@@ -108,7 +118,7 @@ class SiteAgentCommandService
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,
             'session_id' => null,
-            'operation' => 'test_connection',
+            'operation' => $operation,
             'payload' => [],
             'status' => 'pending',
             'attempts' => 0,

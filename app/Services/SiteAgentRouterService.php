@@ -9,7 +9,7 @@ class SiteAgentRouterService
 {
     public function __construct(private HotspotProfileSynchronizer $profiles) {}
 
-    public function execute(int $routerId, string $operation, array $payload): void
+    public function execute(int $routerId, string $operation, array $payload): ?array
     {
         $router = config('site_agent.routers.'.$routerId);
         if (! is_array($router)
@@ -37,7 +37,37 @@ class SiteAgentRouterService
                 throw new RuntimeException('Router API returned no system resource data.');
             }
 
-            return;
+            return null;
+        }
+
+        if ($operation === 'telemetry') {
+            $client = MikroTik::router($key);
+            $resources = $client->system()->getResources();
+            if (! is_array($resources) || $resources === []) {
+                throw new RuntimeException('Router API returned no system resource data.');
+            }
+
+            $totalMemory = $resources['total-memory'] ?? null;
+            $freeMemory = $resources['free-memory'] ?? null;
+            $cpuLoad = $resources['cpu-load'] ?? null;
+            $uptime = $resources['uptime'] ?? null;
+            if (! is_numeric($totalMemory) || (float) $totalMemory <= 0
+                || ! is_numeric($freeMemory) || ! is_numeric($cpuLoad)
+                || ! is_string($uptime) || $uptime === '') {
+                throw new RuntimeException('Router API returned incomplete system telemetry.');
+            }
+
+            $activeHosts = $client->hotspot()->getActiveHosts();
+            if (! is_array($activeHosts)) {
+                throw new RuntimeException('Router API returned invalid active hotspot users.');
+            }
+
+            return [
+                'cpu_usage' => (int) min(100, max(0, (int) $cpuLoad)),
+                'memory_usage' => (int) min(100, max(0, round((1 - ((float) $freeMemory / (float) $totalMemory)) * 100))),
+                'active_users' => count($activeHosts),
+                'uptime' => $uptime,
+            ];
         }
 
         $hotspot = MikroTik::router($key)->hotspot();
@@ -56,7 +86,7 @@ class SiteAgentRouterService
                 $this->profiles->sync($key, $hotspot, $settings);
             }
 
-            return;
+            return null;
         }
 
         $username = $payload['username'] ?? null;
@@ -84,7 +114,7 @@ class SiteAgentRouterService
                 $hotspot->createUser($data);
             }
 
-            return;
+            return null;
         }
 
         if ($operation === 'expire_user') {
@@ -98,7 +128,7 @@ class SiteAgentRouterService
                 $hotspot->kickHost($username);
             }
 
-            return;
+            return null;
         }
 
         throw new RuntimeException("Unsupported site-agent operation '{$operation}'.");

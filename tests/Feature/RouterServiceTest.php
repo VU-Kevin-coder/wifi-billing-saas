@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Services\HotspotProfileSynchronizer;
 use App\Services\RouterService;
+use App\Services\SiteAgentRouterService;
 use Tests\TestCase;
 use ZillEAli\MikrotikLaravel\Testing\MikrotikFake;
 
@@ -49,5 +51,36 @@ class RouterServiceTest extends TestCase
 
         // 3. Assert the data came through
         $this->assertCount(2, $sessions);
+    }
+
+    public function test_site_agent_telemetry_collects_router_resources_and_hotspot_users(): void
+    {
+        config([
+            'site_agent.routers.42' => [
+                'host' => '192.0.2.42',
+                'username' => 'agent',
+                'password' => 'local-secret',
+                'port' => 8729,
+            ],
+        ]);
+        MikrotikFake::fake([
+            '/system/resource/print' => [
+                ['uptime' => '2d4h', 'cpu-load' => 12, 'free-memory' => 50, 'total-memory' => 100],
+            ],
+            '/ip/hotspot/active/print' => [
+                ['user' => 'guest-1'],
+                ['user' => 'guest-2'],
+            ],
+        ]);
+
+        $telemetry = (new SiteAgentRouterService(new HotspotProfileSynchronizer))
+            ->execute(42, 'telemetry', []);
+
+        $this->assertSame([
+            'cpu_usage' => 12,
+            'memory_usage' => 50,
+            'active_users' => 2,
+            'uptime' => '2d4h',
+        ], $telemetry);
     }
 }

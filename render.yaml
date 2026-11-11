@@ -44,7 +44,7 @@ services:
       - key: TENANT_BASE_DOMAIN
         sync: false               # e.g. wifi.example.com (tenants live at <slug>.<this>)
       - key: TRUSTED_PROXIES
-        value: "*"
+        sync: false               # Set exact trusted proxy IPs/CIDRs; wildcard trust is unsafe.
       - key: LOG_CHANNEL
         value: stderr
       # ── Database ──
@@ -138,6 +138,20 @@ services:
         value: redis              # schedule `withoutOverlapping` locks live here
       - key: QUEUE_CONNECTION
         value: sync
+      - key: MAIL_MAILER
+        value: smtp
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM_ADDRESS
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: "Hamnet Wi-Fi Billing System"
 
   - type: keyvalue
     name: hamnet-redis

@@ -140,7 +140,7 @@ services:
   # MikroTik CHR (RouterOS) container for testing
   # ─────────────────────────────────────────────────────────
   mikrotik-chr:
-    image: evilfreelancer/docker-routeros:latest
+    image: evilfreelancer/docker-routeros:7.24.6
     container_name: hamnet-chr
     ports:
       - "127.0.0.1:8728:8728"   # RouterOS API
