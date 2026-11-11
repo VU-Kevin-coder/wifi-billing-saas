@@ -9,7 +9,9 @@ class RouterTransportConfig
     public static function forRouter(string $host, int $port, int|string $routerId): array
     {
         $ssl = $port === 8729;
-        $verifyPeer = (bool) config('site_agent.router_ssl_verify_peer');
+        $configuredVerifyPeer = (bool) config('site_agent.router_ssl_verify_peer');
+        $production = config('app.env') === 'production';
+        $verifyPeer = $production || $configuredVerifyPeer;
 
         if (! $ssl && config('app.env') === 'production') {
             Log::warning('MikroTik router connection is using plaintext API.', [
@@ -17,7 +19,7 @@ class RouterTransportConfig
                 'port' => $port,
             ]);
         }
-        if ($ssl && config('app.env') === 'production' && ! $verifyPeer) {
+        if ($ssl && $production && ! $configuredVerifyPeer) {
             Log::critical('MikroTik API-SSL certificate verification is disabled in production.', [
                 'router_id' => $routerId,
             ]);

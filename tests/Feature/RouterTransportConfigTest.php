@@ -41,4 +41,19 @@ class RouterTransportConfigTest extends TestCase
 
         $this->assertFalse($options['ssl']);
     }
+
+    public function test_certificate_verification_cannot_be_disabled_in_production(): void
+    {
+        config([
+            'app.env' => 'production',
+            'site_agent.router_ssl_verify_peer' => false,
+        ]);
+        Log::shouldReceive('critical')
+            ->once()
+            ->with('MikroTik API-SSL certificate verification is disabled in production.', ['router_id' => 17]);
+
+        $options = RouterTransportConfig::forRouter('10.8.1.2', 8729, 17);
+
+        $this->assertTrue($options['verify_peer']);
+    }
 }
