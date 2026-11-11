@@ -311,6 +311,8 @@ class SiteAgentControlPlaneTest extends TestCase
     public function test_stale_router_health_checks_are_marked_offline(): void
     {
         [$tenant, , $staleRouter] = $this->createSiteSetup();
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole(Role::findOrCreate('operator_admin', 'web'));
         $staleRouter->update(['status' => 'online', 'last_seen_at' => now()->subMinutes(3)]);
         $recentRouter = Router::create([
             'tenant_id' => $tenant->id,
@@ -323,6 +325,12 @@ class SiteAgentControlPlaneTest extends TestCase
 
         $this->assertSame('offline', $staleRouter->fresh()->status);
         $this->assertSame('online', $recentRouter->fresh()->status);
+        $notification = $operator->notifications()->get()->first(
+            fn ($notification) => $notification->data['title'] === 'Router health alert'
+        );
+        $this->assertNotNull($notification);
+        $this->assertSame('Router health alert', $notification->data['title']);
+        $this->assertStringContainsString('health checks marked the router offline', $notification->data['message']);
     }
 
     public function test_legacy_router_settings_test_is_queued_in_agent_mode_and_blocked_without_direct_opt_in(): void

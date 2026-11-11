@@ -77,6 +77,8 @@ class ProvisioningWatchdogTest extends TestCase
         $this->session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
             ->activate($this->tenant, $voucher, Request::create('/'), '0771234567'));
         $this->command = SiteAgentCommand::query()->where('operation', 'provision_user')->sole();
+
+        Notification::fake();
     }
 
     private function inspect(): string

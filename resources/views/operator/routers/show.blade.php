@@ -325,6 +325,12 @@
                         <span class="text-gray-400 block mb-0.5">Assigned Ports</span>
                         <span class="font-mono font-semibold text-gray-800">{{ implode(', ', $router->ethernet_ports ?? ['ether2', 'ether3']) }}</span>
                     </div>
+                    @if($router->has_wireless)
+                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                            <span class="text-gray-400 block mb-0.5">Wi-Fi Name (SSID)</span>
+                            <span class="font-mono font-semibold text-gray-800">{{ $router->wifi_ssid ?: 'Not configured' }}</span>
+                        </div>
+                    @endif
                 </div>
 
                 <div class="mt-4 border-t border-gray-100 pt-3">

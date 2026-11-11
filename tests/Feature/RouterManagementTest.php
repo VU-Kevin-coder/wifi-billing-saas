@@ -86,6 +86,7 @@ class RouterManagementTest extends TestCase
         $response->assertSee('Operating site');
         $response->assertSee('Central Office');
         $response->assertSee('value="'.$site->id.'"', false);
+        $response->assertSee('Wi-Fi name (SSID)');
         $response->assertSee('Service setup');
     }
 
@@ -102,6 +103,7 @@ class RouterManagementTest extends TestCase
                 'hardware_model' => 'CCR2004',
                 'api_password' => 'supersecretpass123',
                 'has_wireless' => 1,
+                'wifi_ssid' => 'Kampala Guest',
                 'enable_hotspot' => 1,
                 'hotspot_network' => '10.10.0.0/16',
                 'gateway_ip' => '10.10.0.1',
@@ -122,6 +124,7 @@ class RouterManagementTest extends TestCase
         $this->assertEquals(8729, $router->api_port);
         $this->assertSame('router-api', $router->api_username);
         $this->assertTrue($router->has_wireless);
+        $this->assertSame('Kampala Guest', $router->wifi_ssid);
         $this->assertSame('supersecretpass123', $router->api_password);
         $this->assertSame('10.20.1.0/24', $router->hotspot_config['management_subnet']);
 
@@ -265,6 +268,7 @@ class RouterManagementTest extends TestCase
                 'dns_servers' => '1.1.1.1,8.8.8.8',
                 'hotspot_domain' => 'wifi.example.test',
                 'ethernet_ports' => ['ether3', 'ether4'],
+                'wifi_ssid' => 'Updated Guest WiFi',
             ]);
 
         $response->assertRedirect(route('operator.routers.show', [
@@ -287,6 +291,50 @@ class RouterManagementTest extends TestCase
         $this->assertSame('10.20.0.0/16', $router->hotspot_config['network']);
         $this->assertSame('10.20.0.1', $router->hotspot_config['gateway']);
         $this->assertSame(['ether3', 'ether4'], $router->ethernet_ports);
+        $this->assertSame('Updated Guest WiFi', $router->wifi_ssid);
+    }
+
+    public function test_router_ssid_defaults_to_site_or_tenant_name_and_is_cleared_when_wireless_is_disabled(): void
+    {
+        $site = $this->acme->sites()->create(['name' => 'Ntinda Guest WiFi']);
+
+        $router = $this->actingAs($this->acmeUser)
+            ->post('http://acme.localhost/operator/routers', [
+                'name' => 'SSID-FALLBACK-ROUTER',
+                'site_id' => $site->id,
+                'has_wireless' => 1,
+                '_idempotency_key' => $this->idempotencyKey(),
+            ]);
+
+        $router->assertRedirect();
+        $savedRouter = Router::where('name', 'SSID-FALLBACK-ROUTER')->firstOrFail();
+        $this->assertSame('Ntinda Guest WiFi', $savedRouter->wifi_ssid);
+
+        $this->actingAs($this->acmeUser)
+            ->put("http://acme.localhost/operator/routers/{$savedRouter->id}", [
+                'name' => $savedRouter->name,
+                'api_port' => 8728,
+                'has_wireless' => 0,
+            ])
+            ->assertRedirect();
+
+        $this->assertNull($savedRouter->fresh()->wifi_ssid);
+    }
+
+    public function test_router_ssid_rejects_values_longer_than_32_characters(): void
+    {
+        $response = $this->actingAs($this->acmeUser)
+            ->from('http://acme.localhost/operator/routers/create')
+            ->post('http://acme.localhost/operator/routers', [
+                'name' => 'INVALID-SSID-ROUTER',
+                'has_wireless' => 1,
+                'wifi_ssid' => str_repeat('a', 33),
+                '_idempotency_key' => $this->idempotencyKey(),
+            ]);
+
+        $response->assertRedirect('http://acme.localhost/operator/routers/create')
+            ->assertSessionHasErrors('wifi_ssid');
+        $this->assertDatabaseMissing('routers', ['name' => 'INVALID-SSID-ROUTER']);
     }
 
     public function test_router_edit_rejects_site_from_another_tenant(): void

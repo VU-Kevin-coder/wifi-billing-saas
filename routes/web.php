@@ -179,6 +179,8 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::get('/dashboard', OperatorDashboard::class)->name('dashboard');
 
                 Route::middleware('role:operator_admin|operator_support')->group(function () {
+                    Route::get('/customers/export.csv', [CustomerController::class, 'export'])
+                        ->name('customers.export');
                     Route::resource('customers', CustomerController::class)
                         ->only(['index', 'show', 'update', 'destroy']);
                     Route::post('/customers', [CustomerController::class, 'store'])

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Site;
 use App\Services\Tenancy\TenantContext;
 use App\Support\ReportingTime;
@@ -22,6 +23,7 @@ class SiteController extends Controller
         abort_unless($tenant, 404, 'Tenant not found');
 
         $tenantId = $tenant->id;
+        $defaultCurrency = strtoupper((string) PlatformSetting::get('currency', 'UGX'));
         $currencies = Package::query()
             ->where('packages.tenant_id', $tenantId)
             ->distinct()
@@ -30,7 +32,7 @@ class SiteController extends Controller
             ->all();
 
         if ($currencies === []) {
-            $currencies = ['UGX'];
+            $currencies = [$defaultCurrency];
         }
 
         $currency = $request->query('currency');
@@ -135,7 +137,9 @@ class SiteController extends Controller
             ->distinct()
             ->pluck('currency')
             ->all();
-        $currency = in_array($currency, $currencies, true) ? $currency : ($currencies[0] ?? 'UGX');
+        $currency = in_array($currency, $currencies, true)
+            ? $currency
+            : ($currencies[0] ?? strtoupper((string) PlatformSetting::get('currency', 'UGX')));
 
         $metrics = $this->siteMetrics($tenant->id, $currency);
         $sites = Site::query()->where('sites.tenant_id', $tenant->id)->with('routers')->orderBy('name')->get();

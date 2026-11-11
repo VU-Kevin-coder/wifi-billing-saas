@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Tenancy\TenantContext;
@@ -94,6 +95,31 @@ class PackageIsolationTest extends TestCase
             $this->assertSame(rtrim($unit, 's'), $package->duration_unit_singular);
             $this->assertEquals($startedAt->copy()->$addMethod(2), $package->expiresAt($startedAt));
         }
+    }
+
+    public function test_new_packages_use_the_configured_platform_currency(): void
+    {
+        $admin = User::factory()->create(['tenant_id' => $this->acme->id]);
+        $admin->assignRole('operator_admin');
+        PlatformSetting::set('currency', 'KES');
+
+        $this->actingAs($admin)
+            ->post('http://acme.localhost:8000/operator/packages', [
+                'name' => 'Daily KES',
+                'price' => 100,
+                'duration_value' => 1,
+                'duration_unit' => 'days',
+                'speed_limit_mbps' => 5,
+                'device_limit' => 1,
+                'is_published' => 1,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('packages', [
+            'tenant_id' => $this->acme->id,
+            'name' => 'Daily KES',
+            'currency' => 'KES',
+        ]);
     }
 
     public function test_operator_can_view_packages_page_and_dashboard(): void

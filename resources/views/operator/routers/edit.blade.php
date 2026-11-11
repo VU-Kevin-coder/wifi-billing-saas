@@ -27,7 +27,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ route('operator.routers.update', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="space-y-6">
+            <form x-data="{ hasWireless: @js((bool) old('has_wireless', $router->has_wireless)) }" method="POST" action="{{ route('operator.routers.update', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="space-y-6">
                 @csrf
                 @method('PUT')
 
@@ -90,10 +90,18 @@
                             @error('api_password') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
                         <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
-                            <input type="checkbox" name="has_wireless" value="1" @checked(old('has_wireless', $router->has_wireless))
+                            <input type="checkbox" name="has_wireless" value="1" x-model="hasWireless" @checked(old('has_wireless', $router->has_wireless))
                                    class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                             <span class="text-sm font-medium text-gray-900">Router has wireless</span>
                         </label>
+                        <div x-show="hasWireless" x-cloak class="sm:col-span-2">
+                            <label for="wifi_ssid" class="mb-1 block text-sm font-medium text-gray-700">Wi-Fi name (SSID)</label>
+                            <input id="wifi_ssid" name="wifi_ssid" maxlength="32" value="{{ old('wifi_ssid', $router->wifi_ssid) }}"
+                                   placeholder="{{ $tenant->name }}"
+                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <p class="mt-1 text-xs text-gray-500">Leave blank to use the selected site or your business name. The SSID is configured without changing existing Wi-Fi security settings.</p>
+                            @error('wifi_ssid') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </div>
                     </div>
                 </section>
 

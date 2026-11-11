@@ -92,6 +92,7 @@ class RouterProvisioningTest extends TestCase
         $this->assertStringContainsString('/ip address add address=10.10.0.1/16 interface=br-hotspot', $script);
         $this->assertStringContainsString('/ip hotspot profile add name=prof-billing dns-name="wifi.acme.local"', $script);
         $this->assertStringContainsString('login-by=http-chap use-radius=no', $script);
+        $this->assertStringNotContainsString('/interface wifi set', $script);
         $this->assertStringNotContainsString('http-pap', $script);
         $this->assertStringContainsString('policy=api,read,write', $script);
         $this->assertStringNotContainsString('policy=api,read,write,test,password', $script);
@@ -107,6 +108,25 @@ class RouterProvisioningTest extends TestCase
         $this->assertArrayNotHasKey('limit-uptime', $profile);
         $this->assertArrayNotHasKey('limit-bytes-total', $profile);
         $this->assertStringContainsString('Voucher uptime and data caps are applied to each HotSpot user', $script);
+    }
+
+    public function test_wireless_provisioning_sets_ssid_for_legacy_and_routeros_wifi_radios(): void
+    {
+        $router = Router::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Wireless-Router',
+            'has_wireless' => true,
+            'wifi_ssid' => 'Guest "$WiFi"',
+        ]);
+        $service = new RouterProvisioningService;
+        $script = $service->generateScript($router);
+        $escapedSsid = $service->escapeRouterOs('Guest "$WiFi"');
+
+        $this->assertStringContainsString('/interface wireless set [find default-name=wlan1] ssid="'.$escapedSsid.'" disabled=no', $script);
+        $this->assertStringContainsString('/interface wireless set [find default-name=wlan2] ssid="'.$escapedSsid.'" disabled=no', $script);
+        $this->assertStringContainsString('/interface wifi set [find default-name=wifi1] configuration.ssid="'.$escapedSsid.'" disabled=no', $script);
+        $this->assertStringContainsString('/interface wifi set [find default-name=wifi2] configuration.ssid="'.$escapedSsid.'" disabled=no', $script);
+        $this->assertStringContainsString('existing security settings are preserved', $script);
     }
 
     public function test_generated_routeros_values_are_escaped_and_generated_password_is_persisted(): void

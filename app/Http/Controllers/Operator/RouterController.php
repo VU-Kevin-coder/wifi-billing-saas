@@ -8,6 +8,7 @@ use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
 use App\Models\SiteAgentCommand;
+use App\Services\ActivityNotifier;
 use App\Services\RouterConnectionService;
 use App\Services\RouterProvisioningService;
 use App\Services\SiteAgentCommandService;
@@ -139,6 +140,17 @@ class RouterController extends Controller
             'api_password' => ['nullable', 'string', 'max:255', 'not_regex:/[\r\n\x00]/'],
             'api_port' => ['nullable', 'integer', 'between:1,65535'],
             'has_wireless' => ['nullable', 'boolean'],
+            'wifi_ssid' => [
+                'nullable',
+                'string',
+                'max:32',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (is_string($value) && strlen($value) > 32) {
+                        $fail('The Wi-Fi name must be no more than 32 bytes.');
+                    }
+                },
+                'not_regex:/[\r\n\x00]/',
+            ],
             'ethernet_ports' => ['nullable', 'array'],
             'enable_hotspot' => ['nullable', 'boolean'],
             'hotspot_network' => [
@@ -203,6 +215,14 @@ class RouterController extends Controller
         $site = isset($validated['site_id'])
             ? Site::where('tenant_id', $tenantId)->findOrFail($validated['site_id'])
             : null;
+        $hasWireless = $request->boolean('has_wireless');
+        $wifiSsid = $hasWireless ? trim((string) ($validated['wifi_ssid'] ?? '')) : null;
+        if ($hasWireless && $wifiSsid === '') {
+            $wifiSsid = trim((string) ($site?->name ?: $context->getTenant()->name ?: 'Free WiFi'));
+        }
+        if ($wifiSsid !== null) {
+            $wifiSsid = mb_strcut($wifiSsid, 0, 32, 'UTF-8');
+        }
 
         $apiPassword = ! empty($validated['api_password'])
             ? $validated['api_password']
@@ -216,6 +236,7 @@ class RouterController extends Controller
             'tenant_id' => $tenantId,
             'site_id' => $site?->id,
             'name' => $validated['name'],
+            'wifi_ssid' => $wifiSsid,
             'site' => $site?->name ?? ($validated['site'] ?? null),
             'hardware_model' => $validated['hardware_model'] ?? 'hEX / RB750Gr3',
             'management_ip' => $validated['management_ip'] ?? null,
@@ -227,7 +248,7 @@ class RouterController extends Controller
             'api_username' => $apiUsername,
             'api_password' => $apiPassword,
             'api_port' => $validated['api_port'] ?? 8728,
-            'has_wireless' => $request->boolean('has_wireless'),
+            'has_wireless' => $hasWireless,
             'enable_hotspot' => $request->boolean('enable_hotspot', true),
             'hotspot_config' => [
                 'network' => $validated['hotspot_network'] ?? '10.10.0.0/16',
@@ -288,6 +309,17 @@ class RouterController extends Controller
             'api_password' => ['nullable', 'string', 'max:255', 'not_regex:/[\r\n\x00]/'],
             'api_port' => ['required', 'integer', 'between:1,65535'],
             'has_wireless' => ['nullable', 'boolean'],
+            'wifi_ssid' => [
+                'nullable',
+                'string',
+                'max:32',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (is_string($value) && strlen($value) > 32) {
+                        $fail('The Wi-Fi name must be no more than 32 bytes.');
+                    }
+                },
+                'not_regex:/[\r\n\x00]/',
+            ],
             'enable_hotspot' => ['nullable', 'boolean'],
             'hotspot_network' => [
                 'nullable',
@@ -353,6 +385,14 @@ class RouterController extends Controller
         $site = isset($validated['site_id'])
             ? Site::where('tenant_id', $tenantId)->findOrFail($validated['site_id'])
             : null;
+        $hasWireless = $request->boolean('has_wireless');
+        $wifiSsid = $hasWireless ? trim((string) ($validated['wifi_ssid'] ?? '')) : null;
+        if ($hasWireless && $wifiSsid === '') {
+            $wifiSsid = trim((string) ($site?->name ?: $context->getTenant()->name ?: 'Free WiFi'));
+        }
+        if ($wifiSsid !== null) {
+            $wifiSsid = mb_strcut($wifiSsid, 0, 32, 'UTF-8');
+        }
         $hotspotConfig = $router->hotspot_config ?? [];
         $hotspotConfig = array_merge($hotspotConfig, [
             'network' => $validated['hotspot_network'] ?? null,
@@ -369,9 +409,10 @@ class RouterController extends Controller
             'site' => $site?->name,
             'hardware_model' => $validated['hardware_model'] ?? null,
             'management_ip' => $validated['management_ip'] ?? null,
+            'wifi_ssid' => $wifiSsid,
             'api_username' => $validated['api_username'] ?? null,
             'api_port' => $validated['api_port'],
-            'has_wireless' => $request->boolean('has_wireless'),
+            'has_wireless' => $hasWireless,
             'enable_hotspot' => $request->boolean('enable_hotspot'),
             'hotspot_config' => $hotspotConfig,
             'ethernet_ports' => $validated['ethernet_ports'] ?? [],
@@ -470,7 +511,7 @@ class RouterController extends Controller
     /**
      * Ping / Test connectivity for a specific router.
      */
-    public function ping(Request $request, RouterConnectionService $connectionService, ...$args)
+    public function ping(Request $request, RouterConnectionService $connectionService, ActivityNotifier $notifier, ...$args)
     {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
@@ -480,6 +521,8 @@ class RouterController extends Controller
         $latency = (int) round((microtime(true) - $startedAt) * 1000);
         if ($result['ok']) {
             $router->update(['status' => 'online', 'last_seen_at' => now()]);
+        } elseif (($result['failure_type'] ?? null) !== 'missing_configuration') {
+            $notifier->routerFailure($router, 'Latest API check failed: '.Str::limit($result['message'], 240));
         }
         $message = $result['ok']
             ? "Router '{$router->name}' responded to the RouterOS API check."
@@ -502,6 +545,7 @@ class RouterController extends Controller
         Request $request,
         RouterConnectionService $connectionService,
         SiteAgentCommandService $commandService,
+        ActivityNotifier $notifier,
         ...$args,
     ) {
         $context = app(TenantContext::class);
@@ -530,6 +574,8 @@ class RouterController extends Controller
         $result = $connectionService->test($router);
         if ($result['ok']) {
             $router->update(['status' => 'online', 'last_seen_at' => now()]);
+        } elseif (($result['failure_type'] ?? null) !== 'missing_configuration') {
+            $notifier->routerFailure($router, 'Latest API check failed: '.Str::limit($result['message'], 240));
         }
 
         $statusCode = $result['ok']
@@ -646,7 +692,7 @@ class RouterController extends Controller
     /**
      * Ping / Refresh health check for all routers of the current tenant.
      */
-    public function pingAll(Request $request, TenantContext $context, RouterConnectionService $connectionService)
+    public function pingAll(Request $request, TenantContext $context, RouterConnectionService $connectionService, ActivityNotifier $notifier)
     {
         $tenantId = $context->getTenantId();
         $routers = Router::where('tenant_id', $tenantId)->get();
@@ -657,6 +703,8 @@ class RouterController extends Controller
             if ($result['ok']) {
                 $router->update(['status' => 'online', 'last_seen_at' => now()]);
                 $responded++;
+            } elseif (($result['failure_type'] ?? null) !== 'missing_configuration') {
+                $notifier->routerFailure($router, 'Latest API check failed: '.Str::limit($result['message'], 240));
             }
         }
 

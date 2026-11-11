@@ -55,7 +55,8 @@
                 this.loadingView = false;
             });
         }
-    }">
+    }"
+        @scroll.window="open = false">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 
             <!-- Flash Message -->
@@ -76,10 +77,10 @@
                     <p class="text-gray-500 text-sm mt-1">Know every connection. Manage customer accounts, plan subscriptions and service history.</p>
                 </div>
                 <div class="flex gap-2">
-                    <button class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 flex items-center gap-2">
+                    <a href="{{ route('operator.customers.export', request()->only(['q', 'status'])) }}" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                         Export customers
-                    </button>
+                    </a>
                     <button @click="openCreate()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                         Add customer
@@ -99,7 +100,7 @@
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <p class="text-sm font-medium text-gray-500">Outstanding balance</p>
-                    <p class="text-3xl font-bold text-gray-900 mt-2">UGX {{ number_format($outstandingBalance) }}</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ $currency }} {{ number_format($outstandingBalance) }}</p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <p class="text-sm font-medium text-gray-500">New this month</p>
@@ -108,22 +109,28 @@
             </div>
 
             <!-- Search & Filters Bar -->
-            <div class="bg-white p-4 rounded-t-xl border border-gray-200 border-b-0 flex justify-between items-center">
-                <div class="relative w-72">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <form method="GET" action="{{ route('operator.customers.index') }}" class="bg-white p-4 rounded-t-xl border border-gray-200 border-b-0 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex flex-col gap-3 sm:flex-row">
+                    <div class="relative w-full sm:w-72">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <input type="search" name="q" value="{{ $validated['q'] ?? '' }}" placeholder="Search name, phone, email or MAC"
+                               class="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50">
                     </div>
-                    <input type="text" placeholder="Search" class="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50">
+                    <select name="status" class="w-full sm:w-40 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="">All statuses</option>
+                        <option value="active" @selected(($validated['status'] ?? '') === 'active')>Active</option>
+                        <option value="inactive" @selected(($validated['status'] ?? '') === 'inactive')>Inactive</option>
+                    </select>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button class="p-2 text-gray-500 hover:text-gray-700 bg-gray-50 rounded-lg border border-gray-200">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
-                    </button>
-                    <button class="p-2 text-gray-500 hover:text-gray-700 bg-gray-50 rounded-lg border border-gray-200">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                    </button>
+                    @if(($validated['q'] ?? '') !== '' || ($validated['status'] ?? '') !== '')
+                        <a href="{{ route('operator.customers.index') }}" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">Clear</a>
+                    @endif
+                    <button type="submit" class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700">Apply filters</button>
                 </div>
-            </div>
+            </form>
 
             <!-- Main Table -->
             <div class="bg-white rounded-b-xl shadow-sm border border-gray-200">
@@ -184,23 +191,39 @@
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <!-- Actions Dropdown -->
-                                        <div class="relative inline-block text-left" x-data="{ open: false }">
-                                            <button @click="open = !open" 
+                                        <div class="relative inline-block text-left" x-data="{
+                                            open: false,
+                                            menuPosition: {},
+                                            toggleMenu(event) {
+                                                this.open = !this.open;
+                                                if (!this.open) return;
+                                                const rect = event.currentTarget.getBoundingClientRect();
+                                                const menuHeight = 150;
+                                                const top = rect.bottom + menuHeight > window.innerHeight
+                                                    ? Math.max(8, rect.top - menuHeight - 6)
+                                                    : rect.bottom + 6;
+                                                this.menuPosition = { top: `${top}px`, right: `${Math.max(8, window.innerWidth - rect.right)}px` };
+                                            }
+                                        }">
+                                            <button @click="toggleMenu($event)"
                                                     type="button" 
+                                                    aria-label="Customer actions"
+                                                    :aria-expanded="open"
                                                     class="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none">
                                                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
                                             </button>
 
                                             <!-- Dropdown Menu -->
-                                            <div x-show="open" 
-                                                 @click.away="open = false" 
+                                            <div x-show="open"
+                                                 @click.outside="open = false"
                                                  x-transition:enter="transition ease-out duration-100"
                                                  x-transition:enter-start="transform opacity-0 scale-95"
                                                  x-transition:enter-end="transform opacity-100 scale-100"
                                                  x-transition:leave="transition ease-in duration-75"
                                                  x-transition:leave-start="transform opacity-100 scale-100"
                                                  x-transition:leave-end="transform opacity-0 scale-95"
-                                                 class="absolute right-0 mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 text-left" 
+                                                 :style="menuPosition"
+                                                 class="fixed w-44 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-[100] text-left"
                                                  x-cloak>
                                                 
                                                 <button type="button" 
@@ -234,7 +257,12 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-4 py-8 text-center text-gray-500 text-sm">No customers yet.</td>
+                                    <td colspan="7" class="px-4 py-12 text-center text-sm">
+                                        <p class="font-semibold text-gray-700">{{ ($validated['q'] ?? '') !== '' || ($validated['status'] ?? '') !== '' ? 'No customers match these filters.' : 'No customers yet.' }}</p>
+                                        @if(($validated['q'] ?? '') !== '' || ($validated['status'] ?? '') !== '')
+                                            <a href="{{ route('operator.customers.index') }}" class="mt-2 inline-flex text-blue-600 hover:text-blue-800">Clear filters</a>
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -242,14 +270,9 @@
                 </div>
                 
                 <!-- Footer -->
-                <div class="px-4 py-3 border-t border-gray-200 flex justify-between items-center bg-white">
+                <div class="px-4 py-3 border-t border-gray-200 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center bg-white">
                     <span class="text-sm text-gray-500">Showing {{ $customers->firstItem() ?? 0 }} to {{ $customers->lastItem() ?? 0 }} of {{ $customers->total() }} results</span>
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm text-gray-500">Per page</span>
-                        <select class="border border-gray-300 rounded-lg text-sm py-1 px-2">
-                            <option>25</option>
-                        </select>
-                    </div>
+                    {{ $customers->links() }}
                 </div>
             </div>
 
@@ -347,7 +370,7 @@
                                                     <option value="">No Package / Unassigned</option>
                                                     @foreach($packages as $pkg)
                                                         <option value="{{ $pkg->id }}">
-                                                            {{ $pkg->name }} — UGX {{ number_format($pkg->price) }} ({{ $pkg->duration_value }} {{ $pkg->duration_unit }})
+                                                            {{ $pkg->name }} — {{ $pkg->currency }} {{ number_format($pkg->price) }} ({{ $pkg->duration_value }} {{ $pkg->duration_unit }})
                                                         </option>
                                                     @endforeach
                                                 </select>

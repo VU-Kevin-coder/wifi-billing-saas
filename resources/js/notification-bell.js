@@ -6,6 +6,7 @@ window.notificationBell = function notificationBell() {
         notifications: [],
         latestUnreadId: null,
         pollTimer: null,
+        error: false,
 
         init() {
             this.fetchUnreadCount(true);
@@ -25,12 +26,14 @@ window.notificationBell = function notificationBell() {
 
         async fetchNotifications() {
             this.loading = true;
+            this.error = false;
             try {
                 const result = await window.apiFetch('/api/notifications');
                 this.notifications = result.notifications;
                 this.unreadCount = result.unread_count;
                 this.latestUnreadId = this.notifications.find((item) => !item.read_at)?.id || this.latestUnreadId;
             } catch (error) {
+                this.error = true;
                 console.error('Unable to load notifications.', error);
             } finally {
                 this.loading = false;
@@ -62,6 +65,7 @@ window.notificationBell = function notificationBell() {
                 this.notifications = this.notifications.map((item) => ({ ...item, read_at: new Date().toISOString() }));
                 this.unreadCount = 0;
             } catch (error) {
+                this.error = true;
                 console.error('Unable to mark notifications as read.', error);
             }
         },

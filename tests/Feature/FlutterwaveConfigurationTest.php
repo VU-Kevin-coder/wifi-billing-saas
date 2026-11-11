@@ -32,6 +32,24 @@ class FlutterwaveConfigurationTest extends TestCase
             ->assertDontSee('test-secret-value');
     }
 
+    public function test_platform_currency_is_limited_to_supported_options(): void
+    {
+        $admin = User::factory()->create(['tenant_id' => null]);
+        $admin->assignRole('platform_admin');
+
+        $this->actingAs($admin)
+            ->put(route('platform.configuration.general.update'), [
+                'platform_name' => 'Hamnet',
+                'default_country' => 'Uganda',
+                'currency' => 'EUR',
+                'timezone' => 'Africa/Kampala',
+                'date_format' => 'Y-m-d',
+                'language' => 'en',
+                'default_commission_rate' => 10,
+            ])
+            ->assertSessionHasErrors('currency');
+    }
+
     public function test_flutterwave_configuration_saves_secrets_and_keeps_them_when_inputs_are_blank(): void
     {
         $admin = User::factory()->create(['tenant_id' => null]);

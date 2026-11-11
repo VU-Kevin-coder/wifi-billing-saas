@@ -28,7 +28,7 @@ RouterOS 7.10 is the proposed minimum for the supported range, not a verified mi
 Run on a disposable CHR or a factory-reset, isolated test router. Do not use a production router. Record the model and full RouterOS version before starting.
 Keep an out-of-band recovery path and export a backup before provisioning.
 
-1. **Provision the package:** create and publish a package with a known duration,rate limit, device limit, and data cap. Generate and review the router `.rsc`; confirm API access is source-restricted and the hotspot profile is `login-by=http-chap` (not `http-pap`).
+1. **Provision the package:** create and publish a package with a known duration, rate limit, device limit, and data cap. For wireless hardware, set an SSID and confirm it is applied to the radio without unexpectedly changing its security profile. Generate and review the router `.rsc`; confirm API access is source-restricted and the hotspot profile is `login-by=http-chap` (not `http-pap`).
 2. **Create a voucher:** issue a one-use voucher for that package. Confirm the router assignment and generated hotspot user profile match the package.
 3. **Purchase:** use the configured payment sandbox and verify that no voucher is issued before the provider confirms payment. Confirm activation is acknowledged by the paired site agent.
 4. **Redeem:** redeem a separate unused voucher from the captive portal. Confirm
@@ -40,5 +40,4 @@ Keep an out-of-band recovery path and export a backup before provisioning.
 8. **Re-provision:** run the generated provisioning script a second time on the disposable router. Confirm it is idempotent and does not create duplicate bridge, address, DHCP, hotspot, API-service, or package-profile entries.
 9. **Network-loss recovery:** interrupt the agent's cloud connection while a harmless test command is pending. Confirm it remains pending (not reported successful), the worker retries after connectivity returns, and the router state converges without duplicate voucher users or sessions.
 10. **Capture evidence:** record router identity/version, application commit, timestamps, command outcomes, screenshots or sanitized exports, and any failures. Never include API passwords, agent bearer tokens, WireGuard private keys, payment credentials, or customer data.
-
 

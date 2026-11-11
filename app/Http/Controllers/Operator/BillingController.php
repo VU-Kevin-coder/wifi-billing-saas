@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Models\PlatformPlan;
+use App\Models\PlatformSetting;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\View\View;
 
@@ -20,7 +21,8 @@ class BillingController extends Controller
 
         // All available plans for the "Explore plans" overlay
         $plans = PlatformPlan::orderBy('price')->get();
+        $currency = strtoupper((string) PlatformSetting::get('currency', 'UGX'));
 
-        return view('operator.billing.index', compact('tenant', 'plans'));
+        return view('operator.billing.index', compact('tenant', 'plans', 'currency'));
     }
 }

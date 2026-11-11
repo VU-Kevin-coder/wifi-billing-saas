@@ -73,7 +73,7 @@
                     <p class="text-sm font-medium text-gray-500">Current plan</p>
                     @if($currentPlan)
                         <p class="mt-3 text-lg font-bold text-gray-900">{{ $currentPlan->name }}</p>
-                        <p class="mt-2 text-xs text-gray-500">UGX {{ number_format((float) $currentPlan->price) }} / month</p>
+                        <p class="mt-2 text-xs text-gray-500">{{ $currency }} {{ number_format((float) $currentPlan->price) }} / month</p>
                     @else
                         <p class="mt-3 text-lg font-bold text-gray-400">No plan assigned</p>
                         <p class="mt-2 text-xs text-gray-500">Contact the platform admin to assign a plan.</p>
@@ -83,7 +83,7 @@
                 {{-- Wallet Balance --}}
                 <article class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                     <p class="text-sm font-medium text-gray-500">Wallet balance</p>
-                    <p class="mt-3 text-lg font-bold text-gray-900">UGX {{ number_format((float) ($tenant->wallet_balance ?? 0)) }}</p>
+                    <p class="mt-3 text-lg font-bold text-gray-900">{{ $currency }} {{ number_format((float) ($tenant->wallet_balance ?? 0)) }}</p>
                     <a href="{{ route('operator.wallet.index') }}" class="mt-2 inline-block text-xs font-semibold text-blue-600 hover:text-blue-800">Manage wallet &amp; payouts &rarr;</a>
                 </article>
 
@@ -110,7 +110,7 @@
                     <div class="md:col-span-2 space-y-4">
                         <div>
                             <p class="text-sm font-bold text-gray-900">{{ $currentPlan->name }} Plan</p>
-                            <p class="mt-1 text-sm text-gray-500">UGX {{ number_format((float) $currentPlan->price) }}/month</p>
+                            <p class="mt-1 text-sm text-gray-500">{{ $currency }} {{ number_format((float) $currentPlan->price) }}/month</p>
                         </div>
                         <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
                             <div>
@@ -231,7 +231,7 @@
                                     <div class="flex items-start justify-between gap-4 pr-20">
                                         <div>
                                             <p class="text-sm font-bold text-gray-900">{{ $plan->name }}</p>
-                                            <p class="mt-0.5 text-xs text-gray-500">UGX {{ number_format((float) $plan->price) }} / month</p>
+                                            <p class="mt-0.5 text-xs text-gray-500">{{ $currency }} {{ number_format((float) $plan->price) }} / month</p>
                                         </div>
                                     </div>
 

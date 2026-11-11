@@ -50,6 +50,12 @@
             <template x-if="!loading && notifications.length === 0">
                 <p class="px-4 py-8 text-center text-sm text-gray-500">You’re all caught up.</p>
             </template>
+            <template x-if="error">
+                <div class="px-4 py-6 text-center">
+                    <p class="text-sm text-red-600">Notifications could not be loaded.</p>
+                    <button type="button" @click="fetchNotifications()" class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800">Try again</button>
+                </div>
+            </template>
             <template x-for="notification in notifications" :key="notification.id">
                 <button
                     type="button"

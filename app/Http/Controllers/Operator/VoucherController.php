@@ -23,6 +23,14 @@ class VoucherController extends Controller
         // KPI Calculations (tenant-scoped via global scope)
         $generatedThisMonth = Voucher::whereBetween('created_at', ReportingTime::monthRange())->count();
         $unusedStock = Voucher::where('status', 'unused')->count();
+        $unusedFaceValueByCurrency = Voucher::query()
+            ->where('vouchers.status', 'unused')
+            ->join('packages', 'packages.id', '=', 'vouchers.package_id')
+            ->select('packages.currency')
+            ->selectRaw('SUM(packages.price) as face_value')
+            ->groupBy('packages.currency')
+            ->orderBy('packages.currency')
+            ->get();
         $redeemed = Voucher::where('status', 'redeemed')->count();
         $voided = Voucher::where('status', 'voided')->count();
 
@@ -42,7 +50,7 @@ class VoucherController extends Controller
         $voucherSettings = $context->getTenant()->settings;
 
         return view('operator.vouchers.index', compact(
-            'generatedThisMonth', 'unusedStock', 'redeemed', 'voided',
+            'generatedThisMonth', 'unusedStock', 'unusedFaceValueByCurrency', 'redeemed', 'voided',
             'vouchers', 'packages', 'latestBatch', 'voucherSettings'
         ));
     }
