@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -30,6 +31,37 @@ class TenantSettingsTest extends TestCase
         $this->assertSame('#123456', $tenant->settings['primary_color']);
         $this->assertSame('Acme Guest Wi-Fi', $tenant->settings['portal_title']);
         $this->assertTrue($tenant->settings['show_packages']);
+    }
+
+    public function test_integration_secrets_are_encrypted_at_rest_and_legacy_values_remain_readable(): void
+    {
+        $tenant = Tenant::create([
+            'name' => 'Secure Wi-Fi',
+            'slug' => 'secure',
+            'settings' => [
+                'sms_api_key' => 'sms-secret',
+                'whatsapp_api_key' => 'whatsapp-secret',
+                'whatsapp_webhook_secret' => 'webhook-secret',
+            ],
+        ]);
+
+        $stored = DB::table('tenants')->where('id', $tenant->id)->value('settings');
+        $this->assertStringNotContainsString('sms-secret', $stored);
+        $this->assertStringNotContainsString('whatsapp-secret', $stored);
+        $this->assertStringNotContainsString('webhook-secret', $stored);
+        $this->assertSame('sms-secret', $tenant->settings['sms_api_key']);
+        $this->assertSame('whatsapp-secret', $tenant->settings['whatsapp_api_key']);
+
+        DB::table('tenants')->where('id', $tenant->id)->update([
+            'settings' => json_encode(['sms_api_key' => 'legacy-plaintext-key'], JSON_THROW_ON_ERROR),
+        ]);
+        $tenant->refresh();
+        $this->assertSame('legacy-plaintext-key', $tenant->settings['sms_api_key']);
+
+        $tenant->update(['settings' => array_merge($tenant->settings, ['brand_name' => 'Secure Networks'])]);
+        $stored = DB::table('tenants')->where('id', $tenant->id)->value('settings');
+        $this->assertStringNotContainsString('legacy-plaintext-key', $stored);
+        $this->assertSame('legacy-plaintext-key', $tenant->fresh()->settings['sms_api_key']);
     }
 
     public function test_operator_can_view_and_update_general_settings(): void

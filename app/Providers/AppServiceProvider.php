@@ -4,7 +4,13 @@ namespace App\Providers;
 
 use App\Auth\TenantAwareEloquentUserProvider;
 use App\Models\AuditLog;
+use App\Models\Package;
+use App\Models\Router;
+use App\Models\Site;
+use App\Models\Tenant;
 use App\Models\User;
+use App\Models\VoucherBatch;
+use App\Observers\ActivityNotificationObserver;
 use App\Services\PlatformMailService;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
@@ -46,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
 
         $this->registerAuthAuditing();
         $this->registerRateLimiters();
+        $this->registerActivityNotifications();
 
         ResetPassword::createUrlUsing(function ($user, string $token) {
             return url(route('password.reset', [
@@ -78,6 +85,11 @@ class AppServiceProvider extends ServiceProvider
     private function registerRateLimiters(): void
     {
         RateLimiter::for('auth-register', fn (Request $request) => Limit::perMinute(5)->by('register:'.$request->ip()));
+        RateLimiter::for('auth-email-code-send', fn (Request $request) => [
+            Limit::perMinute(3)->by('email-code:'.$request->ip()),
+            Limit::perHour(8)->by('email-code-hour:'.$request->ip()),
+            Limit::perHour(3)->by('email-code-address:'.hash('sha256', strtolower(trim((string) $request->input('email'))))),
+        ]);
         RateLimiter::for('auth-password-email', fn (Request $request) => Limit::perMinute(5)->by('pwd-email:'.$request->ip()));
         RateLimiter::for('auth-password-reset', fn (Request $request) => Limit::perMinute(10)->by('pwd-reset:'.$request->ip()));
 
@@ -98,6 +110,16 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(10)->by('activate:'.hash('sha256', (string) $request->header('X-Payment-Token').'|'.$request->ip())),
             Limit::perMinute(120)->by('activate-ip:'.$request->ip()),
         ]);
+    }
+
+    private function registerActivityNotifications(): void
+    {
+        Tenant::observe(ActivityNotificationObserver::class);
+        User::observe(ActivityNotificationObserver::class);
+        Router::observe(ActivityNotificationObserver::class);
+        Package::observe(ActivityNotificationObserver::class);
+        Site::observe(ActivityNotificationObserver::class);
+        VoucherBatch::observe(ActivityNotificationObserver::class);
     }
 
     /**

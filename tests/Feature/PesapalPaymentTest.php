@@ -112,6 +112,30 @@ class PesapalPaymentTest extends TestCase
         $this->assertSame('pesapal', $transaction->meta['payment_provider']);
     }
 
+    public function test_pesapal_order_uses_the_package_currency(): void
+    {
+        $this->package->update(['currency' => 'KES']);
+        PlatformSetting::set('pesapal_consumer_key', 'test-key');
+        PlatformSetting::setSecret('pesapal_consumer_secret', 'test-secret');
+
+        Http::fake([
+            'https://cybqa.pesapal.com/pesapalv3/api/Auth/RequestToken' => Http::response(['token' => 'mock-token']),
+            'https://cybqa.pesapal.com/pesapalv3/api/Transactions/SubmitOrderRequest' => Http::response([
+                'order_tracking_id' => 'trk-kes-123',
+                'redirect_url' => 'https://cybqa.pesapal.com/checkout',
+            ]),
+        ]);
+
+        $this->post(route('portal.direct.purchase', ['tenant' => $this->tenant->slug]), [
+            'package_id' => $this->package->id,
+            'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertRedirect('https://cybqa.pesapal.com/checkout');
+
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/Transactions/SubmitOrderRequest')
+            && $request['currency'] === 'KES');
+    }
+
     public function test_pesapal_callback_fulfills_payment_on_completed_status(): void
     {
         PlatformSetting::set('pesapal_consumer_key', 'test-key');

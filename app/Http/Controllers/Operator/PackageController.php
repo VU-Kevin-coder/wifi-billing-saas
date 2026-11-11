@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Services\Tenancy\TenantContext;
 use App\Support\DataLimit;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ class PackageController extends Controller
 {
     public function index(TenantContext $context)
     {
+        $currency = strtoupper((string) PlatformSetting::get('currency', 'UGX'));
         // Automatically scoped to current tenant by BelongsToTenant
         $packages = Package::orderBy('price')->get();
 
@@ -28,7 +30,8 @@ class PackageController extends Controller
             'packages',
             'publishedCount',
             'activeSubscriptions',
-            'mostPopular'
+            'mostPopular',
+            'currency',
         ));
     }
 
@@ -53,7 +56,7 @@ class PackageController extends Controller
 
         $validated['tenant_id'] = $context->getTenantId();
         $validated['features'] = $request->input('features', []);
-        $validated['currency'] = 'UGX'; // Hardcoded for now, will use Tenant settings later
+        $validated['currency'] = strtoupper((string) PlatformSetting::get('currency', 'UGX'));
 
         $package = Package::create($validated);
 

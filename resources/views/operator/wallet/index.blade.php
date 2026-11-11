@@ -238,7 +238,7 @@
                                                        x-model="phone" 
                                                        placeholder="+256700000000"
                                                        class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
-                                                <p class="text-xs text-gray-500 mt-1">Enter a whole UGX amount. Payouts are sent through Flutterwave to the detected mobile money network.</p>
+                                                <p class="text-xs text-gray-500 mt-1">Enter a whole {{ $currency }} amount. Payouts are sent through Flutterwave to the detected mobile money network.</p>
                                             </div>
                                         </div>
                                     </div>

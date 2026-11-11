@@ -72,7 +72,7 @@
                 <x-ui.stat-card label="Weekly revenue" :value="$currency . ' ' . number_format($weeklyRevenue)" description="This week" tone="amber" class="p-4 sm:p-5" />
                 <x-ui.stat-card label="Monthly revenue" :value="$currency . ' ' . number_format($monthlyRevenue)" description="This month" tone="purple" class="p-4 sm:p-5" />
                 <x-ui.stat-card label="Active users" :value="number_format($activeSessions)" :description="number_format($activeSessions) . ' online · ' . number_format($offlineCustomers) . ' offline'" tone="green" class="p-4 sm:p-5" />
-                <x-ui.stat-card label="Wallet balance" :value="'UGX ' . number_format((float) ($tenant->wallet_balance ?? 0))" tone="amber" class="p-4 sm:p-5">
+                <x-ui.stat-card label="Wallet balance" :value="$currency . ' ' . number_format((float) ($tenant->wallet_balance ?? 0))" tone="amber" class="p-4 sm:p-5">
                     <a href="{{ route('operator.wallet.index') }}" class="text-[11px] text-white/80 underline hover:text-white">Manage &amp; Withdraw &rarr;</a>
                 </x-ui.stat-card>
                 <x-ui.stat-card label="Total customers" :value="number_format($totalCustomers)" description="Registered customers" tone="blue" class="p-4 sm:p-5" />

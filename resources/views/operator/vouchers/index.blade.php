@@ -87,8 +87,14 @@
                         </div>
                     </div>
                     <p class="text-3xl font-bold text-gray-900">{{ number_format($unusedStock) }}</p>
-                    @php $unusedVal = $unusedStock > 0 ? 'UGX ' . number_format($unusedStock * 2000) . ' face value' : 'Ready for distribution'; @endphp
-                    <p class="text-xs text-gray-400 mt-1">{{ $unusedVal }}</p>
+                    @if($unusedFaceValueByCurrency->isEmpty())
+                        <p class="text-xs text-gray-400 mt-1">Ready for distribution</p>
+                    @else
+                        <p class="text-xs text-gray-400 mt-1">
+                            Face value:
+                            {{ $unusedFaceValueByCurrency->map(fn ($row) => $row->currency.' '.number_format((float) $row->face_value))->join(', ') }}
+                        </p>
+                    @endif
                 </div>
 
                 {{-- Redeemed --}}
@@ -207,7 +213,7 @@
                                 </td>
                                 <td class="px-4 py-4 whitespace-nowrap">
                                     <div class="text-sm text-gray-900 font-medium">{{ $voucher->package->name }}</div>
-                                    <div class="text-xs text-gray-400 mt-0.5">UGX {{ number_format($voucher->package->price) }}</div>
+                                    <div class="text-xs text-gray-400 mt-0.5">{{ $voucher->package->currency }} {{ number_format($voucher->package->price) }}</div>
                                 </td>
                                 <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">
                                     {{ $voucher->batch->batch_code }}
@@ -316,7 +322,7 @@
                             @if($latestBatch)
                                 <p class="text-xs text-gray-500 mt-1">
                                     {{ number_format($latestBatch->quantity) }} × {{ $latestBatch->package->name }}
-                                    (UGX {{ number_format($latestBatch->package->price * $latestBatch->quantity) }})
+                                    ({{ $latestBatch->package->currency }} {{ number_format($latestBatch->package->price * $latestBatch->quantity) }})
                                     · Created by {{ $latestBatch->creator?->name ?? 'System' }}
                                 </p>
                             @else
@@ -432,7 +438,7 @@
                                                         <option value="">Select a package…</option>
                                                         @foreach($packages as $pkg)
                                                             <option value="{{ $pkg->id }}">
-                                                                {{ $pkg->name }} — UGX {{ number_format($pkg->price) }}
+                                                                {{ $pkg->name }} — {{ $pkg->currency }} {{ number_format($pkg->price) }}
                                                                 / {{ $pkg->duration_value }} {{ $pkg->duration_unit }}
                                                             </option>
                                                         @endforeach

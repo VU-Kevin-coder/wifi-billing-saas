@@ -131,6 +131,7 @@
                                 <option value="KES" {{ old('currency', $settings['currency']) == 'KES' ? 'selected' : '' }}>KES - Kenyan Shilling</option>
                                 <option value="USD" {{ old('currency', $settings['currency']) == 'USD' ? 'selected' : '' }}>USD - US Dollar</option>
                             </select>
+                            <p class="mt-1 text-[11px] text-gray-500">New packages use this currency. MTN and Airtel collections currently accept UGX only; use Pesapal for KES or USD packages.</p>
                         </div>
 
                         <div>

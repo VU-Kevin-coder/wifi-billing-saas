@@ -7,6 +7,12 @@
         <p class="text-gray-500 text-sm mt-1">Start free — no credit card required.</p>
     </div>
 
+    @if (session('email_code_sent'))
+        <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">
+            {{ session('email_code_sent') }}
+        </div>
+    @endif
+
     <form method="POST" action="{{ route('register') }}" class="space-y-4">
         @csrf
 
@@ -51,10 +57,28 @@
         {{-- ── Email ──────────────────────────────────────────────────────── --}}
         <div>
             <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-            <input id="email" type="email" name="email" value="{{ old('email') }}"
-                required autocomplete="email"
-                class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('email') border-red-400 bg-red-50 @enderror">
+            <div class="flex gap-2">
+                <input id="email" type="email" name="email" value="{{ old('email') }}"
+                    required autocomplete="email"
+                    class="min-w-0 flex-1 rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('email') border-red-400 bg-red-50 @enderror">
+                <button type="submit" formmethod="POST" formaction="{{ route('register.email-code') }}" formnovalidate
+                    class="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                    Verify email
+                </button>
+            </div>
             @error('email')
+                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+            @enderror
+        </div>
+
+        {{-- ── Email Verification Code ───────────────────────────────────── --}}
+        <div>
+            <label for="email_code" class="block text-sm font-medium text-gray-700 mb-1">Email verification code</label>
+            <input id="email_code" type="text" name="email_code" value="{{ old('email_code') }}"
+                required inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"
+                placeholder="6-digit code"
+                class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('email_code') border-red-400 bg-red-50 @enderror">
+            @error('email_code')
                 <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>

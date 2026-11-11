@@ -13,15 +13,19 @@ class MarkStaleRouters extends Command
 
     public function handle(): int
     {
-        $count = Router::withoutGlobalScopes()
+        $routers = Router::withoutGlobalScopes()
             ->where('status', 'online')
             ->where(function ($query): void {
                 $query->whereNull('last_seen_at')
                     ->orWhere('last_seen_at', '<=', now()->subMinutes(2));
             })
-            ->update(['status' => 'offline']);
+            ->get();
 
-        $this->info("Marked {$count} stale router(s) offline.");
+        foreach ($routers as $router) {
+            $router->update(['status' => 'offline']);
+        }
+
+        $this->info('Marked '.$routers->count().' stale router(s) offline.');
 
         return self::SUCCESS;
     }

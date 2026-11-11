@@ -38,7 +38,7 @@ class SiteAgentController extends Controller
                 if ($command->attempts >= 5) {
                     $command->update(['status' => 'failed']);
                     if (in_array($command->operation, ['telemetry', 'test_connection'], true)) {
-                        Router::query()->whereKey($command->router_id)->update(['status' => 'offline']);
+                        $this->markRouterOffline($agent, $command);
                     }
 
                     continue;
@@ -100,7 +100,7 @@ class SiteAgentController extends Controller
                     'failure_reason' => $validated['message'] ?? 'Agent reported command failure.',
                 ]);
                 if (in_array($job->operation, ['telemetry', 'test_connection'], true) && $job->attempts >= 5) {
-                    Router::query()->whereKey($job->router_id)->update(['status' => 'offline']);
+                    $this->markRouterOffline($agent, $job);
                 }
 
                 return ['duplicate' => false, 'status' => $job->status];
@@ -115,7 +115,7 @@ class SiteAgentController extends Controller
 
             if ($job->operation === 'telemetry') {
                 abort_unless(isset($validated['telemetry']), 422, 'Telemetry command did not include router metrics.');
-                Router::query()->whereKey($job->router_id)->update([
+                $this->routerForAgent($agent, $job)->update([
                     'status' => 'online',
                     'last_seen_at' => now(),
                     'telemetry_at' => now(),
@@ -125,7 +125,7 @@ class SiteAgentController extends Controller
                     'uptime' => $validated['telemetry']['uptime'],
                 ]);
             } elseif ($job->operation === 'test_connection') {
-                Router::query()->whereKey($job->router_id)->update([
+                $this->routerForAgent($agent, $job)->update([
                     'status' => 'online',
                     'last_seen_at' => now(),
                 ]);
@@ -142,5 +142,17 @@ class SiteAgentController extends Controller
         });
 
         return response()->json($result);
+    }
+
+    private function markRouterOffline(SiteAgent $agent, SiteAgentCommand $command): void
+    {
+        $this->routerForAgent($agent, $command)->update(['status' => 'offline']);
+    }
+
+    private function routerForAgent(SiteAgent $agent, SiteAgentCommand $command): Router
+    {
+        return Router::withoutTenancy()
+            ->where('tenant_id', $agent->tenant_id)
+            ->findOrFail($command->router_id);
     }
 }

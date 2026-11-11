@@ -40,6 +40,11 @@ class RouterProvisioningService
 
         $routerName = $router->name ?: 'MikroTik-Router';
         $escapedRouterName = $this->escapeRouterOs($routerName);
+        $wifiSsid = trim((string) $router->wifi_ssid);
+        if ($router->has_wireless && $wifiSsid === '') {
+            $wifiSsid = trim((string) ($tenant?->name ?: 'Free WiFi'));
+        }
+        $escapedWifiSsid = $this->escapeRouterOs(mb_strcut($wifiSsid, 0, 32, 'UTF-8'));
 
         $gatewayIp = (string) ($hotspotConfig['gateway'] ?? '10.10.0.1');
         $network = (string) ($hotspotConfig['network'] ?? '10.10.0.0/16');
@@ -121,7 +126,19 @@ class RouterProvisioningService
             $lines[] = ":if ([:len [/interface bridge port find interface=\"{$port}\"]] = 0) do={ /interface bridge port add bridge=br-hotspot interface=\"{$port}\" comment=\"Client access port\" } else={ /interface bridge port set [find interface=\"{$port}\"] bridge=br-hotspot comment=\"Client access port\" }";
         }
         if ($router->has_wireless) {
-            $lines[] = ':if ([:len [/interface bridge port find interface=wlan1]] = 0) do={ /interface bridge port add bridge=br-hotspot interface=wlan1 comment="Wireless access" disabled=no } else={ /interface bridge port set [find interface=wlan1] bridge=br-hotspot comment="Wireless access" disabled=no }';
+            foreach (['wlan1', 'wlan2'] as $interface) {
+                $lines[] = ":do { :if ([:len [/interface wireless find default-name={$interface}]] > 0) do={ :if ([:len [/interface bridge port find interface={$interface}]] = 0) do={ /interface bridge port add bridge=br-hotspot interface={$interface} comment=\"Wireless access\" disabled=no } else={ /interface bridge port set [find interface={$interface}] bridge=br-hotspot comment=\"Wireless access\" disabled=no } } } on-error={ :log warning \"Could not add {$interface} to the hotspot bridge; verify this radio exists.\" }";
+            }
+            foreach (['wifi1', 'wifi2'] as $interface) {
+                $lines[] = ":do { :if ([:len [/interface wifi find default-name={$interface}]] > 0) do={ :if ([:len [/interface bridge port find interface={$interface}]] = 0) do={ /interface bridge port add bridge=br-hotspot interface={$interface} comment=\"Wireless access\" disabled=no } else={ /interface bridge port set [find interface={$interface}] bridge=br-hotspot comment=\"Wireless access\" disabled=no } } } on-error={ :log warning \"Could not add {$interface} to the hotspot bridge; verify the WiFi package and radio.\" }";
+            }
+            $lines[] = '# --- Wi-Fi SSID (existing security settings are preserved) ---';
+            foreach (['wlan1', 'wlan2'] as $interface) {
+                $lines[] = ":do { /interface wireless set [find default-name={$interface}] ssid=\"{$escapedWifiSsid}\" disabled=no } on-error={ :log warning \"Could not set SSID on {$interface}; verify this radio exists.\" }";
+            }
+            foreach (['wifi1', 'wifi2'] as $interface) {
+                $lines[] = ":do { /interface wifi set [find default-name={$interface}] configuration.ssid=\"{$escapedWifiSsid}\" disabled=no } on-error={ :log warning \"Could not set SSID on {$interface}; verify the WiFi package and radio.\" }";
+            }
         }
         $lines[] = '';
 

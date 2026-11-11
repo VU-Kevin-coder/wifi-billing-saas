@@ -3,6 +3,10 @@
         showOverlay: false, 
         editMode: false, 
         packageId: null, 
+        currency: @js($currency),
+        displayCurrency() {
+            return this.editMode ? (this.form.currency || this.currency) : this.currency;
+        },
         form: { 
             name: '', 
             price: '', 
@@ -147,7 +151,7 @@
                     <div class="mt-3">
                         <p class="text-2xl font-bold text-slate-900 tracking-tight">VAT inclusive</p>
                         <p class="text-[11px] font-medium text-slate-400 mt-2">
-                            18% • charged in UGX
+                            18% • charged in {{ $currency }}
                         </p>
                     </div>
                 </div>
@@ -476,7 +480,7 @@
                                                 </div>
                                                 <div>
                                                     <label class="block font-medium text-slate-700 mb-1">Currency</label>
-                                                    <input type="text" value="UGX" disabled 
+                                                    <input type="text" :value="displayCurrency()" disabled
                                                            class="block w-full rounded-lg border-slate-200 bg-slate-50 text-xs shadow-sm text-slate-500">
                                                 </div>
                                             </div>

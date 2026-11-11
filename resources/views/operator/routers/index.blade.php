@@ -415,7 +415,22 @@
                                 </td>
 
                                 <!-- Action Buttons (Inline Quick Actions + Dropdown) -->
-                                <td class="px-4 py-3.5 whitespace-nowrap text-right" x-data="{ open: false, pinging: false }">
+                                <td class="px-4 py-3.5 whitespace-nowrap text-right" x-data="{
+                                    open: false,
+                                    pinging: false,
+                                    menuPosition: {},
+                                    toggleMenu(event) {
+                                        this.open = !this.open;
+                                        if (!this.open) return;
+                                        const rect = event.currentTarget.getBoundingClientRect();
+                                        const menuHeight = 340;
+                                        const top = rect.bottom + menuHeight > window.innerHeight
+                                            ? Math.max(8, rect.top - menuHeight - 6)
+                                            : rect.bottom + 6;
+                                        this.menuPosition = { top: `${top}px`, right: `${Math.max(8, window.innerWidth - rect.right)}px` };
+                                    }
+                                }"
+                                    @scroll.window="open = false">
                                     <div class="inline-flex items-center justify-end gap-1">
                                         
                                         <!-- Quick Action: Ping / Health Check -->
@@ -471,19 +486,22 @@
 
                                         <!-- Action Dropdown for Secondary Tasks -->
                                         <div class="relative inline-block text-left">
-                                            <button @click="open = !open" 
+                                            <button @click="toggleMenu($event)"
                                                     type="button" 
                                                     title="More actions"
+                                                    aria-label="Router actions"
+                                                    :aria-expanded="open"
                                                     class="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01"/>
                                                 </svg>
                                             </button>
 
-                                            <div x-show="open" 
+                                            <div x-show="open"
                                                  @click.outside="open = false" 
                                                  x-cloak
-                                                 class="absolute right-0 mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-30 text-left">
+                                                 :style="menuPosition"
+                                                 class="fixed w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-[100] text-left">
                                                 
                                                 <a href="{{ route('operator.routers.show', $router) }}" 
                                                    class="flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50">

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Voucher;
@@ -25,6 +26,7 @@ class DashboardController extends Controller
         abort_unless($tenant, 404, 'Tenant not found');
 
         $tenantId = $tenant->id;
+        $defaultCurrency = strtoupper((string) PlatformSetting::get('currency', 'UGX'));
         $currencies = Package::query()
             ->where('packages.tenant_id', $tenantId)
             ->distinct()
@@ -33,7 +35,7 @@ class DashboardController extends Controller
             ->all();
 
         if ($currencies === []) {
-            $currencies = ['UGX'];
+            $currencies = [$defaultCurrency];
         }
 
         $currency = $request->query('currency');

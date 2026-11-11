@@ -69,6 +69,24 @@ class MobileMoneyPaymentFlowTest extends TestCase
         });
     }
 
+    public function test_mobile_money_rejects_non_ugx_packages_instead_of_charging_the_wrong_currency(): void
+    {
+        [$tenant, $package, $transaction] = $this->createPendingPayment();
+        $package->update(['currency' => 'KES']);
+
+        $result = app(PaymentService::class)->initiatePackagePayment(
+            $tenant,
+            $package,
+            '0771234567',
+            $transaction,
+        );
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertStringContainsString('supports UGX packages only', $result['error']);
+        $this->assertSame('failed', $transaction->fresh()->status);
+        Http::assertNothingSent();
+    }
+
     public function test_mobile_money_purchase_redirects_to_pending_and_polling_reconciles_payment(): void
     {
         Http::fake(function (ClientRequest $request) {

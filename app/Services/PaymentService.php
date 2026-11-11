@@ -80,6 +80,16 @@ class PaymentService
             return $this->initiatePesapalPayment($tenant, $package, $phone, $transaction);
         }
 
+        $currency = strtoupper((string) ($package->currency ?: PlatformSetting::get('currency', 'UGX')));
+        if ($currency !== 'UGX') {
+            $transaction->update(['status' => 'failed']);
+
+            return [
+                'status' => 'failed',
+                'error' => "Mobile money currently supports UGX packages only. Configure Pesapal for {$currency} packages.",
+            ];
+        }
+
         $configured = $network === 'MTN' ? $this->mtn->isConfigured() : $this->airtel->isConfigured();
         if (! $configured) {
             $transaction->update(['status' => 'failed']);
@@ -427,7 +437,7 @@ class PaymentService
             $orderResponse = Http::withToken($token)
                 ->post("{$baseUrl}/Transactions/SubmitOrderRequest", [
                     'id' => $transaction->reference,
-                    'currency' => 'UGX',
+                    'currency' => strtoupper((string) ($package->currency ?: PlatformSetting::get('currency', 'UGX'))),
                     'amount' => $amount,
                     'description' => "Wi-Fi Package: {$package->name}",
                     'callback_url' => $callbackUrl,

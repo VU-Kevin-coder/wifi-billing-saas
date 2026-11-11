@@ -16,6 +16,7 @@ class Router extends Model
         'tenant_id',
         'site_id',
         'name',
+        'wifi_ssid',
         'serial_number',
         'hardware_model',
         'management_ip',

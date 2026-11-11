@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\TenantSettingsSecrets;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -96,7 +97,16 @@ class Tenant extends Model
 
         $storedSettings = is_array($value) ? $value : (json_decode($value ?? '', true) ?? []);
 
-        return array_merge($defaults, $storedSettings);
+        return array_merge($defaults, TenantSettingsSecrets::decrypt($storedSettings));
+    }
+
+    public function setSettingsAttribute(array|string|null $value): void
+    {
+        $settings = is_array($value) ? $value : (json_decode($value ?? '', true) ?? []);
+        $this->attributes['settings'] = json_encode(
+            TenantSettingsSecrets::encrypt($settings),
+            JSON_THROW_ON_ERROR,
+        );
     }
 
     /**

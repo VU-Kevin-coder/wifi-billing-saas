@@ -8,6 +8,7 @@ use App\Models\PlatformSetting;
 use App\Services\PlatformMailService;
 use App\Services\SmsService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ConfigurationController extends Controller
 {
@@ -103,7 +104,7 @@ class ConfigurationController extends Controller
         $validated = $request->validate([
             'platform_name' => 'required|string',
             'default_country' => 'required|string',
-            'currency' => 'required|string',
+            'currency' => ['required', Rule::in(['UGX', 'KES', 'USD'])],
             'timezone' => 'required|string',
             'date_format' => 'required|string',
             'language' => 'required|string',
