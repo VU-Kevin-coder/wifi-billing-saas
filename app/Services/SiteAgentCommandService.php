@@ -73,33 +73,6 @@ class SiteAgentCommandService
                 ]);
             }
 
-            public function testConnection(Router $router): SiteAgentCommand
-            {
-                $agent = $this->agentFor($router);
-                $command = SiteAgentCommand::query()
-                    ->where('router_id', $router->id)
-                    ->whereNull('session_id')
-                    ->where('operation', 'test_connection')
-                    ->whereIn('status', ['pending', 'claimed'])
-                    ->latest('id')
-                    ->first();
-
-                if ($command) {
-                    return $command;
-                }
-
-                return SiteAgentCommand::create([
-                    'site_agent_id' => $agent->id,
-                    'tenant_id' => $router->tenant_id,
-                    'router_id' => $router->id,
-                    'session_id' => null,
-                    'operation' => 'test_connection',
-                    'payload' => [],
-                    'status' => 'pending',
-                    'attempts' => 0,
-                ]);
-            }
-
             return $command;
         }
 
@@ -110,6 +83,33 @@ class SiteAgentCommandService
             'session_id' => null,
             'operation' => 'sync_profile',
             'payload' => ['profiles' => $profiles],
+            'status' => 'pending',
+            'attempts' => 0,
+        ]);
+    }
+
+    public function testConnection(Router $router): SiteAgentCommand
+    {
+        $agent = $this->agentFor($router);
+        $command = SiteAgentCommand::query()
+            ->where('router_id', $router->id)
+            ->whereNull('session_id')
+            ->where('operation', 'test_connection')
+            ->whereIn('status', ['pending', 'claimed'])
+            ->latest('id')
+            ->first();
+
+        if ($command) {
+            return $command;
+        }
+
+        return SiteAgentCommand::create([
+            'site_agent_id' => $agent->id,
+            'tenant_id' => $router->tenant_id,
+            'router_id' => $router->id,
+            'session_id' => null,
+            'operation' => 'test_connection',
+            'payload' => [],
             'status' => 'pending',
             'attempts' => 0,
         ]);

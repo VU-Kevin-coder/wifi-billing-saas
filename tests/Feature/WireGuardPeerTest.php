@@ -68,7 +68,7 @@ class WireGuardPeerTest extends TestCase
         $runner = Mockery::mock(WireGuardCommandRunner::class);
         $runner->shouldReceive('run')
             ->once()
-            ->with(['wg', 'show', 'wg0', 'public-key'], null)
+            ->with(['wg', 'show', 'wg0', 'public-key'])
             ->andReturn(base64_encode(str_repeat('s', 32)));
         $service = new WireGuardService($runner);
 
