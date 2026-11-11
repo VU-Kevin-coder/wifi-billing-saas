@@ -75,6 +75,30 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertSame('expired', Session::withoutTenancy()->findOrFail($session->id)->status);
     }
 
+    public function test_production_activation_fails_closed_when_router_is_ambiguous(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, , , , $voucher] = $this->createSiteSetup();
+        $otherSite = Site::create(['tenant_id' => $tenant->id, 'name' => 'South Site']);
+        Router::create([
+            'tenant_id' => $tenant->id,
+            'site_id' => $otherSite->id,
+            'name' => 'South Router',
+            'status' => 'online',
+        ]);
+
+        try {
+            app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+                ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+            $this->fail('Activation unexpectedly chose a router without router context.');
+        } catch (\LogicException $exception) {
+            $this->assertStringContainsString('not bound to a router', $exception->getMessage());
+        }
+
+        $this->assertSame('unused', $voucher->fresh()->status);
+        $this->assertDatabaseCount('sessions_log', 0);
+    }
+
     public function test_production_activation_fails_closed_without_a_paired_site_agent(): void
     {
         config(['site_agent.required' => true]);
