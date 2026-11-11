@@ -15,6 +15,7 @@ class Tenant extends Model
     protected $fillable = [
         'name', 'slug', 'status', 'settings',
         'mikrotik_host', 'mikrotik_username', 'mikrotik_password', 'mikrotik_port',
+        'vpn_subnet',
         // Account details
         'legal_name', 'address', 'contact_name', 'contact_email', 'contact_phone',
         // Plan & Subscription
@@ -147,6 +148,11 @@ class Tenant extends Model
     public function routers(): HasMany
     {
         return $this->hasMany(Router::class);
+    }
+
+    public function vpnPeers(): HasMany
+    {
+        return $this->hasMany(VpnPeer::class);
     }
 
     public function plan(): BelongsTo

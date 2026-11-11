@@ -9,8 +9,10 @@ use App\Models\Session;
 use App\Models\Site;
 use App\Services\RouterConnectionService;
 use App\Services\RouterProvisioningService;
+use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class RouterController extends Controller
@@ -115,19 +117,99 @@ class RouterController extends Controller
                 Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
             ],
             'hardware_model' => ['nullable', 'string', 'max:255'],
+            'management_ip' => ['nullable', 'string', 'max:255'],
+            'management_subnet' => [
+                'nullable',
+                'string',
+                'max:18',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    $parts = explode('/', $value, 2);
+                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : (isset($parts[1]) ? -1 : 32);
+                    if (filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || $prefix < 8 || $prefix > 32) {
+                        $fail('The management subnet must be a valid IPv4 address or CIDR no broader than an IPv4 /8.');
+                    }
+                },
+            ],
+            'api_username' => ['nullable', 'string', 'max:100'],
+            'api_password' => ['nullable', 'string', 'max:255', 'not_regex:/[\r\n\x00]/'],
             'api_port' => ['nullable', 'integer', 'between:1,65535'],
             'has_wireless' => ['nullable', 'boolean'],
             'ethernet_ports' => ['nullable', 'array'],
             'enable_hotspot' => ['nullable', 'boolean'],
-            'hotspot_network' => ['nullable', 'string', 'max:50'],
-            'gateway_ip' => ['nullable', 'ipv4'],
-            'dns_servers' => ['nullable', 'string', 'max:100'],
-            'hotspot_domain' => ['nullable', 'string', 'max:100'],
+            'hotspot_network' => [
+                'nullable',
+                'string',
+                'max:50',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    $parts = explode('/', $value, 2);
+                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : (isset($parts[1]) ? -1 : 32);
+                    if (filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || $prefix < 8 || $prefix > 30) {
+                        $fail('The hotspot network must be a valid IPv4 CIDR with usable host addresses.');
+                    }
+                },
+            ],
+            'gateway_ip' => [
+                'nullable',
+                'ipv4',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if (! $value) {
+                        return;
+                    }
+
+                    $network = (string) $request->input('hotspot_network', '10.10.0.0/16');
+                    $parts = explode('/', $network, 2);
+                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : -1;
+                    if ($prefix < 8 || $prefix > 30 || filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                        return;
+                    }
+
+                    $mask = (0xFFFFFFFF << (32 - $prefix)) & 0xFFFFFFFF;
+                    $networkAddress = (int) sprintf('%u', ip2long($parts[0]));
+                    $gatewayAddress = (int) sprintf('%u', ip2long($value));
+                    if (($networkAddress & $mask) !== $networkAddress || ($gatewayAddress & $mask) !== $networkAddress) {
+                        $fail('The gateway must be an IPv4 host inside the configured hotspot network.');
+                    }
+                },
+            ],
+            'dns_servers' => [
+                'nullable',
+                'string',
+                'max:100',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+                    foreach (explode(',', $value) as $server) {
+                        if (filter_var(trim($server), FILTER_VALIDATE_IP) === false) {
+                            $fail('DNS servers must be comma-separated IP addresses.');
+
+                            return;
+                        }
+                    }
+                },
+            ],
+            'hotspot_domain' => ['nullable', 'string', 'max:100', 'regex:/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/'],
         ]);
 
         $site = isset($validated['site_id'])
             ? Site::where('tenant_id', $tenantId)->findOrFail($validated['site_id'])
             : null;
+
+        $apiPassword = ! empty($validated['api_password'])
+            ? $validated['api_password']
+            : Str::password(16);
+
+        $apiUsername = ! empty($validated['api_username'])
+            ? $validated['api_username']
+            : 'billing_api';
 
         $router = Router::create([
             'tenant_id' => $tenantId,
@@ -135,14 +217,14 @@ class RouterController extends Controller
             'name' => $validated['name'],
             'site' => $site?->name ?? ($validated['site'] ?? null),
             'hardware_model' => $validated['hardware_model'] ?? 'hEX / RB750Gr3',
-            'management_ip' => null,
+            'management_ip' => $validated['management_ip'] ?? null,
             'status' => 'provisioning',
             'cpu_usage' => 0,
             'memory_usage' => 0,
             'active_users' => 0,
             'last_seen_at' => null,
-            'api_username' => null,
-            'api_password' => null,
+            'api_username' => $apiUsername,
+            'api_password' => $apiPassword,
             'api_port' => $validated['api_port'] ?? 8728,
             'has_wireless' => $request->boolean('has_wireless'),
             'enable_hotspot' => $request->boolean('enable_hotspot', true),
@@ -151,6 +233,7 @@ class RouterController extends Controller
                 'gateway' => $validated['gateway_ip'] ?? '10.10.0.1',
                 'dns' => $validated['dns_servers'] ?? '8.8.8.8,8.8.4.4',
                 'domain' => $validated['hotspot_domain'] ?? 'hotspot.local',
+                'management_subnet' => $validated['management_subnet'] ?? null,
             ],
             'ethernet_ports' => $request->input('ethernet_ports', ['ether2', 'ether3']),
         ]);
@@ -158,7 +241,7 @@ class RouterController extends Controller
         AuditLog::record('router.created', $router, ['name' => $router->name, 'site_id' => $router->site_id]);
 
         return redirect()->route('operator.routers.show', $router)
-            ->with('status', "Router '{$router->name}' added. Configure its credentials in the local site-agent router map.");
+            ->with('status', "Router '{$router->name}' added successfully.");
     }
 
     /**
@@ -169,6 +252,7 @@ class RouterController extends Controller
         $context = app(TenantContext::class);
         $tenant = $context->getTenant();
         $router = $this->resolveTenantRouter($args, $context);
+        $router->loadMissing('vpnPeer');
         abort_unless($tenant, 404, 'Tenant not found');
         $assignedSite = $router->site_id
             ? Site::withoutTenancy()
@@ -176,9 +260,24 @@ class RouterController extends Controller
                 ->find($router->site_id)
             : null;
         $liveData = $connectionService->liveStatus($router);
-        $provisionScript = app(RouterProvisioningService::class)->generateScript($router);
+        $hasApiCredentials = (filled($router->management_ip) || $router->vpnPeer?->enabled)
+            && filled($router->api_username)
+            && filled($router->api_password);
+        $latestConnectionTest = \App\Models\SiteAgentCommand::query()
+            ->where('router_id', $router->id)
+            ->whereNull('session_id')
+            ->where('operation', 'test_connection')
+            ->latest('id')
+            ->first();
 
-        return view('operator.routers.show', compact('tenant', 'router', 'assignedSite', 'liveData', 'provisionScript'));
+        return view('operator.routers.show', compact(
+            'tenant',
+            'router',
+            'assignedSite',
+            'liveData',
+            'hasApiCredentials',
+            'latestConnectionTest',
+        ));
     }
 
     /**
@@ -237,12 +336,46 @@ class RouterController extends Controller
         return back()->with($result['ok'] ? 'status' : 'error', $message);
     }
 
-    public function testConnection(Request $request, RouterConnectionService $connectionService, ...$args)
+    public function testConnection(
+        Request $request,
+        RouterConnectionService $connectionService,
+        SiteAgentCommandService $commandService,
+        ...$args,
+    )
     {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
 
-        return response()->json($connectionService->test($router));
+        if (config('site_agent.required')) {
+            try {
+                $command = $commandService->testConnection($router);
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'A paired site agent is required to test this router, but no usable agent is available.',
+                ], 422);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'queued' => true,
+                'command_id' => $command->id,
+                'message' => 'Router API test queued for the paired site agent. The router status will update when the agent reports back.',
+            ], 202);
+        }
+
+        $result = $connectionService->test($router);
+        if ($result['ok']) {
+            $router->update(['status' => 'online', 'last_seen_at' => now()]);
+        }
+
+        $statusCode = $result['ok']
+            ? 200
+            : (str_contains($result['message'] ?? '', 'before testing') ? 422 : 503);
+
+        return response()->json($result, $statusCode);
     }
 
     /**
@@ -309,7 +442,7 @@ class RouterController extends Controller
     }
 
     /**
-     * Sync configuration & RADIUS profile with a router.
+     * Sync configuration and package HotSpot profiles with a router.
      */
     public function sync(Request $request, ...$args)
     {

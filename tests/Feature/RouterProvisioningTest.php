@@ -56,6 +56,7 @@ class RouterProvisioningTest extends TestCase
             'duration_unit' => 'hours',
             'speed_limit_mbps' => 15,
             'device_limit' => 2,
+            'data_limit' => '5GB',
         ]);
 
         $this->router = Router::create([
@@ -72,6 +73,7 @@ class RouterProvisioningTest extends TestCase
                 'gateway' => '10.10.0.1',
                 'dns' => '8.8.8.8,1.1.1.1',
                 'domain' => 'wifi.acme.local',
+                'management_subnet' => '192.168.88.0/24',
             ],
             'ethernet_ports' => ['ether2', 'ether3', 'ether4'],
         ]);
@@ -86,13 +88,68 @@ class RouterProvisioningTest extends TestCase
 
         $this->assertStringContainsString('/system identity set name="Main-Hotspot-Router"', $script);
         $this->assertStringContainsString('/interface bridge add name=br-hotspot', $script);
-        $this->assertStringContainsString('/interface bridge port add bridge=br-hotspot interface=ether2', $script);
+        $this->assertStringContainsString('/interface bridge port add bridge=br-hotspot interface="ether2"', $script);
         $this->assertStringContainsString('/ip address add address=10.10.0.1/16 interface=br-hotspot', $script);
         $this->assertStringContainsString('/ip hotspot profile add name=prof-billing dns-name="wifi.acme.local"', $script);
-        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host=*pesapal.com*', $script);
-        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host=*mtn.co.ug*', $script);
-        $this->assertStringContainsString('/ip service set api port=8728', $script);
-        $this->assertStringContainsString('/ip hotspot user profile add name="Daily_Pass" rate-limit="15M/15M" shared-users=2', $script);
+        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*pesapal.com*"', $script);
+        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*mtn.co.ug*"', $script);
+        $this->assertStringContainsString('/ip service set api port=8728 address="192.168.88.0/24" disabled=no', $script);
+        $this->assertStringContainsString('/ip service set api-ssl disabled=yes', $script);
+        $this->assertStringContainsString('ranges=10.10.0.10-10.10.255.254', $script);
+        $this->assertStringContainsString('password="'.$service->escapeRouterOs('secret123').'"', $script);
+        $this->assertStringNotContainsString('******', $script);
+        $profile = $this->package->routerProfileSettings();
+        $this->assertStringContainsString('/ip hotspot user profile add name="package-'.$this->package->id.'" rate-limit="15M/15M" shared-users=2', $script);
+        $this->assertArrayNotHasKey('limit-uptime', $profile);
+        $this->assertArrayNotHasKey('limit-bytes-total', $profile);
+        $this->assertStringContainsString('Voucher uptime and data caps are applied to each HotSpot user', $script);
+    }
+
+    public function test_generated_routeros_values_are_escaped_and_generated_password_is_persisted(): void
+    {
+        $router = Router::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Edge "HQ"\\$',
+            'api_username' => 'billing_api',
+            'api_password' => null,
+            'api_port' => 8729,
+            'hotspot_config' => [
+                'network' => '192.168.20.0/24',
+                'gateway' => '192.168.20.1',
+                'dns' => '1.1.1.1',
+                'domain' => 'hotspot.acme.test',
+                'management_subnet' => '192.168.88.0/24',
+            ],
+        ]);
+        $service = new RouterProvisioningService;
+
+        $script = $service->generateScript($router);
+        $password = $router->fresh()->api_password;
+
+        $this->assertNotSame('', $password);
+        $this->assertStringContainsString('password="'.$service->escapeRouterOs($password).'"', $script);
+        $this->assertStringContainsString('name="'.$service->escapeRouterOs($router->name).'"', $script);
+        $this->assertStringContainsString('password="'.$service->escapeRouterOs($password).'"', $script);
+        $this->assertStringNotContainsString('******', $script);
+        $this->assertStringContainsString('ranges=192.168.20.10-192.168.20.254', $script);
+        $this->assertStringContainsString('/ip service set api-ssl port=8729 address="192.168.88.0/24" disabled=no', $script);
+        $this->assertStringContainsString('/ip service set api disabled=yes', $script);
+        $this->assertStringNotContainsString($router->name, $script);
+    }
+
+    public function test_invalid_hotspot_network_is_rejected_before_script_generation(): void
+    {
+        $this->router->forceFill([
+            'hotspot_config' => [
+                'network' => '10.10.0.0/24',
+                'gateway' => '10.11.0.1',
+                'dns' => '8.8.8.8',
+                'domain' => 'wifi.acme.local',
+            ],
+        ])->save();
+
+        $this->expectException(\InvalidArgumentException::class);
+        (new RouterProvisioningService)->generateScript($this->router);
     }
 
     public function test_dynamic_router_configuration_refreshes_the_resolved_manager(): void
@@ -163,6 +220,7 @@ class RouterProvisioningTest extends TestCase
             '/system/resource/print' => [
                 ['uptime' => '5d', 'cpu-load' => 10, 'free-memory' => 100000000, 'total-memory' => 256000000],
             ],
+            '/ip/hotspot/user/profile/print' => [],
             '/ip/hotspot/user/profile/add' => [],
         ]);
 

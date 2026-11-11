@@ -9,8 +9,6 @@ use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
 use App\Models\Voucher;
 use App\Services\Policy\Policy;
-use App\Support\DataLimit;
-use Illuminate\Support\Facades\Log;
 
 class SiteAgentCommandService
 {
@@ -18,6 +16,7 @@ class SiteAgentCommandService
     {
         $agent = $this->agentFor($router);
         $package = $session->package;
+        $profileSettings = $package?->routerProfileSettings();
 
         return SiteAgentCommand::query()->updateOrCreate(
             ['session_id' => $session->id, 'operation' => 'provision_user'],
@@ -28,13 +27,10 @@ class SiteAgentCommandService
                 'payload' => [
                     'username' => $voucher->code,
                     'password' => $voucher->code,
-                    'profile' => $package?->radius_profile_name ?: 'default',
+                    'profile' => $package?->routerProfileName() ?? 'default',
+                    'profile_settings' => $profileSettings,
                     'limit_uptime' => $this->routerUptimeLimit($session),
-                    'rate_limit' => (int) $package?->speed_limit_mbps > 0
-                        ? ((int) $package->speed_limit_mbps).'M/'.((int) $package->speed_limit_mbps).'M'
-                        : null,
-                    'shared_users' => max(1, (int) ($package?->device_limit ?? 1)),
-                    'limit_bytes_total' => $this->dataLimitBytes($package),
+                    'limit_bytes_total' => $package?->routerLimitBytes(),
                 ],
                 'status' => 'pending',
                 'attempts' => 0,
@@ -43,6 +39,80 @@ class SiteAgentCommandService
                 'failure_reason' => null,
             ],
         );
+    }
+
+    public function syncProfiles(Router $router): SiteAgentCommand
+    {
+        $agent = $this->agentFor($router);
+        $profiles = Package::withoutGlobalScopes()
+            ->where('tenant_id', $router->tenant_id)
+            ->get()
+            ->map(fn (Package $package): array => $package->routerProfileSettings())
+            ->values()
+            ->all();
+
+        $command = SiteAgentCommand::query()
+            ->where('router_id', $router->id)
+            ->whereNull('session_id')
+            ->where('operation', 'sync_profile')
+            ->whereIn('status', ['pending', 'claimed'])
+            ->latest('id')
+            ->first();
+
+        if ($command) {
+            if ($command->status === 'pending') {
+                $command->update([
+                    'payload' => ['profiles' => $profiles],
+                    'site_agent_id' => $agent->id,
+                    'tenant_id' => $router->tenant_id,
+                    'status' => 'pending',
+                    'attempts' => 0,
+                    'claimed_at' => null,
+                    'completed_at' => null,
+                    'failure_reason' => null,
+                ]);
+            }
+
+            public function testConnection(Router $router): SiteAgentCommand
+            {
+                $agent = $this->agentFor($router);
+                $command = SiteAgentCommand::query()
+                    ->where('router_id', $router->id)
+                    ->whereNull('session_id')
+                    ->where('operation', 'test_connection')
+                    ->whereIn('status', ['pending', 'claimed'])
+                    ->latest('id')
+                    ->first();
+
+                if ($command) {
+                    return $command;
+                }
+
+                return SiteAgentCommand::create([
+                    'site_agent_id' => $agent->id,
+                    'tenant_id' => $router->tenant_id,
+                    'router_id' => $router->id,
+                    'session_id' => null,
+                    'operation' => 'test_connection',
+                    'payload' => [],
+                    'status' => 'pending',
+                    'attempts' => 0,
+                ]);
+            }
+
+            return $command;
+        }
+
+        return SiteAgentCommand::create([
+            'site_agent_id' => $agent->id,
+            'tenant_id' => $router->tenant_id,
+            'router_id' => $router->id,
+            'session_id' => null,
+            'operation' => 'sync_profile',
+            'payload' => ['profiles' => $profiles],
+            'status' => 'pending',
+            'attempts' => 0,
+        ]);
     }
 
     /**
@@ -120,24 +190,5 @@ class SiteAgentCommandService
         $remainingSeconds = $seconds % 60;
 
         return sprintf('%02d:%02d:%02d', $hours, $minutes, $remainingSeconds);
-    }
-
-    /**
-     * The package's data allowance in bytes for the router, or null for unlimited.
-     * A legacy value that cannot be parsed is logged and treated as unlimited
-     * rather than blocking a paying customer's activation.
-     */
-    private function dataLimitBytes(?Package $package): ?int
-    {
-        try {
-            return DataLimit::bytes($package?->data_limit);
-        } catch (\InvalidArgumentException $exception) {
-            Log::warning('Package has an unparseable data limit; no byte cap applied.', [
-                'package_id' => $package?->id,
-                'data_limit' => $package?->data_limit,
-            ]);
-
-            return null;
-        }
     }
 }

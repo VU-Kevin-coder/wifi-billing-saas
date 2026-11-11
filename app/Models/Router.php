@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Router extends Model
 {
@@ -59,5 +60,10 @@ class Router extends Model
     public function assignedSite(): BelongsTo
     {
         return $this->belongsTo(Site::class, 'site_id');
+    }
+
+    public function vpnPeer(): HasOne
+    {
+        return $this->hasOne(VpnPeer::class);
     }
 }
