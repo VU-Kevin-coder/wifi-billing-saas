@@ -155,10 +155,11 @@ class CustomerController extends Controller
 
         if ($search !== '') {
             $customers->where(function (Builder $query) use ($search): void {
-                $query->where('name', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('mac_address', 'like', "%{$search}%");
+                $pattern = "%{$search}%";
+                $query->whereLike('name', $pattern)
+                    ->orWhereLike('phone', $pattern)
+                    ->orWhereLike('email', $pattern)
+                    ->orWhereLike('mac_address', $pattern);
             });
         }
 
