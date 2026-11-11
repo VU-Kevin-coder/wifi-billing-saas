@@ -534,7 +534,7 @@ class RouterController extends Controller
 
         $statusCode = $result['ok']
             ? 200
-            : (str_contains($result['message'] ?? '', 'before testing') ? 422 : 503);
+            : (($result['failure_type'] ?? null) === 'missing_configuration' ? 422 : 503);
 
         return response()->json($result, $statusCode);
     }

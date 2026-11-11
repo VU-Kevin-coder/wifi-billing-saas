@@ -15,6 +15,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
+use ZillEAli\MikrotikLaravel\Exceptions\ConnectionException;
+use ZillEAli\MikrotikLaravel\Facades\MikroTik;
 
 class RouterManagementTest extends TestCase
 {
@@ -470,6 +472,37 @@ class RouterManagementTest extends TestCase
                 'ok' => false,
                 'message' => 'Router API did not respond.',
             ]);
+    }
+
+    public function test_router_api_failure_includes_connection_diagnostics_without_exposing_password(): void
+    {
+        config([
+            'site_agent.required' => false,
+            'site_agent.allow_direct_router_connection' => true,
+        ]);
+
+        $router = app(TenantContext::class)->runAs($this->acme, function () {
+            return Router::create([
+                'name' => 'DIAGNOSTIC-ROUTER',
+                'management_ip' => '10.8.1.2',
+                'api_port' => 8729,
+                'api_username' => 'router-admin',
+                'api_password' => 'do-not-display-this-password',
+            ]);
+        });
+
+        MikroTik::shouldReceive('router')
+            ->once()
+            ->with('lan-demo-router-'.$router->id)
+            ->andThrow(new ConnectionException('Login failed for user router-admin on 10.8.1.2 with do-not-display-this-password'));
+
+        $result = app(RouterConnectionService::class)->test($router);
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('10.8.1.2:8729 (API-SSL)', $result['diagnostic']);
+        $this->assertStringContainsString(ConnectionException::class, $result['diagnostic']);
+        $this->assertStringContainsString('Login failed', $result['diagnostic']);
+        $this->assertStringNotContainsString('do-not-display-this-password', $result['message']);
     }
 
     public function test_operator_reboot_is_not_reported_as_success_without_agent_support(): void
