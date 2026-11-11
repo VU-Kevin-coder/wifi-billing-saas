@@ -22,8 +22,7 @@ the production proxy chain.
 
 ## Batches A–C
 
-The current branch contains the earlier tenant-scoped router records, site-agent
-command channel, voucher provisioning/expiry flow, and one-time WireGuard
+The current branch contains the earlier tenant-scoped router records, site-agent command channel, voucher provisioning/expiry flow, and one-time WireGuard
 configuration. Their individual batch-to-finding mapping and historical test
 results are not captured in this repository; this document does not claim that
 those features have passed on physical hardware.
