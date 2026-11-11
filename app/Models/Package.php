@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use App\Support\DataLimit;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class Package extends Model
 {
@@ -61,5 +63,42 @@ class Package extends Model
             'month' => $expiresAt->addMonths($value),
             'year' => $expiresAt->addYears($value),
         };
+    }
+
+    public function routerProfileName(): string
+    {
+        return 'package-'.$this->getKey();
+    }
+
+    /**
+     * Return the canonical RouterOS HotSpot user profile settings for this package.
+     */
+    public function routerProfileSettings(): array
+    {
+        $speed = max(1, (int) $this->speed_limit_mbps);
+
+        return [
+            'name' => $this->routerProfileName(),
+            'rate-limit' => "{$speed}M/{$speed}M",
+            'shared-users' => max(1, (int) ($this->device_limit ?: 1)),
+        ];
+    }
+
+    /**
+     * RouterOS stores total uptime and byte caps on each HotSpot user, not on
+     * the user profile. Keep those per-voucher limits in the user command.
+     */
+    public function routerLimitBytes(): ?int
+    {
+        try {
+            return DataLimit::bytes($this->data_limit);
+        } catch (\InvalidArgumentException) {
+            Log::warning('Package has an unparseable data limit; no byte cap applied.', [
+                'package_id' => $this->getKey(),
+                'data_limit' => $this->data_limit,
+            ]);
+
+            return null;
+        }
     }
 }

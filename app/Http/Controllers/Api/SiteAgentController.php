@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Router;
 use App\Models\Session;
 use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
@@ -36,6 +37,9 @@ class SiteAgentController extends Controller
             foreach ($rows as $command) {
                 if ($command->attempts >= 5) {
                     $command->update(['status' => 'failed']);
+                    if (in_array($command->operation, ['sync_profile', 'test_connection'], true)) {
+                        Router::query()->whereKey($command->router_id)->update(['status' => 'offline']);
+                    }
 
                     continue;
                 }
@@ -90,6 +94,9 @@ class SiteAgentController extends Controller
                     'claimed_at' => null,
                     'failure_reason' => $validated['message'] ?? 'Agent reported command failure.',
                 ]);
+                if (in_array($job->operation, ['sync_profile', 'test_connection'], true) && $job->attempts >= 5) {
+                    Router::query()->whereKey($job->router_id)->update(['status' => 'offline']);
+                }
 
                 return ['duplicate' => false, 'status' => $job->status];
             }
@@ -101,7 +108,12 @@ class SiteAgentController extends Controller
                 'failure_reason' => null,
             ]);
 
-            if ($job->operation === 'expire_user') {
+            if (in_array($job->operation, ['sync_profile', 'test_connection'], true)) {
+                Router::query()->whereKey($job->router_id)->update([
+                    'status' => 'online',
+                    'last_seen_at' => now(),
+                ]);
+            } elseif ($job->operation === 'expire_user') {
                 Session::withoutTenancy()
                     ->where('tenant_id', $job->tenant_id)
                     ->whereKey($job->session_id)

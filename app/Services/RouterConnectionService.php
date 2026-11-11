@@ -24,14 +24,16 @@ class RouterConnectionService
             ];
         }
 
-        if (blank($router->management_ip) || blank($router->api_username) || blank($router->api_password)) {
+        $host = $this->hostForRouter($router);
+
+        if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
             return [
                 'ok' => false,
-                'message' => 'Add a host/IP, API username and API password before testing.',
+                'message' => 'A WireGuard peer or explicitly enabled direct connection, API username and API password are required before testing.',
             ];
         }
 
-        $key = $this->configureRouter($router);
+        $key = $this->configureRouter($router, $host);
 
         try {
             // This is deliberately read-only: it proves API reachability
@@ -48,7 +50,7 @@ class RouterConnectionService
         } catch (\Throwable $exception) {
             Log::warning('MikroTik LAN demo connection failed', [
                 'router_id' => $router->getKey(),
-                'host' => $router->management_ip,
+                'host' => $host,
                 'exception' => $exception::class,
             ]);
 
@@ -118,11 +120,13 @@ class RouterConnectionService
             throw new RuntimeException('Direct router connections are disabled. Use the paired site agent.');
         }
 
-        if (blank($router->management_ip) || blank($router->api_username) || blank($router->api_password)) {
+        $host = $this->hostForRouter($router);
+
+        if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
             throw new RuntimeException("Router {$router->getKey()} is missing API connection details.");
         }
 
-        $key = $this->configureRouter($router);
+        $key = $this->configureRouter($router, $host);
 
         $hotspot = MikroTik::router($key)->hotspot();
         $isActive = collect($hotspot->getActiveHosts())
@@ -137,18 +141,30 @@ class RouterConnectionService
         return true;
     }
 
-    private function configureRouter(Router $router): string
+    private function configureRouter(Router $router, ?string $host = null): string
     {
-        $key = 'lan-demo-router-'.$router->getKey();
+        $host ??= $this->hostForRouter($router);
+        if (blank($host)) {
+            throw new RuntimeException("Router {$router->getKey()} has no permitted connection address.");
+        }
 
+        $key = 'lan-demo-router-'.$router->getKey();
         DynamicMikrotikRouterConfig::set($key, [
-            'host' => $router->management_ip,
             'username' => $router->api_username,
             'password' => $router->api_password,
-            'port' => (int) ($router->api_port ?: 8728),
+            ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: 8728), $router->getKey()),
             'timeout' => 5,
         ]);
 
         return $key;
+    }
+
+    private function hostForRouter(Router $router): ?string
+    {
+        $router->loadMissing('vpnPeer');
+
+        return $router->vpnPeer?->enabled
+            ? $router->vpnPeer->tunnel_ip
+            : (config('site_agent.allow_direct_router_connection') ? $router->management_ip : null);
     }
 }

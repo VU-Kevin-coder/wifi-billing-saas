@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Tenant;
 use App\Services\Tenancy\TenantContext;
+use RuntimeException;
 use ZillEAli\MikrotikLaravel\Facades\MikroTik;
 
 class RouterService
@@ -45,10 +46,14 @@ class RouterService
      */
     public function testConnection(): bool
     {
+        if (config('site_agent.required') || ! config('site_agent.allow_direct_router_connection')
+            || ! $this->tenant || blank($this->tenant->mikrotik_host)) {
+            return false;
+        }
+
         try {
-            $system = $this->tenant && $this->tenant->mikrotik_host
-                ? MikroTik::router($this->tenant->slug)->system()
-                : MikroTik::system();
+            $this->configureTenantRouter();
+            $system = MikroTik::router($this->tenant->slug)->system();
 
             $resources = $system->getResources();
 
@@ -63,18 +68,31 @@ class RouterService
      */
     protected function getHotspotManager()
     {
-        if ($this->tenant && $this->tenant->mikrotik_host) {
-            DynamicMikrotikRouterConfig::set($this->tenant->slug, [
-                'host' => $this->tenant->mikrotik_host,
-                'username' => $this->tenant->mikrotik_username ?? 'admin',
-                'password' => $this->tenant->mikrotik_password ?? '',
-                'port' => (int) ($this->tenant->mikrotik_port ?? 8728),
-                'timeout' => 10,
-            ]);
-
-            return MikroTik::router($this->tenant->slug)->hotspot();
+        if (config('site_agent.required') || ! config('site_agent.allow_direct_router_connection')) {
+            throw new RuntimeException('Legacy direct router operations are disabled. Use the paired site agent or a router WireGuard peer.');
         }
 
-        return MikroTik::hotspot();
+        if (! $this->tenant) {
+            return MikroTik::hotspot();
+        }
+
+        if (blank($this->tenant->mikrotik_host)) {
+            throw new RuntimeException('Tenant-level direct router credentials are not configured.');
+        }
+
+        $this->configureTenantRouter();
+
+        return MikroTik::router($this->tenant->slug)->hotspot();
+    }
+
+    private function configureTenantRouter(): void
+    {
+        $port = (int) ($this->tenant->mikrotik_port ?? 8728);
+        DynamicMikrotikRouterConfig::set($this->tenant->slug, [
+            'username' => $this->tenant->mikrotik_username ?? 'admin',
+            'password' => $this->tenant->mikrotik_password ?? '',
+            ...RouterTransportConfig::forRouter($this->tenant->mikrotik_host, $port, $this->tenant->id),
+            'timeout' => 10,
+        ]);
     }
 }

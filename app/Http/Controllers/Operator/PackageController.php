@@ -46,7 +46,6 @@ class PackageController extends Controller
                     $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
                 }
             }],
-            'radius_profile_name' => ['nullable', 'string', 'max:50'],
             'is_published' => ['boolean'],
             'is_popular' => ['boolean'],
             'features' => ['nullable', 'array'],
@@ -82,7 +81,6 @@ class PackageController extends Controller
                     $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
                 }
             }],
-            'radius_profile_name' => ['nullable', 'string', 'max:50'],
             'is_published' => ['boolean'],
             'is_popular' => ['boolean'],
             'features' => ['nullable', 'array'],

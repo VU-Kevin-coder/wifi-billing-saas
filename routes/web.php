@@ -24,6 +24,7 @@ use App\Http\Controllers\Platform\PolicyController;
 use App\Http\Controllers\Platform\RefundController;
 use App\Http\Controllers\Platform\RevenueController;
 use App\Http\Controllers\Platform\TenantController;
+use App\Http\Controllers\Platform\VpnPeerController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\PortalPlanController;
 use App\Http\Controllers\Profile\SecurityController;
@@ -78,6 +79,10 @@ Route::middleware(['auth', 'role:platform_admin'])
     ->name('platform.')
     ->group(function () {
         Route::get('/dashboard', PlatformDashboard::class)->name('dashboard');
+        Route::get('/vpn-peers', [VpnPeerController::class, 'index'])->name('vpn-peers.index');
+        Route::post('/vpn-peers', [VpnPeerController::class, 'store'])->name('vpn-peers.store');
+        Route::get('/vpn-peers/{peer}/router-config', [VpnPeerController::class, 'download'])
+            ->whereNumber('peer')->middleware('throttle:3,1')->name('vpn-peers.download');
         Route::get('/tenants', [TenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [TenantController::class, 'store'])->name('tenants.store');
         Route::get('/tenants/{tenant}', [TenantController::class, 'show'])->name('tenants.show');
@@ -205,6 +210,8 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::get('routers/{router}/provision-script', [RouterController::class, 'provisionScript'])->name('routers.provision-script');
                     Route::post('routers/{router}/provision', [RouterController::class, 'provision'])->name('routers.provision');
                     Route::post('routers/{router}/test', [RouterController::class, 'testConnection'])->name('routers.test');
+                    Route::post('routers/{router}/vpn-peer', [VpnPeerController::class, 'storeForRouter'])->whereNumber('router')->name('routers.vpn-peer.store');
+                    Route::get('routers/{router}/vpn-peer/config', [VpnPeerController::class, 'downloadForRouter'])->whereNumber('router')->middleware('throttle:3,1')->name('routers.vpn-peer.download');
                     Route::patch('routers/{router}/gateway', [RouterController::class, 'updateGateway'])->name('routers.gateway');
                     Route::resource('routers', RouterController::class)->except(['store']);
                     Route::post('/routers', [RouterController::class, 'store'])

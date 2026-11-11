@@ -102,7 +102,7 @@
                                            value="{{ old('mikrotik_host', $tenant->mikrotik_host) }}"
                                            placeholder="e.g. 192.168.88.1 or router.yourdomain.com"
                                            class="w-full rounded-xl border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
-                                    <p class="text-xs text-gray-400 mt-1">Public IP, DDNS hostname, or WireGuard/VPN IP reachable by the SaaS server.</p>
+                                    <p class="text-xs text-gray-400 mt-1">Use a LAN or VPN address reachable by the authorized router client. Do not expose the unencrypted API port to the public internet.</p>
                                     @error('mikrotik_host')
                                         <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
                                     @enderror
@@ -166,6 +166,7 @@
                             <!-- Form Actions -->
                             <div class="mt-8 pt-6 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
                                 <div class="flex items-center gap-2">
+                                    @if(config('site_agent.allow_direct_router_connection') && !config('site_agent.required'))
                                     <button type="button" 
                                             @click="runTest()" 
                                             :disabled="testingConnection || !'{{ $tenant->mikrotik_host }}'"
@@ -179,6 +180,11 @@
                                         </svg>
                                         <span x-text="testingConnection ? 'Testing API Connection...' : 'Test Connection'"></span>
                                     </button>
+                                    @else
+                                        <p class="max-w-sm text-xs text-gray-500">
+                                            Legacy tenant-level cloud tests are disabled. Use Test Router API on the router page; production checks go through the paired site agent.
+                                        </p>
+                                    @endif
 
                                     @if($tenant->mikrotik_host)
                                         <button type="button" 
@@ -240,6 +246,47 @@
                         </p>
 
                         <div class="space-y-2 pt-1">
+                            @if(session('router_sync_results'))
+                                <div class="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs">
+                                    <p class="font-semibold text-blue-900">This sync request</p>
+                                    <ul class="mt-2 space-y-1">
+                                        @foreach(session('router_sync_results') as $result)
+                                            <li class="flex justify-between gap-3">
+                                                <span class="font-medium">{{ $result['router'] }}</span>
+                                                <span class="{{ $result['status'] === 'failed' ? 'text-red-700' : 'text-blue-700' }}">
+                                                    {{ $result['status'] === 'failed' ? $result['message'] : 'Queued for site agent' }}
+                                                </span>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+
+                            @if($routers->isNotEmpty())
+                                <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs">
+                                    <p class="font-semibold text-gray-900">Latest profile sync per router</p>
+                                    <ul class="mt-2 space-y-1">
+                                        @foreach($routers as $router)
+                                            @php($sync = $routerSyncStatuses->get($router->id))
+                                            <li class="flex justify-between gap-3">
+                                                <span class="font-medium">{{ $router->name }}</span>
+                                                <span class="{{ $sync?->status === 'failed' ? 'text-red-700' : ($sync?->status === 'completed' ? 'text-emerald-700' : 'text-gray-600') }}">
+                                                    @if($sync?->status === 'completed')
+                                                        Succeeded
+                                                    @elseif($sync?->status === 'failed')
+                                                        Failed: {{ $sync->failure_reason ?? 'Agent could not apply profiles.' }}
+                                                    @elseif($sync)
+                                                        {{ ucfirst($sync->status) }} — awaiting site-agent result
+                                                    @else
+                                                        Not synced
+                                                    @endif
+                                                </span>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+
                             <form method="POST" action="{{ route('operator.settings.router.sync-all') }}">
                                 @csrf
                                 <button type="submit" 
@@ -275,41 +322,18 @@
                     <!-- Quick Setup Guide Card -->
                     <div class="bg-white rounded-2xl border border-gray-200/80 p-6 shadow-sm">
                         <div class="flex items-center gap-2 mb-4 text-gray-900 font-bold text-sm">
-                            <div class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                ⚙️
-                            </div>
+                            <div class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">⚙️</div>
                             <h3>RouterOS Quick Setup</h3>
                         </div>
-
-                        <p class="text-xs text-gray-500 mb-4">
-                            Run these commands in your MikroTik RouterOS Terminal (WinBox / SSH) to enable API access:
-                        </p>
-
-                        <!-- Terminal Command 1 -->
-                        <div class="mb-4">
-                            <span class="text-[11px] font-semibold text-gray-700 block mb-1">1. Enable API Service</span>
-                            <div class="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] overflow-x-auto select-all">
-                                /ip service enable api
-                            </div>
-                        </div>
-
-                        <!-- Terminal Command 2 -->
-                        <div class="mb-4">
-                            <span class="text-[11px] font-semibold text-gray-700 block mb-1">2. Create Dedicated API User</span>
-                            <div class="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] overflow-x-auto select-all">
-                                /user add name=billing_api group=full password=YourStrongPassword
-                            </div>
-                        </div>
-
-                        <!-- Terminal Command 3 -->
-                        <div>
-                            <span class="text-[11px] font-semibold text-gray-700 block mb-1">3. Restrict Access (Optional)</span>
-                            <div class="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] overflow-x-auto select-all">
-                                /ip service set api address={{ request()->server('SERVER_ADDR', 'YOUR_SERVER_IP') }}
-                            </div>
-                        </div>
+                        <ol class="space-y-3 text-xs leading-5 text-gray-600">
+                            <li><strong>1. Use the router wizard.</strong> Save the management host, API username/password, and trusted management source subnet.</li>
+                            <li><strong>2. Back up the router first.</strong> In RouterOS Terminal run <code class="rounded bg-gray-100 px-1">/system backup save name=pre-wifi-billing</code>.</li>
+                            <li><strong>3. Review the generated .rsc script.</strong> It is intended for a fresh/dedicated router. Review existing bridge, IP, DHCP, hotspot, and firewall configuration before running.</li>
+                            <li><strong>4. Import it in WinBox or RouterOS Terminal</strong>, then use <em>Test LAN API</em> on that router's page.</li>
+                            <li><strong>If import stops partway:</strong> inspect <code class="rounded bg-gray-100 px-1">/log print</code>. Do not blindly rerun; inspect completed commands and restore the backup if needed. Restoring may reboot the router.</li>
+                        </ol>
+                        <p class="mt-4 text-xs text-amber-700">The generated script source-restricts API access; without a management subnet, it creates the user but leaves the API service disabled. Port 8728 is unencrypted; use it only on a trusted network. Port 8729 selects API-SSL.</p>
                     </div>
-
                     <!-- Security & Architecture Card -->
                     <div class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-5">
                         <h4 class="text-xs font-bold text-blue-900 mb-2 flex items-center gap-1.5">

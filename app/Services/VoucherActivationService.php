@@ -156,7 +156,16 @@ class VoucherActivationService
             }
         }
 
-        return Router::where('tenant_id', $tenant->id)->orderBy('id')->first();
+        $fallbackRouters = Router::where('tenant_id', $tenant->id)
+            ->orderBy('id')
+            ->limit(2)
+            ->get();
+
+        if (config('site_agent.required') && $fallbackRouters->count() > 1) {
+            throw new LogicException('This voucher is not bound to a router. Access was not activated.');
+        }
+
+        return $fallbackRouters->first();
     }
 
     private function resolveSite(Tenant $tenant, Voucher $voucher, ?Router $router): ?Site

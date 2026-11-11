@@ -112,8 +112,17 @@
                     <div>
                         <h2 class="text-base font-bold text-gray-900">Connection Status</h2>
                         <p class="mb-4 mt-2 text-sm text-gray-500">
-                            Verify that this application can reach the router's read-only RouterOS API.
+                            Verify saved RouterOS API credentials after importing the setup script. In production, the paired site agent runs this check on the router's local network.
                         </p>
+                        @if($latestConnectionTest)
+                            <p class="mb-3 text-xs text-gray-600">
+                                Latest agent test:
+                                <span class="font-semibold">{{ ucfirst($latestConnectionTest->status) }}</span>
+                                @if($latestConnectionTest->failure_reason)
+                                    — {{ $latestConnectionTest->failure_reason }}
+                                @endif
+                            </p>
+                        @endif
                         <div x-cloak x-show="testResult" role="status" aria-live="polite"
                              :class="testResult && testResult.ok ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'"
                              class="mb-4 rounded-lg border p-3 text-sm"
@@ -134,8 +143,49 @@
                             "
                             :disabled="testing"
                             class="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60">
-                        <span x-text="testing ? 'Testing...' : 'Test LAN API'">Test LAN API</span>
+                        <span x-text="testing ? 'Testing...' : 'Test Router API'">Test Router API</span>
                     </button>
+                </section>
+
+                <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-base font-bold text-gray-900">WireGuard management tunnel</h2>
+                    <p class="mt-1 text-sm text-gray-500">
+                        The tunnel is for encrypted management traffic only; it does not carry customer hotspot traffic.
+                    </p>
+                    @if($router->vpnPeer)
+                        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-semibold text-gray-900">
+                                    {{ $router->vpnPeer->enabled ? 'Peer enabled' : 'Peer disabled' }}
+                                    <span class="font-mono font-normal text-gray-600">({{ $router->vpnPeer->tunnel_ip }})</span>
+                                </p>
+                                <p class="mt-1 text-xs text-gray-500">
+                                    Last handshake: {{ $router->vpnPeer->last_handshake_at?->diffForHumans() ?? 'No handshake recorded yet' }}
+                                </p>
+                            </div>
+                            @if(!$router->vpnPeer->config_downloaded_at)
+                                <a href="{{ route('operator.routers.vpn-peer.download', ['tenant' => $tenant->slug, 'router' => $router->id]) }}"
+                                   class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
+                                    Download one-time router config
+                                </a>
+                            @else
+                                <span class="text-xs text-gray-500">Router config already downloaded. Contact platform support to rotate this peer.</span>
+                            @endif
+                        </div>
+                    @else
+                        <form class="mt-4" method="POST" action="{{ route('operator.routers.vpn-peer.store', ['tenant' => $tenant->slug, 'router' => $router->id]) }}">
+                            @csrf
+                            <button type="submit" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
+                                Generate WireGuard peer
+                            </button>
+                        </form>
+                    @endif
+                    @error('wireguard')
+                        <p class="mt-3 text-sm text-red-700">{{ $message }}</p>
+                    @enderror
+                    <p class="mt-3 text-xs text-amber-700">
+                        The configuration contains the router's private key and is available once. Store it securely and do not share or log it.
+                    </p>
                 </section>
 
                 <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -200,7 +250,7 @@
                             <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                             Download .rsc
                         </a>
-                        <button type="button" @click="deployNow()" :disabled="deploying || !'{{ $router->management_ip }}'"
+                        <button type="button" @click="deployNow()" :disabled="deploying || !{{ $hasApiCredentials ? 'true' : 'false' }}"
                                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 text-xs font-semibold text-white hover:bg-orange-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <svg x-show="deploying" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -218,6 +268,9 @@
                         <button type="button" @click="deployResult = null" class="text-xs font-bold">&times;</button>
                     </div>
                 </div>
+                @unless ($hasApiCredentials)
+                    <p class="mt-2 text-xs text-amber-700">Save a router host, API username, and API password before deploying via API.</p>
+                @endunless
 
                 <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">
@@ -238,23 +291,10 @@
                     </div>
                 </div>
 
-                <div class="mt-4 pt-3 border-t border-gray-100">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-semibold text-gray-700">RouterOS Terminal Commands</span>
-                        <div class="flex items-center gap-2">
-                            <button type="button" @click="showScript = !showScript" class="text-xs text-blue-600 hover:underline font-medium">
-                                <span x-text="showScript ? 'Hide Script' : 'View Full Script'"></span>
-                            </button>
-                            <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('rsc-script-content').innerText)"
-                                    class="text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-2 py-0.5 font-medium bg-gray-50 hover:bg-gray-100">
-                                Copy Script
-                            </button>
-                        </div>
-                    </div>
-                    <p class="text-[11px] text-gray-500 mb-2">Paste these commands into your MikroTik Terminal (WinBox or SSH) to configure the hotspot and walled garden rules in seconds.</p>
-                    <div x-show="showScript" x-cloak class="mt-2">
-                        <pre id="rsc-script-content" class="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-[11px] overflow-x-auto max-h-72 select-all whitespace-pre">{{ $provisionScript ?? '' }}</pre>
-                    </div>
+                <div class="mt-4 border-t border-gray-100 pt-3">
+                    <p class="text-[11px] text-gray-600">
+                        The downloaded .rsc contains the router API password. Treat it as a secret, import it only on the intended fresh/dedicated router, and do not paste it into tickets or logs.
+                    </p>
                 </div>
             </section>
         </div>

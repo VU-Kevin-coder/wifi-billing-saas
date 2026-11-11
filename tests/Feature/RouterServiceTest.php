@@ -8,6 +8,16 @@ use ZillEAli\MikrotikLaravel\Testing\MikrotikFake;
 
 class RouterServiceTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'site_agent.required' => false,
+            'site_agent.allow_direct_router_connection' => true,
+        ]);
+    }
+
     public function test_it_creates_a_hotspot_user_on_the_router()
     {
         // 1. Set up the fake to expect a call to '/ip/hotspot/user/add'
