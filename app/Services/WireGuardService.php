@@ -72,6 +72,7 @@ class WireGuardService
     public function routerConfiguration(VpnPeer $peer): string
     {
         $this->assertEnabled();
+
         return DB::transaction(function () use ($peer): string {
             $lockedPeer = VpnPeer::query()->findOrFail($peer->id);
             if (! $lockedPeer->enabled || blank($lockedPeer->private_key) || $lockedPeer->config_downloaded_at) {
@@ -239,7 +240,7 @@ class WireGuardService
 
     private function routerOsQuote(string $value): string
     {
-        return addcslashes(str_replace(["\r", "\n", "\0"], '', $value), "\\\"");
+        return addcslashes(str_replace(["\r", "\n", "\0"], '', $value), '\\"');
     }
 
     private function removePeerFromInterface(string $interface, VpnPeer $peer): void

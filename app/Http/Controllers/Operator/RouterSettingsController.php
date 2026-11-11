@@ -74,8 +74,7 @@ class RouterSettingsController extends Controller
         TenantContext $context,
         SiteAgentCommandService $commandService,
         ?string $tenant = null,
-    )
-    {
+    ) {
         $tenantModel = $context->getTenant() ?? ($tenant ? Tenant::where('slug', $tenant)->first() : null);
 
         if (! $tenantModel) {

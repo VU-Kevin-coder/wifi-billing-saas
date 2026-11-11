@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\VpnPeer;
+use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -78,7 +79,7 @@ class VpnPeerController extends Controller
 
     public function storeForRouter(Request $request, int $router, WireGuardService $wireGuard)
     {
-        $context = app(\App\Services\Tenancy\TenantContext::class);
+        $context = app(TenantContext::class);
         $routerModel = Router::withoutGlobalScopes()
             ->where('tenant_id', $context->getTenantId())
             ->findOrFail($router);
@@ -97,7 +98,7 @@ class VpnPeerController extends Controller
 
     public function downloadForRouter(int $router, WireGuardService $wireGuard)
     {
-        $context = app(\App\Services\Tenancy\TenantContext::class);
+        $context = app(TenantContext::class);
         $routerModel = Router::withoutGlobalScopes()
             ->where('tenant_id', $context->getTenantId())
             ->findOrFail($router);

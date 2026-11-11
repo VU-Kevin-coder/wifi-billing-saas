@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\VpnPeer;
 use App\Services\WireGuardCommandRunner;

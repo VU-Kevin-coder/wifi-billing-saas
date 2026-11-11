@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
+use App\Models\SiteAgentCommand;
 use App\Services\RouterConnectionService;
 use App\Services\RouterProvisioningService;
 use App\Services\SiteAgentCommandService;
@@ -263,7 +264,7 @@ class RouterController extends Controller
         $hasApiCredentials = (filled($router->management_ip) || $router->vpnPeer?->enabled)
             && filled($router->api_username)
             && filled($router->api_password);
-        $latestConnectionTest = \App\Models\SiteAgentCommand::query()
+        $latestConnectionTest = SiteAgentCommand::query()
             ->where('router_id', $router->id)
             ->whereNull('session_id')
             ->where('operation', 'test_connection')
@@ -341,8 +342,7 @@ class RouterController extends Controller
         RouterConnectionService $connectionService,
         SiteAgentCommandService $commandService,
         ...$args,
-    )
-    {
+    ) {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
 
