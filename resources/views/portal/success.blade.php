@@ -41,6 +41,7 @@
         const paymentStatusUrl = @json($paymentStatusUrl);
         const paymentActivationUrl = @json($paymentActivationUrl);
         const initialMikrotikUrl = @json($mikrotikUrl);
+        const initialVoucherCode = @json($voucherCode ?? null);
 
         let connectionCountdown;
 
@@ -62,7 +63,7 @@
             document.getElementById('mikrotik-link').classList.remove('hidden');
             document.getElementById('payment-spinner').classList.add('hidden');
             document.getElementById('payment-message').innerHTML =
-                'Your access is active. Connecting in <span id="countdown">3</span>s…';
+                'Your access is active. Opening the router login page in <span id="countdown">3</span>s. Enter the voucher code there.';
 
             let seconds = 3;
             connectionCountdown = window.setInterval(() => {
@@ -134,7 +135,7 @@
         if (paymentStatusUrl) {
             document.addEventListener('DOMContentLoaded', checkPaymentStatus, { once: true });
         } else if (initialMikrotikUrl) {
-            document.addEventListener('DOMContentLoaded', () => connectToWifi(initialMikrotikUrl), { once: true });
+            document.addEventListener('DOMContentLoaded', () => connectToWifi(initialMikrotikUrl, initialVoucherCode), { once: true });
         }
 
         function retryActivation() {

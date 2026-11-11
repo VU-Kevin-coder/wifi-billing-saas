@@ -91,6 +91,10 @@ class RouterProvisioningTest extends TestCase
         $this->assertStringContainsString('/interface bridge port add bridge=br-hotspot interface="ether2"', $script);
         $this->assertStringContainsString('/ip address add address=10.10.0.1/16 interface=br-hotspot', $script);
         $this->assertStringContainsString('/ip hotspot profile add name=prof-billing dns-name="wifi.acme.local"', $script);
+        $this->assertStringContainsString('login-by=http-chap use-radius=no', $script);
+        $this->assertStringNotContainsString('http-pap', $script);
+        $this->assertStringContainsString('policy=api,read,write', $script);
+        $this->assertStringNotContainsString('policy=api,read,write,test,password', $script);
         $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*pesapal.com*"', $script);
         $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*mtn.co.ug*"', $script);
         $this->assertStringContainsString('/ip service set api port=8728 address="192.168.88.0/24" disabled=no', $script);

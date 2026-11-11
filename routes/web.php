@@ -210,6 +210,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::get('routers/{router}/provision-script', [RouterController::class, 'provisionScript'])->name('routers.provision-script');
                     Route::post('routers/{router}/provision', [RouterController::class, 'provision'])->name('routers.provision');
                     Route::post('routers/{router}/test', [RouterController::class, 'testConnection'])->name('routers.test');
+                    Route::post('routers/{router}/telemetry', [RouterController::class, 'telemetry'])->name('routers.telemetry');
                     Route::post('routers/{router}/vpn-peer', [VpnPeerController::class, 'storeForRouter'])->whereNumber('router')->name('routers.vpn-peer.store');
                     Route::get('routers/{router}/vpn-peer/config', [VpnPeerController::class, 'downloadForRouter'])->whereNumber('router')->middleware('throttle:3,1')->name('routers.vpn-peer.download');
                     Route::patch('routers/{router}/gateway', [RouterController::class, 'updateGateway'])->name('routers.gateway');

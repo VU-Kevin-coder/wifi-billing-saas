@@ -9,7 +9,7 @@
 
     <div class="min-h-screen bg-gray-50 py-8">
         <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8"
-             x-data="{ testing: false, testResult: null }">
+             x-data="{ testing: false, testResult: null, requestingTelemetry: false, telemetryResult: null }">
             @if(session('status'))
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
                     {{ session('status') }}
@@ -21,10 +21,10 @@
                     <div class="mb-1 flex flex-wrap items-center gap-3">
                         <h1 class="text-2xl font-bold text-gray-900">{{ $router->name }}</h1>
                         <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold
-                            {{ $router->status === 'online' ? 'bg-green-100 text-green-800' : ($router->status === 'provisioning' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800') }}">
+                            {{ in_array($healthStatus, ['agent confirmed', 'online'], true) ? 'bg-green-100 text-green-800' : (in_array($healthStatus, ['last known', 'provisioning'], true) ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800') }}">
                             <span class="h-1.5 w-1.5 rounded-full
-                                {{ $router->status === 'online' ? 'bg-green-600' : ($router->status === 'provisioning' ? 'bg-blue-600' : 'bg-red-600') }}"></span>
-                            {{ ucfirst($router->status) }}
+                                {{ in_array($healthStatus, ['agent confirmed', 'online'], true) ? 'bg-green-600' : (in_array($healthStatus, ['last known', 'provisioning'], true) ? 'bg-amber-600' : 'bg-red-600') }}"></span>
+                            {{ ucfirst($healthStatus) }}
                         </span>
                     </div>
                     <p class="text-sm text-gray-500">
@@ -46,15 +46,15 @@
                 <div class="flex min-h-36 flex-col justify-between rounded-xl bg-blue-600 p-5 text-white shadow-sm">
                     <p class="text-sm font-medium text-blue-100">CPU Load</p>
                     <div>
-                        <p class="mt-2 text-3xl font-bold">{{ $liveData['cpu_load'] }}%</p>
-                        <p class="mt-1 text-xs text-blue-100">{{ $liveData['ok'] ? 'Live system load' : 'Live data unavailable' }}</p>
+                        <p class="mt-2 text-3xl font-bold">{{ $liveData['ok'] ? $liveData['cpu_load'].'%' : '—' }}</p>
+                        <p class="mt-1 text-xs text-blue-100">{{ $liveData['ok'] ? 'Last reported load' : 'Live data unavailable' }}</p>
                     </div>
                 </div>
                 <div class="flex min-h-36 flex-col justify-between rounded-xl bg-orange-500 p-5 text-white shadow-sm">
                     <p class="text-sm font-medium text-orange-100">Memory Usage</p>
                     <div>
-                        <p class="mt-2 text-3xl font-bold">{{ $liveData['memory_usage'] }}%</p>
-                        <p class="mt-1 text-xs text-orange-100">{{ $liveData['ok'] ? 'Live memory usage' : 'Live data unavailable' }}</p>
+                        <p class="mt-2 text-3xl font-bold">{{ $liveData['ok'] ? $liveData['memory_usage'].'%' : '—' }}</p>
+                        <p class="mt-1 text-xs text-orange-100">{{ $liveData['ok'] ? 'Last reported usage' : 'Live data unavailable' }}</p>
                     </div>
                 </div>
                 <div class="flex min-h-36 flex-col justify-between rounded-xl bg-green-600 p-5 text-white shadow-sm">
@@ -105,6 +105,16 @@
                             <dt class="text-sm text-gray-500">Last Seen</dt>
                             <dd class="text-right text-sm font-medium text-gray-900">{{ $router->last_seen_at?->diffForHumans() ?? 'Never' }}</dd>
                         </div>
+                        @if(config('site_agent.required'))
+                            <div class="flex justify-between gap-4 py-3">
+                                <dt class="text-sm text-gray-500">Site agent last reported</dt>
+                                <dd class="text-right text-sm font-medium text-gray-900">{{ $agentLastReportedAt?->diffForHumans() ?? 'Never' }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-4 py-3">
+                                <dt class="text-sm text-gray-500">Router telemetry last reported</dt>
+                                <dd class="text-right text-sm font-medium text-gray-900">{{ $router->telemetry_at?->diffForHumans() ?? 'Never' }}</dd>
+                            </div>
+                        @endif
                     </dl>
                 </section>
 
@@ -145,6 +155,26 @@
                             class="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60">
                         <span x-text="testing ? 'Testing...' : 'Test Router API'">Test Router API</span>
                     </button>
+                    @if(config('site_agent.required'))
+                        <div x-cloak x-show="telemetryResult" role="status" aria-live="polite"
+                             class="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800"
+                             x-text="telemetryResult ? telemetryResult.message : ''"></div>
+                        <button type="button"
+                                @click="
+                                    requestingTelemetry = true;
+                                    telemetryResult = null;
+                                    window.apiFetch('{{ route('operator.routers.telemetry', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                                        method: 'POST',
+                                    })
+                                    .then(data => telemetryResult = data)
+                                    .catch(error => telemetryResult = { message: error.message || 'Telemetry could not be requested.' })
+                                    .finally(() => requestingTelemetry = false);
+                                "
+                                :disabled="requestingTelemetry"
+                                class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">
+                            <span x-text="requestingTelemetry ? 'Requesting...' : 'Request telemetry from site agent'">Request telemetry from site agent</span>
+                        </button>
+                    @endif
                 </section>
 
                 <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

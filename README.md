@@ -498,6 +498,10 @@ router has no paired agent. A voucher stays in provisioning state until the
 agent acknowledges that the hotspot user was created. Expiry likewise remains
 pending until the agent disables the user and disconnects any active host.
 Router connectivity checks also run through the paired agent in this mode.
+Router detail pages distinguish the site-agent heartbeat from router telemetry.
+Use **Request telemetry from site agent** to collect uptime, CPU, memory, and
+active hotspot users; a profile-sync acknowledgement alone is not displayed as
+an online health check.
 RouterOS API port 8729 automatically selects API-SSL. In production, certificate
 verification defaults to enabled; install the issuing CA on the host running
 the app or agent and set `MIKROTIK_CA_CERT_PATH` to its PEM bundle. The router
@@ -506,6 +510,30 @@ WireGuard tunnel IP when applicable). Port 8728 is plaintext and is logged as
 a production warning. Do not expose it to the public internet. The legacy
 cloud-to-router path is disabled unless `ALLOW_DIRECT_ROUTER_CONNECTION` is
 explicitly enabled; it should remain disabled in production.
+
+Generated hotspot profiles use `http-chap` only, not plaintext `http-pap`.
+Voucher codes are not placed in router login URLs; customers use the router's
+captive-portal form to submit their credentials. The application portal must
+be served over HTTPS. RouterOS HTTPS captive login additionally requires a
+trusted certificate installed and selected on each router.
+
+The generated RouterOS API account no longer has the `test` or `password`
+policies, and the API service is source-restricted to the configured management
+subnet. RouterOS group policies grant `write` at configuration scope; this
+script cannot truthfully restrict it to only `/ip hotspot`. Do not describe the
+account as subtree-scoped. Use it only on a dedicated router and trusted
+management network until a narrower command boundary is deployed.
+
+Production `TRUSTED_PROXIES` must contain the exact proxy IPs/CIDRs that
+overwrite forwarded headers. The Render blueprint intentionally asks for this
+value instead of trusting `*`; production preflight blocks unset and wildcard
+values. Verify the actual proxy chain and forwarded-header behavior on the
+deployed Render service before enabling production traffic.
+
+See [docs/HARDWARE-MATRIX.md](docs/HARDWARE-MATRIX.md) for router-version targets
+and the end-to-end acceptance checklist, and
+[docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md) for current audit
+status and validation evidence.
 
 ### WireGuard router management
 
@@ -532,7 +560,8 @@ not prove API provisioning or customer browsing works; validate all of those
 steps on a disposable CHR or physical test router.
 
 The application scheduler must run `schedule:work` (or `schedule:run` from a
-cron service) so session expiry and `payments:reconcile` run every minute.
+cron service) so session expiry, stale-router health checks, and
+`payments:reconcile` run every minute.
 Payment reconciliation checks provider status for mobile-money charges that
 remain pending; it does not trust webhook status alone.
 

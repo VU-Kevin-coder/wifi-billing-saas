@@ -36,12 +36,12 @@ class HotspotLoginUrlTest extends TestCase
 
     // ── URL building ────────────────────────────────────────────────────────
 
-    public function test_url_uses_the_routers_own_gateway_and_encodes_the_code(): void
+    public function test_url_uses_the_routers_own_gateway_without_exposing_a_voucher_code(): void
     {
         $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
         $router = $this->router($tenant, ['gateway' => '192.168.88.1']);
 
-        $this->assertSame('http://192.168.88.1/login?username=AB%20%26C', HotspotLogin::url($router, 'AB &C'));
+        $this->assertSame('http://192.168.88.1/login', HotspotLogin::url($router));
     }
 
     #[DataProvider('untrustedGateways')]
@@ -51,7 +51,7 @@ class HotspotLoginUrlTest extends TestCase
         $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
         $router = $this->router($tenant, ['gateway' => $gateway]);
 
-        $this->assertNull(HotspotLogin::url($router, 'CODE'));
+        $this->assertNull(HotspotLogin::url($router));
     }
 
     public static function untrustedGateways(): array
@@ -73,14 +73,14 @@ class HotspotLoginUrlTest extends TestCase
         $noGateway = $this->router($tenant, null);
 
         config(['hotspot.default_gateway' => '10.20.30.1']);
-        $this->assertSame('http://10.20.30.1/login?username=C', HotspotLogin::url($noGateway, 'C'));
-        $this->assertSame('http://10.20.30.1/login?username=C', HotspotLogin::url(null, 'C'));
+        $this->assertSame('http://10.20.30.1/login', HotspotLogin::url($noGateway));
+        $this->assertSame('http://10.20.30.1/login', HotspotLogin::url(null));
 
         config(['hotspot.default_gateway' => 'not-an-ip']);
-        $this->assertNull(HotspotLogin::url($noGateway, 'C'));
+        $this->assertNull(HotspotLogin::url($noGateway));
 
         config(['hotspot.default_gateway' => null]);
-        $this->assertNull(HotspotLogin::url(null, 'C'));
+        $this->assertNull(HotspotLogin::url(null));
     }
 
     public function test_the_routers_gateway_wins_over_the_platform_default(): void
@@ -89,8 +89,8 @@ class HotspotLoginUrlTest extends TestCase
         $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
 
         $this->assertSame(
-            'http://172.16.0.1/login?username=C',
-            HotspotLogin::url($this->router($tenant, ['gateway' => '172.16.0.1']), 'C')
+            'http://172.16.0.1/login',
+            HotspotLogin::url($this->router($tenant, ['gateway' => '172.16.0.1']))
         );
     }
 
@@ -122,10 +122,10 @@ class HotspotLoginUrlTest extends TestCase
         $this->voucherFor($beta, 'BETA-0001');
 
         $this->post('http://acme.localhost/portal/redeem', ['voucher_code' => 'ACME-0001', 'router_id' => $routerA->id])
-            ->assertSessionHas('mikrotik_url', 'http://10.10.0.1/login?username=ACME-0001');
+            ->assertSessionHas('mikrotik_url', 'http://10.10.0.1/login');
 
         $this->post('http://beta.localhost/portal/redeem', ['voucher_code' => 'BETA-0001', 'router_id' => $routerB->id])
-            ->assertSessionHas('mikrotik_url', 'http://192.168.50.1/login?username=BETA-0001');
+            ->assertSessionHas('mikrotik_url', 'http://192.168.50.1/login');
     }
 
     public function test_the_login_url_follows_the_router_the_customer_used_not_another_router_of_the_tenant(): void
@@ -136,9 +136,9 @@ class HotspotLoginUrlTest extends TestCase
         $voucher = $this->voucherFor($tenant, 'ACME-0002');
 
         $this->post('http://acme.localhost/portal/redeem', ['voucher_code' => 'ACME-0002', 'router_id' => $second->id])
-            ->assertSessionHas('mikrotik_url', 'http://10.99.0.1/login?username=ACME-0002');
+            ->assertSessionHas('mikrotik_url', 'http://10.99.0.1/login');
 
-        $this->assertSame('http://10.99.0.1/login?username=ACME-0002', HotspotLogin::forVoucher($voucher->fresh()));
+        $this->assertSame('http://10.99.0.1/login', HotspotLogin::forVoucher($voucher->fresh()));
     }
 
     public function test_a_voucher_without_a_session_gets_no_link_when_there_is_no_default(): void

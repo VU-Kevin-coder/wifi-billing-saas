@@ -185,7 +185,7 @@ class RouterManagementTest extends TestCase
         $response->assertDontSee('pass123456');
     }
 
-    public function test_router_detail_page_renders_zero_metrics_when_live_connection_fails(): void
+    public function test_router_detail_page_does_not_report_zero_metrics_when_live_connection_fails(): void
     {
         $router = app(TenantContext::class)->runAs($this->acme, function () {
             return Router::create([
@@ -212,7 +212,8 @@ class RouterManagementTest extends TestCase
             ->get("http://acme.localhost/operator/routers/{$router->id}");
 
         $response->assertOk()
-            ->assertSee('0%')
+            ->assertSee('Live data unavailable')
+            ->assertSee('—')
             ->assertSee('N/A')
             ->assertSee('Add a host/IP, API username and API password before testing.');
     }

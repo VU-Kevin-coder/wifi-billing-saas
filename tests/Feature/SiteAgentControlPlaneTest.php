@@ -12,6 +12,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
+use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -127,7 +128,7 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertDatabaseCount('sessions_log', 0);
     }
 
-    public function test_bulk_profile_sync_waits_for_site_agent_success_before_marking_router_online(): void
+    public function test_bulk_profile_sync_does_not_claim_router_is_online_without_a_health_check(): void
     {
         config(['site_agent.required' => true]);
         [$tenant, , $router, $agent] = $this->createSiteSetup();
@@ -167,8 +168,8 @@ class SiteAgentControlPlaneTest extends TestCase
             ->postJson("/api/site-agent/commands/{$command->id}/complete", ['success' => true])
             ->assertOk()
             ->assertJsonPath('status', 'completed');
-        $this->assertSame('online', $router->fresh()->status);
-        $this->assertNotNull($router->fresh()->last_seen_at);
+        $this->assertSame('offline', $router->fresh()->status);
+        $this->assertNull($router->fresh()->last_seen_at);
     }
 
     public function test_failed_final_profile_sync_does_not_mark_router_online(): void
@@ -255,6 +256,73 @@ class SiteAgentControlPlaneTest extends TestCase
             ->assertJsonPath('status', 'completed');
         $this->assertSame('online', $router->fresh()->status);
         $this->assertNotNull($router->fresh()->last_seen_at);
+    }
+
+    public function test_agent_telemetry_reports_router_metrics_and_drives_health_status(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, , $router, $agent] = $this->createSiteSetup();
+        $router->update(['status' => 'offline']);
+        $token = 'router-telemetry-token';
+        $agent->update(['token_hash' => hash('sha256', $token)]);
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole(Role::findOrCreate('operator_admin', 'web'));
+
+        $this->actingAs($operator)
+            ->postJson("http://{$tenant->slug}.localhost/operator/routers/{$router->id}/telemetry")
+            ->assertStatus(202)
+            ->assertJsonPath('queued', true);
+
+        $command = SiteAgentCommand::query()->where('operation', 'telemetry')->sole();
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/site-agent/commands')
+            ->assertOk()
+            ->assertJsonPath('commands.0.operation', 'telemetry');
+        $completionUrl = "/api/site-agent/commands/{$command->id}/complete";
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson($completionUrl, ['success' => true])
+            ->assertUnprocessable();
+        $this->assertSame('claimed', $command->fresh()->status);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson($completionUrl, [
+                'success' => true,
+                'telemetry' => [
+                    'cpu_usage' => 17,
+                    'memory_usage' => 62,
+                    'active_users' => 8,
+                    'uptime' => '4d12h',
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('status', 'completed');
+
+        $reported = $router->fresh();
+        $this->assertSame('online', $reported->status);
+        $this->assertSame(17, $reported->cpu_usage);
+        $this->assertSame(62, $reported->memory_usage);
+        $this->assertSame(8, $reported->active_users);
+        $this->assertSame('4d12h', $reported->uptime);
+        $this->assertNotNull($reported->telemetry_at);
+        $this->assertNotNull($reported->last_seen_at);
+        $this->assertSame(17, app(RouterConnectionService::class)->liveStatus($reported)['cpu_load']);
+    }
+
+    public function test_stale_router_health_checks_are_marked_offline(): void
+    {
+        [$tenant, , $staleRouter] = $this->createSiteSetup();
+        $staleRouter->update(['status' => 'online', 'last_seen_at' => now()->subMinutes(3)]);
+        $recentRouter = Router::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Recent Router',
+            'status' => 'online',
+            'last_seen_at' => now()->subMinute(),
+        ]);
+
+        $this->artisan('routers:mark-stale')->assertSuccessful();
+
+        $this->assertSame('offline', $staleRouter->fresh()->status);
+        $this->assertSame('online', $recentRouter->fresh()->status);
     }
 
     public function test_legacy_router_settings_test_is_queued_in_agent_mode_and_blocked_without_direct_opt_in(): void

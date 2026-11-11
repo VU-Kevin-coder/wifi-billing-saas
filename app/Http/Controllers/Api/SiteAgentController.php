@@ -37,7 +37,7 @@ class SiteAgentController extends Controller
             foreach ($rows as $command) {
                 if ($command->attempts >= 5) {
                     $command->update(['status' => 'failed']);
-                    if (in_array($command->operation, ['sync_profile', 'test_connection'], true)) {
+                    if (in_array($command->operation, ['telemetry', 'test_connection'], true)) {
                         Router::query()->whereKey($command->router_id)->update(['status' => 'offline']);
                     }
 
@@ -72,6 +72,11 @@ class SiteAgentController extends Controller
         $validated = $request->validate([
             'success' => ['required', 'boolean'],
             'message' => ['nullable', 'string', 'max:1000'],
+            'telemetry' => ['sometimes', 'nullable', 'array'],
+            'telemetry.cpu_usage' => ['required_with:telemetry', 'integer', 'between:0,100'],
+            'telemetry.memory_usage' => ['required_with:telemetry', 'integer', 'between:0,100'],
+            'telemetry.active_users' => ['required_with:telemetry', 'integer', 'min:0'],
+            'telemetry.uptime' => ['required_with:telemetry', 'string', 'max:64'],
         ]);
         /** @var SiteAgent $agent */
         $agent = $request->attributes->get('site_agent');
@@ -94,7 +99,7 @@ class SiteAgentController extends Controller
                     'claimed_at' => null,
                     'failure_reason' => $validated['message'] ?? 'Agent reported command failure.',
                 ]);
-                if (in_array($job->operation, ['sync_profile', 'test_connection'], true) && $job->attempts >= 5) {
+                if (in_array($job->operation, ['telemetry', 'test_connection'], true) && $job->attempts >= 5) {
                     Router::query()->whereKey($job->router_id)->update(['status' => 'offline']);
                 }
 
@@ -108,7 +113,18 @@ class SiteAgentController extends Controller
                 'failure_reason' => null,
             ]);
 
-            if (in_array($job->operation, ['sync_profile', 'test_connection'], true)) {
+            if ($job->operation === 'telemetry') {
+                abort_unless(isset($validated['telemetry']), 422, 'Telemetry command did not include router metrics.');
+                Router::query()->whereKey($job->router_id)->update([
+                    'status' => 'online',
+                    'last_seen_at' => now(),
+                    'telemetry_at' => now(),
+                    'cpu_usage' => $validated['telemetry']['cpu_usage'],
+                    'memory_usage' => $validated['telemetry']['memory_usage'],
+                    'active_users' => $validated['telemetry']['active_users'],
+                    'uptime' => $validated['telemetry']['uptime'],
+                ]);
+            } elseif ($job->operation === 'test_connection') {
                 Router::query()->whereKey($job->router_id)->update([
                     'status' => 'online',
                     'last_seen_at' => now(),

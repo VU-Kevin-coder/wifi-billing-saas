@@ -25,15 +25,15 @@ class HotspotLogin
             ? Router::withoutTenancy()->where('tenant_id', $voucher->tenant_id)->find($session->router_id)
             : null;
 
-        return self::url($router, $voucher->code);
+        return self::url($router);
     }
 
-    public static function url(?Router $router, string $code): ?string
+    public static function url(?Router $router): ?string
     {
         $gateway = self::validGateway($router?->hotspot_config['gateway'] ?? null)
             ?? self::validGateway(config('hotspot.default_gateway'));
 
-        return $gateway ? 'http://'.$gateway.'/login?username='.rawurlencode($code) : null;
+        return $gateway ? 'http://'.$gateway.'/login' : null;
     }
 
     /**

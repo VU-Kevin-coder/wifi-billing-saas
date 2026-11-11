@@ -13,6 +13,10 @@ Schedule::command('sessions:expire')
     ->everyMinute()
     ->withoutOverlapping();
 
+Schedule::command('routers:mark-stale')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 // Payment reconciler (default: every minute)
 $paymentMinutes = max(1, (int) Policy::get('schedule.payment_reconcile_minutes', 1));
 Schedule::command('payments:reconcile')

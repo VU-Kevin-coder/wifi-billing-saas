@@ -133,7 +133,7 @@ class RouterProvisioningService
         $lines[] = '';
 
         // 4. Hotspot Profile and Server (Idempotent)
-        $lines[] = ":if ([:len [/ip hotspot profile find name=prof-billing]] = 0) do={ /ip hotspot profile add name=prof-billing dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} html-directory=hotspot login-by=http-chap,http-pap use-radius=no } else={ /ip hotspot profile set [find name=prof-billing] dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} login-by=http-chap,http-pap use-radius=no }";
+        $lines[] = ":if ([:len [/ip hotspot profile find name=prof-billing]] = 0) do={ /ip hotspot profile add name=prof-billing dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} html-directory=hotspot login-by=http-chap use-radius=no } else={ /ip hotspot profile set [find name=prof-billing] dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} login-by=http-chap use-radius=no }";
         $lines[] = ':if ([:len [/ip hotspot find name=hs-billing]] = 0) do={ /ip hotspot add address-pool=pool-hotspot disabled=no interface=br-hotspot name=hs-billing profile=prof-billing } else={ /ip hotspot set [find name=hs-billing] address-pool=pool-hotspot interface=br-hotspot profile=prof-billing }';
         $lines[] = '';
 
@@ -169,7 +169,7 @@ class RouterProvisioningService
             $lines[] = "# {$apiService} remains disabled because no management subnet was supplied.";
             $lines[] = "/ip service set {$apiService} disabled=yes";
         }
-        $lines[] = ':if ([:len [/user group find name=billing_group]] = 0) do={ /user group add name=billing_group policy=api,read,write,test,password comment="Wi-Fi Billing SaaS Group" } else={ /user group set [find name=billing_group] policy=api,read,write,test,password }';
+        $lines[] = ':if ([:len [/user group find name=billing_group]] = 0) do={ /user group add name=billing_group policy=api,read,write comment="Wi-Fi Billing SaaS Group" } else={ /user group set [find name=billing_group] policy=api,read,write }';
         $lines[] = ":if ([:len [/user find name=\"{$escapedApiUsername}\"]] = 0) do={ /user add name=\"{$escapedApiUsername}\" group=billing_group password=\"{$escapedApiPassword}\" comment=\"Wi-Fi Billing SaaS API User\" } else={ /user set [find name=\"{$escapedApiUsername}\"] group=billing_group password=\"{$escapedApiPassword}\" }";
         $lines[] = '';
 

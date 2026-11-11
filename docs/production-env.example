@@ -5,7 +5,8 @@ APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://wifi.example.com
 TENANT_BASE_DOMAIN=wifi.example.com
-TRUSTED_PROXIES=*
+# Set only the exact reverse-proxy IPs/CIDRs that overwrite X-Forwarded-* headers.
+TRUSTED_PROXIES=
 
 SESSION_DRIVER=redis
 SESSION_SECURE_COOKIE=true

@@ -261,6 +261,17 @@ class RouterController extends Controller
                 ->find($router->site_id)
             : null;
         $liveData = $connectionService->liveStatus($router);
+        $agentLastReportedAt = $assignedSite?->agent?->last_seen_at;
+        if (config('site_agent.required')) {
+            $healthStatus = $router->status === 'online'
+                && $router->last_seen_at?->greaterThanOrEqualTo(now()->subMinutes(2))
+                    ? 'agent confirmed'
+                    : ($router->status === 'provisioning' ? 'provisioning' : ($router->status === 'offline' ? 'offline' : 'last known'));
+        } else {
+            $healthStatus = $liveData['ok']
+                ? 'online'
+                : ($router->status === 'provisioning' ? 'provisioning' : ($router->last_seen_at ? 'last known' : 'offline'));
+        }
         $hasApiCredentials = (filled($router->management_ip) || $router->vpnPeer?->enabled)
             && filled($router->api_username)
             && filled($router->api_password);
@@ -276,6 +287,8 @@ class RouterController extends Controller
             'router',
             'assignedSite',
             'liveData',
+            'agentLastReportedAt',
+            'healthStatus',
             'hasApiCredentials',
             'latestConnectionTest',
         ));
@@ -376,6 +389,37 @@ class RouterController extends Controller
             : (str_contains($result['message'] ?? '', 'before testing') ? 422 : 503);
 
         return response()->json($result, $statusCode);
+    }
+
+    public function telemetry(Request $request, SiteAgentCommandService $commandService, ...$args)
+    {
+        $context = app(TenantContext::class);
+        $router = $this->resolveTenantRouter($args, $context);
+
+        if (! config('site_agent.required')) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Router telemetry is collected through the paired site agent only.',
+            ], 409);
+        }
+
+        try {
+            $command = $commandService->telemetry($router);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'A paired site agent is required to collect router telemetry.',
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'queued' => true,
+            'command_id' => $command->id,
+            'message' => 'Telemetry requested through the paired site agent. Metrics update when the agent reports back.',
+        ], 202);
     }
 
     /**

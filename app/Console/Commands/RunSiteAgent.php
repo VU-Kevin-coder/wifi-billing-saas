@@ -43,8 +43,9 @@ class RunSiteAgent extends Command
                 foreach ($commands as $command) {
                     $success = false;
                     $message = null;
+                    $telemetry = null;
                     try {
-                        $routers->execute(
+                        $telemetry = $routers->execute(
                             (int) ($command['router_id'] ?? 0),
                             (string) ($command['operation'] ?? ''),
                             is_array($command['payload'] ?? null) ? $command['payload'] : [],
@@ -55,10 +56,15 @@ class RunSiteAgent extends Command
                         $this->components->error("Command {$command['id']} failed: {$message}");
                     }
 
-                    $http->post($baseUrl.'/api/site-agent/commands/'.(int) $command['id'].'/complete', [
+                    $completion = [
                         'success' => $success,
                         'message' => $message,
-                    ])->throw();
+                    ];
+                    if ($telemetry !== null) {
+                        $completion['telemetry'] = $telemetry;
+                    }
+
+                    $http->post($baseUrl.'/api/site-agent/commands/'.(int) $command['id'].'/complete', $completion)->throw();
                 }
             } catch (Throwable $exception) {
                 $this->components->error('Site-agent request failed: '.$exception::class);

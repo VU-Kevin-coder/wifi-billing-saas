@@ -25,6 +25,8 @@ class Router extends Model
         'memory_usage',
         'active_users',
         'last_seen_at',
+        'telemetry_at',
+        'uptime',
         'api_username',
         'api_password',
         'api_port',
@@ -37,6 +39,7 @@ class Router extends Model
     protected $casts = [
         'api_password' => 'encrypted',
         'last_seen_at' => 'datetime',
+        'telemetry_at' => 'datetime',
         'has_wireless' => 'boolean',
         'enable_hotspot' => 'boolean',
         'hotspot_config' => 'array',

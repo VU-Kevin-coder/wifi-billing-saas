@@ -143,9 +143,9 @@ class MobileMoneyPaymentFlowTest extends TestCase
 
         $voucherCode = $transaction->fresh()->meta['voucher_code'];
         $this->get($successUrl.'?voucher='.urlencode($voucherCode))
-            ->assertOk()
-            ->assertSee($voucherCode);
-        $this->get($successUrl.'?voucher=NOT-A-PAID-VOUCHER')->assertNotFound();
+            ->assertRedirect($successUrl);
+        $this->get($successUrl.'?voucher=NOT-A-PAID-VOUCHER')
+            ->assertRedirect($successUrl);
     }
 
     public function test_successful_payment_fulfillment_is_idempotent_and_starts_the_session_immediately(): void
