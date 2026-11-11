@@ -4,10 +4,14 @@ namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Models\Router;
+use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
 use App\Services\RouterService;
+use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class RouterSettingsController extends Controller
 {
@@ -21,6 +25,15 @@ class RouterSettingsController extends Controller
 
         return view('operator.settings.router', [
             'tenant' => $tenantModel,
+            'routers' => Router::query()->where('tenant_id', $tenantModel->id)->orderBy('name')->get(),
+            'routerSyncStatuses' => SiteAgentCommand::query()
+                ->where('tenant_id', $tenantModel->id)
+                ->whereNull('session_id')
+                ->where('operation', 'sync_profile')
+                ->latest('id')
+                ->get()
+                ->unique('router_id')
+                ->keyBy('router_id'),
         ]);
     }
 
@@ -56,12 +69,66 @@ class RouterSettingsController extends Controller
             ->with('status', 'MikroTik router connection settings saved successfully.');
     }
 
-    public function testConnection(Request $request, TenantContext $context, ?string $tenant = null)
-    {
+    public function testConnection(
+        Request $request,
+        TenantContext $context,
+        SiteAgentCommandService $commandService,
+        ?string $tenant = null,
+    ) {
         $tenantModel = $context->getTenant() ?? ($tenant ? Tenant::where('slug', $tenant)->first() : null);
 
         if (! $tenantModel) {
             return response()->json(['success' => false, 'message' => 'Tenant context not found.'], 404);
+        }
+
+        if (config('site_agent.required')) {
+            $routers = Router::withoutGlobalScopes()
+                ->where('tenant_id', $tenantModel->id)
+                ->orderBy('name')
+                ->get();
+            $results = [];
+            foreach ($routers as $router) {
+                try {
+                    $command = $commandService->testConnection($router);
+                    $results[] = [
+                        'router' => $router->name,
+                        'status' => $command->status,
+                        'message' => 'Queued for the paired site agent.',
+                    ];
+                } catch (Throwable $exception) {
+                    report($exception);
+                    $results[] = [
+                        'router' => $router->name,
+                        'status' => 'failed',
+                        'message' => 'No usable paired site agent is available.',
+                    ];
+                }
+            }
+
+            if ($results === []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Add a router and pair its site agent before testing connectivity.',
+                ], 409);
+            }
+
+            $queued = collect($results)->contains(fn (array $result): bool => $result['status'] !== 'failed');
+
+            return response()->json([
+                'success' => $queued,
+                'queued' => $queued,
+                'results' => $results,
+                'message' => $queued
+                    ? 'Router API checks were queued through the paired site agents.'
+                    : 'No router API checks could be queued. Pair a site agent with each router first.',
+            ], $queued ? 202 : 503);
+        }
+
+        if (! config('site_agent.allow_direct_router_connection')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Legacy cloud-to-router tests are disabled. Use the per-router test through its paired site agent.',
+            ], 409);
         }
 
         if (empty($tenantModel->mikrotik_host)) {
@@ -88,9 +155,9 @@ class RouterSettingsController extends Controller
     }
 
     /**
-     * Sync RADIUS profiles and packages across all routers of the current tenant.
+     * Queue package HotSpot profile synchronization for each router assigned to this tenant.
      */
-    public function syncAll(Request $request, TenantContext $context, ?string $tenant = null)
+    public function syncAll(Request $request, TenantContext $context, SiteAgentCommandService $commandService, ?string $tenant = null)
     {
         $tenantModel = $context->getTenant() ?? ($tenant ? Tenant::where('slug', $tenant)->first() : null);
 
@@ -98,17 +165,36 @@ class RouterSettingsController extends Controller
             abort(404, 'Tenant not found');
         }
 
-        // Strictly tenant-scoped query
         $routers = Router::where('tenant_id', $tenantModel->id)->get();
-        $count = $routers->count();
+        $results = [];
+        foreach ($routers as $router) {
+            try {
+                $command = $commandService->syncProfiles($router);
+                $results[] = [
+                    'router' => $router->name,
+                    'status' => $command->status,
+                    'message' => 'Profile sync command queued for the paired site agent.',
+                ];
+            } catch (Throwable $exception) {
+                Log::warning('Unable to queue router profile sync', [
+                    'router_id' => $router->id,
+                    'exception' => $exception::class,
+                    'message' => $exception->getMessage(),
+                ]);
+                $results[] = [
+                    'router' => $router->name,
+                    'status' => 'failed',
+                    'message' => 'No usable paired site agent is available for this router.',
+                ];
+            }
+        }
 
-        Router::where('tenant_id', $tenantModel->id)->update([
-            'last_seen_at' => now(),
-            'status' => 'online',
-        ]);
+        $queued = collect($results)->whereIn('status', ['pending', 'claimed'])->count();
+        $failed = count($results) - $queued;
 
         return redirect()->route('operator.settings.router', ['tenant' => $tenantModel->slug])
-            ->with('status', "Configuration and RADIUS profiles synced successfully across {$count} MikroTik router(s).");
+            ->with('status', "Profile sync queued for {$queued} of ".count($results)." router(s); {$failed} could not be queued.")
+            ->with('router_sync_results', $results);
     }
 
     /**

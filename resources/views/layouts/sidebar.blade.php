@@ -92,6 +92,12 @@
                         <span x-show="!sidebarCollapsed">Operator tenants</span>
                     </a>
 
+                    <a href="{{ route('platform.vpn-peers.index') }}"
+                       class="{{ request()->routeIs('platform.vpn-peers.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <span class="w-4 shrink-0 text-center text-sm">VPN</span>
+                        <span x-show="!sidebarCollapsed">WireGuard peers</span>
+                    </a>
+
                     <!-- Platform Billing -->
                     <a href="{{ route('platform.billing.index') }}" 
                        class="{{ request()->routeIs('platform.billing.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">

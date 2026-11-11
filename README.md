@@ -497,6 +497,40 @@ Start the worker with `php artisan site-agent:work`. In production, leave
 router has no paired agent. A voucher stays in provisioning state until the
 agent acknowledges that the hotspot user was created. Expiry likewise remains
 pending until the agent disables the user and disconnects any active host.
+Router connectivity checks also run through the paired agent in this mode.
+RouterOS API port 8729 automatically selects API-SSL. In production, certificate
+verification defaults to enabled; install the issuing CA on the host running
+the app or agent and set `MIKROTIK_CA_CERT_PATH` to its PEM bundle. The router
+certificate must be valid for the address used to connect (including its
+WireGuard tunnel IP when applicable). Port 8728 is plaintext and is logged as
+a production warning. Do not expose it to the public internet. The legacy
+cloud-to-router path is disabled unless `ALLOW_DIRECT_ROUTER_CONNECTION` is
+explicitly enabled; it should remain disabled in production.
+
+### WireGuard router management
+
+WireGuard is an optional management tunnel; it does not provide RADIUS or carry
+customer hotspot data. The Linux app host must first be provisioned outside
+Laravel with `wg0`, address `10.8.0.1/24`, UDP port `51820` reachable from
+routers, and `wg`/`ip` tools available to the application service account. Set
+`WIREGUARD_ENABLED=true`, `WIREGUARD_ENDPOINT`, and the matching interface,
+address, and listen port values before generating peers. The service verifies
+the interface and server public key, allocates a unique `/24` tenant range
+within `10.8.1.0/24`–`10.8.254.0/24`, and installs a `/32` route for each peer.
+The host firewall must also permit WireGuard UDP traffic and API-SSL from the
+tunnel interface.
+
+Platform administrators or tenant network operators can generate a peer and
+download its RouterOS `.rsc` exactly once. It contains the router's private key;
+the key is encrypted at rest before delivery and erased from the database after
+the first configuration download. If a download is lost or import fails,
+remove any partially-created `wg-billing` interface on the router and request
+a new peer through platform support. Configure API-SSL with a certificate
+trusted by the app/agent and containing the router tunnel IP as a subject
+alternative name before testing management access. A tunnel handshake does
+not prove API provisioning or customer browsing works; validate all of those
+steps on a disposable CHR or physical test router.
+
 The application scheduler must run `schedule:work` (or `schedule:run` from a
 cron service) so session expiry and `payments:reconcile` run every minute.
 Payment reconciliation checks provider status for mobile-money charges that
@@ -863,7 +897,7 @@ MikroTik integration is a **critical part** of the product. Development begins w
 |---|---|
 | **Router** | MikroTik hAP ac² (or equivalent with hotspot support) |
 | **RouterOS** | 7.x |
-| **Connection method** | RouterOS API on port 8728 (plain, on a trusted LAN/VPN) or 8729 (API-SSL) |
+| **Connection method** | Site agent by default; API-SSL on port 8729 for direct WireGuard management |
 | **Account** | Dedicated restricted hotspot API user, not `admin` |
 
 ### Initial integration goals

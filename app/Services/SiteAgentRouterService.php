@@ -7,6 +7,8 @@ use ZillEAli\MikrotikLaravel\Facades\MikroTik;
 
 class SiteAgentRouterService
 {
+    public function __construct(private HotspotProfileSynchronizer $profiles) {}
+
     public function execute(int $routerId, string $operation, array $payload): void
     {
         $router = config('site_agent.routers.'.$routerId);
@@ -19,26 +21,59 @@ class SiteAgentRouterService
 
         $key = 'site-agent-router-'.$routerId;
         DynamicMikrotikRouterConfig::set($key, [
-            'host' => $router['host'],
             'username' => $router['username'],
             'password' => $router['password'],
-            'port' => (int) ($router['port'] ?? 8728),
+            ...RouterTransportConfig::forRouter(
+                (string) $router['host'],
+                (int) ($router['port'] ?? 8728),
+                $routerId,
+            ),
             'timeout' => 5,
         ]);
+
+        if ($operation === 'test_connection') {
+            $resources = MikroTik::router($key)->system()->getResources();
+            if (! is_array($resources) || $resources === []) {
+                throw new RuntimeException('Router API returned no system resource data.');
+            }
+
+            return;
+        }
+
         $hotspot = MikroTik::router($key)->hotspot();
+
+        if ($operation === 'sync_profile') {
+            $profileSettings = $payload['profiles'] ?? [];
+            if (! is_array($profileSettings)) {
+                throw new RuntimeException('Profile sync command did not contain a valid profile list.');
+            }
+
+            foreach ($profileSettings as $settings) {
+                if (! is_array($settings)) {
+                    throw new RuntimeException('Profile sync command contained an invalid profile.');
+                }
+
+                $this->profiles->sync($key, $hotspot, $settings);
+            }
+
+            return;
+        }
+
         $username = $payload['username'] ?? null;
         if (! is_string($username) || $username === '') {
             throw new RuntimeException('Router command did not contain a valid voucher username.');
         }
 
         if ($operation === 'provision_user') {
+            if (is_array($payload['profile_settings'] ?? null)) {
+                $this->profiles->sync($key, $hotspot, $payload['profile_settings']);
+            }
+
             $data = array_filter([
                 'name' => $username,
                 'password' => $payload['password'] ?? $username,
                 'profile' => $payload['profile'] ?? 'default',
                 'limit-uptime' => $payload['limit_uptime'] ?? null,
-                'shared-users' => max(1, (int) ($payload['shared_users'] ?? 1)),
-                'rate-limit' => $payload['rate_limit'] ?? null,
                 'limit-bytes-total' => $payload['limit_bytes_total'] ?? null,
                 'comment' => 'Provisioned by Wi-Fi Billing site agent',
             ], static fn (mixed $value): bool => $value !== null && $value !== '');

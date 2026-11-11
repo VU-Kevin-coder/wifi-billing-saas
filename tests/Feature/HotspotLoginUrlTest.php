@@ -170,6 +170,7 @@ class HotspotLoginUrlTest extends TestCase
         $this->actingAs($user)
             ->post(route('operator.routers.store'), [
                 'name' => 'Good',
+                'hotspot_network' => '192.168.88.0/24',
                 'gateway_ip' => '192.168.88.1',
                 '_idempotency_key' => $this->idempotencyKey(),
             ])

@@ -77,8 +77,8 @@ class RouterManagementTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('Add MikroTik Router');
-        $response->assertSee('Site agent');
-        $response->assertSee('credentials stay on the site computer');
+        $response->assertSee('password is encrypted at rest');
+        $response->assertSee('Allowed API source subnet');
         $response->assertSee('Operating site');
         $response->assertSee('Central Office');
         $response->assertSee('value="'.$site->id.'"', false);
@@ -91,6 +91,7 @@ class RouterManagementTest extends TestCase
             ->post('http://acme.localhost/operator/routers', [
                 'name' => 'TEST-ROUTER-01',
                 'management_ip' => '10.20.1.10',
+                'management_subnet' => '10.20.1.0/24',
                 'api_port' => 8729,
                 'api_username' => 'router-api',
                 'site' => 'Kampala Central',
@@ -113,11 +114,22 @@ class RouterManagementTest extends TestCase
         $this->assertEquals($this->acme->id, $router->tenant_id);
         $this->assertEquals('provisioning', $router->status);
         $this->assertEquals('CCR2004', $router->hardware_model);
-        $this->assertNull($router->management_ip);
+        $this->assertSame('10.20.1.10', $router->management_ip);
         $this->assertEquals(8729, $router->api_port);
-        $this->assertNull($router->api_username);
+        $this->assertSame('router-api', $router->api_username);
         $this->assertTrue($router->has_wireless);
-        $this->assertNull($router->api_password);
+        $this->assertSame('supersecretpass123', $router->api_password);
+        $this->assertSame('10.20.1.0/24', $router->hotspot_config['management_subnet']);
+
+        $script = $this->actingAs($this->acmeUser)
+            ->get(route('operator.routers.provision-script', [
+                'tenant' => 'acme',
+                'router' => $router->id,
+                'download' => 1,
+            ]));
+
+        $script->assertOk();
+        $this->assertStringContainsString('password="supersecretpass123"', $script->getContent());
     }
 
     public function test_router_detail_page_can_be_rendered(): void
@@ -169,7 +181,7 @@ class RouterManagementTest extends TestCase
         $response->assertSee('Router Details');
         $response->assertSee('Ntinda Hub');
         $response->assertSee('Connection Status');
-        $response->assertSee('Test LAN API');
+        $response->assertSee('Test Router API');
         $response->assertDontSee('pass123456');
     }
 
@@ -323,6 +335,31 @@ class RouterManagementTest extends TestCase
             ->assertJson([
                 'ok' => true,
                 'message' => 'Router API responded successfully.',
+            ]);
+    }
+
+    public function test_operator_receives_failure_when_router_api_test_fails(): void
+    {
+        $router = app(TenantContext::class)->runAs($this->acme, function () {
+            return Router::create([
+                'name' => 'LAN-API-OFFLINE',
+                'api_password' => 'secret123',
+            ]);
+        });
+
+        $this->mock(RouterConnectionService::class, function ($mock) use ($router): void {
+            $mock->shouldReceive('test')
+                ->once()
+                ->withArgs(fn (Router $testedRouter): bool => $testedRouter->is($router))
+                ->andReturn(['ok' => false, 'message' => 'Router API did not respond.']);
+        });
+
+        $this->actingAs($this->acmeUser)
+            ->postJson("http://acme.localhost/operator/routers/{$router->id}/test")
+            ->assertStatus(503)
+            ->assertJson([
+                'ok' => false,
+                'message' => 'Router API did not respond.',
             ]);
     }
 
