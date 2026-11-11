@@ -14,6 +14,9 @@ RUN apk add --no-cache \
         unzip \
         linux-headers \
         curl \
+        iproute2 \
+        wireguard-tools \
+        libcap-utils \
     && curl -sSLf https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions \
        -o /usr/local/bin/install-php-extensions \
     && chmod +x /usr/local/bin/install-php-extensions \
@@ -28,6 +31,8 @@ RUN apk add --no-cache \
         opcache \
         pcntl \
         redis
+
+RUN setcap cap_net_admin+ep "$(command -v wg)"
 
 # Install Composer (from official Composer image — pinned)
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
@@ -50,6 +55,7 @@ COPY . .
 
 # Regenerate autoloader + run scripts
 RUN composer dump-autoload --optimize --no-interaction \
+    && php artisan storage:link \
     && mkdir -p \
         storage/framework/cache/data \
         storage/framework/sessions \

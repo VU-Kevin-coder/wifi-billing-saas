@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\VpnPeer;
-use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -58,9 +57,9 @@ class VpnPeerController extends Controller
             ->with('status', "WireGuard peer created for {$router->name}. Download its one-time router configuration now.");
     }
 
-    public function download(int $peer, WireGuardService $wireGuard)
+    public function download(string $peer, WireGuardService $wireGuard)
     {
-        $vpnPeer = VpnPeer::query()->findOrFail($peer);
+        $vpnPeer = VpnPeer::query()->findOrFail((int) $peer);
         abort_if($vpnPeer->config_downloaded_at, 410, 'This one-time configuration was already downloaded.');
 
         try {
@@ -77,12 +76,12 @@ class VpnPeerController extends Controller
         ]);
     }
 
-    public function storeForRouter(Request $request, int $router, WireGuardService $wireGuard)
+    public function storeForRouter(Request $request, string $tenant, string $router, WireGuardService $wireGuard)
     {
-        $context = app(TenantContext::class);
+        $tenantModel = Tenant::query()->where('slug', $tenant)->firstOrFail();
         $routerModel = Router::withoutGlobalScopes()
-            ->where('tenant_id', $context->getTenantId())
-            ->findOrFail($router);
+            ->where('tenant_id', $tenantModel->id)
+            ->findOrFail((int) $router);
 
         try {
             $peer = $wireGuard->createPeer($routerModel, $routerModel->name);
@@ -96,12 +95,12 @@ class VpnPeerController extends Controller
         ])->with('status', 'WireGuard peer created. Download the one-time RouterOS configuration below.');
     }
 
-    public function downloadForRouter(int $router, WireGuardService $wireGuard)
+    public function downloadForRouter(string $tenant, string $router, WireGuardService $wireGuard)
     {
-        $context = app(TenantContext::class);
+        $tenantModel = Tenant::query()->where('slug', $tenant)->firstOrFail();
         $routerModel = Router::withoutGlobalScopes()
-            ->where('tenant_id', $context->getTenantId())
-            ->findOrFail($router);
+            ->where('tenant_id', $tenantModel->id)
+            ->findOrFail((int) $router);
         $vpnPeer = $routerModel->vpnPeer()->firstOrFail();
         abort_if($vpnPeer->config_downloaded_at, 410, 'This one-time configuration was already downloaded.');
 

@@ -491,6 +491,11 @@
                                                     <span>View details & telemetry</span>
                                                 </a>
 
+                                                <a href="{{ route('operator.routers.edit', ['tenant' => $tenant->slug, 'router' => $router->id]) }}"
+                                                   class="flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50">
+                                                    <span>Edit router details</span>
+                                                </a>
+
                                                 <form method="POST" action="{{ route('operator.routers.ping', $router) }}">
                                                     @csrf
                                                     <button type="submit" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 text-left">

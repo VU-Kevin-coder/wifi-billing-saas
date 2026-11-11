@@ -29,10 +29,18 @@ class RouterConnectionService
         if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
             return [
                 'ok' => false,
-                'message' => 'A WireGuard peer or explicitly enabled direct connection, API username and API password are required before testing.',
+                'failure_type' => 'missing_configuration',
+                'message' => 'Router API test is missing connection settings.',
+                'diagnostic' => blank($host)
+                    ? 'No reachable router address is configured. Enable a WireGuard peer or allow direct connections and set the router management address.'
+                    : (blank($router->api_username)
+                        ? 'The router API username is empty.'
+                        : 'The router API password is empty.'),
             ];
         }
 
+        $port = (int) ($router->api_port ?: 8728);
+        $protocol = $port === 8729 ? 'API-SSL' : 'RouterOS API';
         $key = $this->configureRouter($router, $host);
 
         try {
@@ -48,15 +56,26 @@ class RouterConnectionService
                 'resource' => $resource,
             ];
         } catch (\Throwable $exception) {
+            $diagnostic = sprintf(
+                'Target %s:%d (%s). %s: %s',
+                $host,
+                $port,
+                $protocol,
+                $exception::class,
+                $this->safeExceptionMessage($exception, $router->api_password),
+            );
+
             Log::warning('MikroTik LAN demo connection failed', [
                 'router_id' => $router->getKey(),
                 'host' => $host,
                 'exception' => $exception::class,
+                'diagnostic' => $diagnostic,
             ]);
 
             return [
                 'ok' => false,
-                'message' => 'Router did not respond. Check that this Laravel process is on the same reachable network, API is enabled, and the port/user are correct.',
+                'message' => 'Router API test failed. '.$diagnostic,
+                'diagnostic' => $diagnostic,
             ];
         }
     }
@@ -192,5 +211,15 @@ class RouterConnectionService
         return $router->vpnPeer?->enabled
             ? $router->vpnPeer->tunnel_ip
             : (config('site_agent.allow_direct_router_connection') ? $router->management_ip : null);
+    }
+
+    private function safeExceptionMessage(\Throwable $exception, ?string $password): string
+    {
+        $message = trim($exception->getMessage());
+        if (filled($password)) {
+            $message = str_replace($password, '[redacted]', $message);
+        }
+
+        return $message !== '' ? $message : 'The router client returned no error details.';
     }
 }

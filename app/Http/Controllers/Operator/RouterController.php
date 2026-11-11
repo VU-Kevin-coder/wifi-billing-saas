@@ -245,6 +245,154 @@ class RouterController extends Controller
             ->with('status', "Router '{$router->name}' added successfully.");
     }
 
+    public function edit(TenantContext $context, ...$args)
+    {
+        $tenant = $context->getTenant();
+        abort_unless($tenant, 404, 'Tenant not found');
+        $router = $this->resolveTenantRouter($args, $context);
+        $sites = Site::where('tenant_id', $context->getTenantId())->orderBy('name')->get(['id', 'name']);
+        $hotspotConfig = $router->hotspot_config ?? [];
+
+        return view('operator.routers.edit', compact('tenant', 'router', 'sites', 'hotspotConfig'));
+    }
+
+    public function update(Request $request, TenantContext $context, ...$args)
+    {
+        $tenantId = $context->getTenantId();
+        abort_unless($tenantId, 404, 'Tenant not found');
+        $router = $this->resolveTenantRouter($args, $context);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'serial_number' => ['nullable', 'string', 'max:255'],
+            'site_id' => ['nullable', 'integer', Rule::exists('sites', 'id')->where('tenant_id', $tenantId)],
+            'hardware_model' => ['nullable', 'string', 'max:255'],
+            'management_ip' => ['nullable', 'string', 'max:255'],
+            'management_subnet' => [
+                'nullable',
+                'string',
+                'max:18',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    $parts = explode('/', $value, 2);
+                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : (isset($parts[1]) ? -1 : 32);
+                    if (filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || $prefix < 8 || $prefix > 32) {
+                        $fail('The management subnet must be a valid IPv4 address or CIDR no broader than an IPv4 /8.');
+                    }
+                },
+            ],
+            'api_username' => ['nullable', 'string', 'max:100'],
+            'api_password' => ['nullable', 'string', 'max:255', 'not_regex:/[\r\n\x00]/'],
+            'api_port' => ['required', 'integer', 'between:1,65535'],
+            'has_wireless' => ['nullable', 'boolean'],
+            'enable_hotspot' => ['nullable', 'boolean'],
+            'hotspot_network' => [
+                'nullable',
+                'string',
+                'max:50',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    $parts = explode('/', $value, 2);
+                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : (isset($parts[1]) ? -1 : 32);
+                    if (filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || $prefix < 8 || $prefix > 30) {
+                        $fail('The hotspot network must be a valid IPv4 CIDR with usable host addresses.');
+                    }
+                },
+            ],
+            'gateway_ip' => [
+                'nullable',
+                'ipv4',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if (! $value) {
+                        return;
+                    }
+
+                    $parts = explode('/', (string) $request->input('hotspot_network'), 2);
+                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : -1;
+                    if ($prefix < 8 || $prefix > 30 || filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                        return;
+                    }
+
+                    $mask = (0xFFFFFFFF << (32 - $prefix)) & 0xFFFFFFFF;
+                    $networkAddress = (int) sprintf('%u', ip2long($parts[0]));
+                    $gatewayAddress = (int) sprintf('%u', ip2long($value));
+                    if (($networkAddress & $mask) !== $networkAddress || ($gatewayAddress & $mask) !== $networkAddress) {
+                        $fail('The gateway must be an IPv4 host inside the configured hotspot network.');
+                    }
+                },
+            ],
+            'dns_servers' => [
+                'nullable',
+                'string',
+                'max:100',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $value === '') {
+                        return;
+                    }
+
+                    foreach (explode(',', $value) as $server) {
+                        if (filter_var(trim($server), FILTER_VALIDATE_IP) === false) {
+                            $fail('DNS servers must be comma-separated IP addresses.');
+
+                            return;
+                        }
+                    }
+                },
+            ],
+            'hotspot_domain' => ['nullable', 'string', 'max:100', 'regex:/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/'],
+            'ethernet_ports' => ['nullable', 'array'],
+            'ethernet_ports.*' => ['string', Rule::in(['ether2', 'ether3', 'ether4', 'ether5'])],
+        ]);
+
+        $site = isset($validated['site_id'])
+            ? Site::where('tenant_id', $tenantId)->findOrFail($validated['site_id'])
+            : null;
+        $hotspotConfig = $router->hotspot_config ?? [];
+        $hotspotConfig = array_merge($hotspotConfig, [
+            'network' => $validated['hotspot_network'] ?? null,
+            'gateway' => $validated['gateway_ip'] ?? null,
+            'dns' => $validated['dns_servers'] ?? null,
+            'domain' => $validated['hotspot_domain'] ?? null,
+            'management_subnet' => $validated['management_subnet'] ?? null,
+        ]);
+
+        $router->fill([
+            'name' => $validated['name'],
+            'serial_number' => $validated['serial_number'] ?? null,
+            'site_id' => $site?->id,
+            'site' => $site?->name,
+            'hardware_model' => $validated['hardware_model'] ?? null,
+            'management_ip' => $validated['management_ip'] ?? null,
+            'api_username' => $validated['api_username'] ?? null,
+            'api_port' => $validated['api_port'],
+            'has_wireless' => $request->boolean('has_wireless'),
+            'enable_hotspot' => $request->boolean('enable_hotspot'),
+            'hotspot_config' => $hotspotConfig,
+            'ethernet_ports' => $validated['ethernet_ports'] ?? [],
+        ]);
+        if (filled($validated['api_password'] ?? null)) {
+            $router->api_password = $validated['api_password'];
+        }
+        $router->save();
+
+        AuditLog::record('router.updated', $router, [
+            'name' => $router->name,
+            'site_id' => $router->site_id,
+            'fields' => array_keys($router->getChanges()),
+        ]);
+
+        return redirect()->route('operator.routers.show', [
+            'tenant' => $context->getTenant()?->slug,
+            'router' => $router->id,
+        ])->with('status', "Router '{$router->name}' updated successfully.");
+    }
+
     /**
      * Display the specified router detail page (telemetry, RADIUS, hardware, uptime).
      */
@@ -386,7 +534,7 @@ class RouterController extends Controller
 
         $statusCode = $result['ok']
             ? 200
-            : (str_contains($result['message'] ?? '', 'before testing') ? 422 : 503);
+            : (($result['failure_type'] ?? null) === 'missing_configuration' ? 422 : 503);
 
         return response()->json($result, $statusCode);
     }

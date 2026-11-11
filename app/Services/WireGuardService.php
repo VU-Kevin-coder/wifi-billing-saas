@@ -56,9 +56,6 @@ class WireGuardService
                 'wg', 'set', $interface, 'peer', $peer->public_key,
                 'allowed-ips', $peer->tunnel_ip.'/32',
             ]);
-            $this->commands->run([
-                'ip', 'route', 'replace', $peer->tunnel_ip.'/32', 'dev', $interface,
-            ]);
         } catch (Throwable $exception) {
             $this->removePeerFromInterface($interface, $peer);
             $peer->delete();
@@ -118,6 +115,24 @@ class WireGuardService
                 $peer->forceFill(['last_handshake_at' => $handshake])->save();
             }
         });
+    }
+
+    public function syncPeers(): int
+    {
+        $this->assertEnabled();
+        $interface = $this->interfaceName();
+        $peers = VpnPeer::withoutGlobalScopes()
+            ->where('enabled', true)
+            ->get(['public_key', 'tunnel_ip']);
+
+        foreach ($peers as $peer) {
+            $this->commands->run([
+                'wg', 'set', $interface, 'peer', $peer->public_key,
+                'allowed-ips', $peer->tunnel_ip.'/32',
+            ]);
+        }
+
+        return $peers->count();
     }
 
     private function allocateTenantSubnet(): string
@@ -247,7 +262,6 @@ class WireGuardService
     {
         try {
             $this->commands->run(['wg', 'set', $interface, 'peer', $peer->public_key, 'remove']);
-            $this->commands->run(['ip', 'route', 'del', $peer->tunnel_ip.'/32', 'dev', $interface]);
         } catch (Throwable $cleanupException) {
             Log::warning('WireGuard peer cleanup failed after provisioning error.', [
                 'vpn_peer_id' => $peer->id,

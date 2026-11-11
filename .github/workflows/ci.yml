@@ -144,7 +144,21 @@ jobs:
         run: python3 -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" render.yaml .github/workflows/ci.yml .github/dependabot.yml
       - name: nginx config
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq nginx-light
+          set -euo pipefail
+          installed=false
+          for attempt in 1 2 3; do
+            if sudo apt-get -o Acquire::Retries=5 update -qq \
+              && sudo apt-get -o Acquire::Retries=5 install -y -qq nginx-light; then
+              installed=true
+              break
+            fi
+            echo "nginx-light install attempt ${attempt}/3 failed; retrying apt metadata and package download." >&2
+            sleep $((attempt * 5))
+          done
+          if [ "$installed" != true ]; then
+            echo "Unable to install nginx-light after 3 attempts; check runner network/DNS." >&2
+            exit 1
+          fi
           cp /etc/nginx/fastcgi_params /tmp/ && cp docker/nginx/render.conf /tmp/site.conf
           printf 'events{}\nhttp{ include /etc/nginx/mime.types; include /tmp/site.conf; }\n' > /tmp/nginx.conf
           sudo mkdir -p /var/www/html/public
