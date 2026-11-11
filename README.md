@@ -538,15 +538,26 @@ status and validation evidence.
 ### WireGuard router management
 
 WireGuard is an optional management tunnel; it does not provide RADIUS or carry
-customer hotspot data. The Linux app host must first be provisioned outside
-Laravel with `wg0`, address `10.8.0.1/24`, UDP port `51820` reachable from
-routers, and `wg`/`ip` tools available to the application service account. Set
-`WIREGUARD_ENABLED=true`, `WIREGUARD_ENDPOINT`, and the matching interface,
-address, and listen port values before generating peers. The service verifies
-the interface and server public key, allocates a unique `/24` tenant range
-within `10.8.1.0/24`–`10.8.254.0/24`, and installs a `/32` route for each peer.
-The host firewall must also permit WireGuard UDP traffic and API-SSL from the
-tunnel interface.
+customer hotspot data. In local Docker Compose development, enable it with
+`WIREGUARD_ENABLED=true` and set `WIREGUARD_ENDPOINT=wifi-billing-app` for a
+RouterOS CHR on the Compose network. The app container creates `wg0` at startup,
+retains its server key in the `wireguard-data` volume, and restores enabled peers
+from the database. Compose publishes the UDP port on loopback by default;
+set `WIREGUARD_BIND_ADDRESS` to an address reachable by your test router when
+testing beyond the Compose network. For a real router, configure a public DNS
+name or IP in `WIREGUARD_ENDPOINT`, bind/publish the UDP port appropriately,
+and forward it through the host firewall/NAT. Do not use the Docker service name
+as an endpoint for routers outside the Compose network.
+
+The Compose app service needs `NET_ADMIN` to manage its interface. This is a
+local-development setup; do not grant that capability to a public-facing
+production application container. Production Linux hosts should provision the
+WireGuard interface and firewall separately, then configure the matching
+`WIREGUARD_*` values, add route `10.8.0.0/16` through the WireGuard interface,
+and ensure the service account can manage peers. The app allocates a unique
+`/24` tenant range within `10.8.1.0/24`–`10.8.254.0/24`; each peer is constrained
+to its assigned `/32` in WireGuard AllowedIPs while the interface route covers
+the tenant address pool.
 
 Platform administrators or tenant network operators can generate a peer and
 download its RouterOS `.rsc` exactly once. It contains the router's private key;

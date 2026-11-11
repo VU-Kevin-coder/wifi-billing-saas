@@ -12,6 +12,7 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html:delegated
+      - wireguard-data:/var/lib/wireguard
     environment:
       # Override any .env values that must match Docker service names
       DB_CONNECTION: mysql
@@ -27,6 +28,18 @@ services:
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
+      WIREGUARD_ENABLED: ${WIREGUARD_ENABLED:-false}
+      WIREGUARD_INTERFACE: ${WIREGUARD_INTERFACE:-wg0}
+      WIREGUARD_SERVER_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:-10.8.0.1}
+      WIREGUARD_ENDPOINT: ${WIREGUARD_ENDPOINT:-}
+      WIREGUARD_LISTEN_PORT: ${WIREGUARD_LISTEN_PORT:-51820}
+      WIREGUARD_KEEPALIVE: ${WIREGUARD_KEEPALIVE:-25}
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "${WIREGUARD_BIND_ADDRESS:-127.0.0.1}:${WIREGUARD_LISTEN_PORT:-51820}:${WIREGUARD_LISTEN_PORT:-51820}/udp"
     depends_on:
       db:
         condition: service_healthy
@@ -144,7 +157,8 @@ services:
     container_name: hamnet-chr
     ports:
       - "127.0.0.1:8728:8728"   # RouterOS API
-      - "127.0.0.1:2222:22"     # SSH (optional, for manual testing)
+      - "127.0.0.1:8729:8729"   # RouterOS API-SSL (ADD THIS)
+      - "127.0.0.1:2222:22"     # SSH
     cap_add:
       - NET_ADMIN
     devices:
@@ -159,6 +173,7 @@ services:
 volumes:
   db-data:
   redis-data:
+  wireguard-data:
 
 # ─────────────────────────────────────────────────────────────
 # Network

@@ -7,8 +7,10 @@ use App\Models\Session;
 use App\Models\Site;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Models\VpnPeer;
 use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
+use App\Services\WireGuardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -216,6 +218,112 @@ class RouterManagementTest extends TestCase
             ->assertSee('—')
             ->assertSee('N/A')
             ->assertSee('Add a host/IP, API username and API password before testing.');
+    }
+
+    public function test_operator_can_edit_router_details_and_preserve_existing_api_password(): void
+    {
+        $site = $this->acme->sites()->create(['name' => 'Updated site']);
+        $router = $this->acme->routers()->create([
+            'name' => 'Old router name',
+            'management_ip' => '192.0.2.10',
+            'api_username' => 'router-api',
+            'api_password' => 'existing-secret',
+            'hotspot_config' => [
+                'network' => '10.10.0.0/16',
+                'gateway' => '10.10.0.1',
+                'dns' => '8.8.8.8,8.8.4.4',
+                'domain' => 'hotspot.local',
+                'management_subnet' => '192.0.2.0/24',
+            ],
+            'ethernet_ports' => ['ether2'],
+        ]);
+
+        $this->actingAs($this->acmeUser)
+            ->get("http://acme.localhost/operator/routers/{$router->id}/edit")
+            ->assertOk()
+            ->assertSee('Edit router')
+            ->assertSee('Old router name')
+            ->assertSee('Leave blank to keep the current encrypted password.');
+
+        $response = $this->actingAs($this->acmeUser)
+            ->put("http://acme.localhost/operator/routers/{$router->id}", [
+                'name' => 'Updated router',
+                'serial_number' => 'SN-123',
+                'site_id' => $site->id,
+                'hardware_model' => 'RB4011',
+                'management_ip' => 'hamnet-chr',
+                'management_subnet' => '192.0.2.0/24',
+                'api_username' => 'updated-api',
+                'api_password' => '',
+                'api_port' => 8729,
+                'has_wireless' => 1,
+                'enable_hotspot' => 1,
+                'hotspot_network' => '10.20.0.0/16',
+                'gateway_ip' => '10.20.0.1',
+                'dns_servers' => '1.1.1.1,8.8.8.8',
+                'hotspot_domain' => 'wifi.example.test',
+                'ethernet_ports' => ['ether3', 'ether4'],
+            ]);
+
+        $response->assertRedirect(route('operator.routers.show', [
+            'tenant' => $this->acme->slug,
+            'router' => $router->id,
+        ]));
+
+        $router->refresh();
+        $this->assertSame('Updated router', $router->name);
+        $this->assertSame('SN-123', $router->serial_number);
+        $this->assertSame($site->id, $router->site_id);
+        $this->assertSame('Updated site', $router->site);
+        $this->assertSame('RB4011', $router->hardware_model);
+        $this->assertSame('hamnet-chr', $router->management_ip);
+        $this->assertSame('updated-api', $router->api_username);
+        $this->assertSame('existing-secret', $router->api_password);
+        $this->assertSame(8729, $router->api_port);
+        $this->assertTrue($router->has_wireless);
+        $this->assertTrue($router->enable_hotspot);
+        $this->assertSame('10.20.0.0/16', $router->hotspot_config['network']);
+        $this->assertSame('10.20.0.1', $router->hotspot_config['gateway']);
+        $this->assertSame(['ether3', 'ether4'], $router->ethernet_ports);
+    }
+
+    public function test_router_edit_rejects_site_from_another_tenant(): void
+    {
+        $router = $this->acme->routers()->create(['name' => 'Acme router']);
+        $foreignSite = $this->beta->sites()->create(['name' => 'Beta site']);
+
+        $response = $this->actingAs($this->acmeUser)
+            ->from("http://acme.localhost/operator/routers/{$router->id}/edit")
+            ->put("http://acme.localhost/operator/routers/{$router->id}", [
+                'name' => 'Should not save',
+                'site_id' => $foreignSite->id,
+                'api_port' => 8728,
+            ]);
+
+        $response->assertRedirect("http://acme.localhost/operator/routers/{$router->id}/edit")
+            ->assertSessionHasErrors('site_id');
+        $this->assertSame('Acme router', $router->fresh()->name);
+    }
+
+    public function test_operator_can_generate_wireguard_peer_for_tenant_router(): void
+    {
+        $router = $this->acme->routers()->create(['name' => 'CHR']);
+        $peer = new VpnPeer;
+
+        $this->mock(WireGuardService::class, function ($mock) use ($router, $peer): void {
+            $mock->shouldReceive('createPeer')
+                ->once()
+                ->withArgs(fn (Router $requestedRouter, string $name): bool => $requestedRouter->is($router) && $name === 'CHR')
+                ->andReturn($peer);
+        });
+
+        $response = $this->actingAs($this->acmeUser)
+            ->post("http://acme.localhost/operator/routers/{$router->id}/vpn-peer");
+
+        $response->assertRedirect(route('operator.routers.show', [
+            'tenant' => $this->acme->slug,
+            'router' => $router->id,
+        ]));
     }
 
     public function test_operator_can_delete_router(): void

@@ -35,5 +35,6 @@
         <env name="SEED_TENANT_PASSWORD" value="Operator-test-password-2026!"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="WIREGUARD_ENABLED" value="false" force="true"/>
     </php>
 </phpunit>

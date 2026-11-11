@@ -81,4 +81,30 @@ class WireGuardPeerTest extends TestCase
         $this->expectException(RuntimeException::class);
         $service->routerConfiguration($peer->fresh());
     }
+
+    public function test_sync_peers_restores_enabled_peers_to_the_interface(): void
+    {
+        config([
+            'wireguard.enabled' => true,
+            'wireguard.interface' => 'wg0',
+        ]);
+        $tenant = Tenant::create(['name' => 'Gamma', 'slug' => 'gamma', 'status' => 'active']);
+        $router = $tenant->routers()->create(['name' => 'Router C']);
+        $peer = VpnPeer::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'name' => 'Router C',
+            'public_key' => base64_encode(str_repeat('c', 32)),
+            'private_key' => null,
+            'tunnel_ip' => '10.8.1.2',
+            'enabled' => true,
+        ]);
+        $runner = Mockery::mock(WireGuardCommandRunner::class);
+        $runner->shouldReceive('run')
+            ->once()
+            ->with(['wg', 'set', 'wg0', 'peer', $peer->public_key, 'allowed-ips', '10.8.1.2/32'])
+            ->andReturn('');
+
+        $this->assertSame(1, (new WireGuardService($runner))->syncPeers());
+    }
 }
