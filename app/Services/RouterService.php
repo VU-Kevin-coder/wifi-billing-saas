@@ -72,7 +72,11 @@ class RouterService
             throw new RuntimeException('Legacy direct router operations are disabled. Use the paired site agent or a router WireGuard peer.');
         }
 
-        if (! $this->tenant || blank($this->tenant->mikrotik_host)) {
+        if (! $this->tenant) {
+            return MikroTik::hotspot();
+        }
+
+        if (blank($this->tenant->mikrotik_host)) {
             throw new RuntimeException('Tenant-level direct router credentials are not configured.');
         }
 

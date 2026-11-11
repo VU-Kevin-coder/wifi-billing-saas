@@ -113,12 +113,16 @@ class RouterSettingsController extends Controller
                 ], 409);
             }
 
+            $queued = collect($results)->contains(fn (array $result): bool => $result['status'] !== 'failed');
+
             return response()->json([
-                'success' => true,
-                'queued' => collect($results)->contains(fn (array $result): bool => $result['status'] !== 'failed'),
+                'success' => $queued,
+                'queued' => $queued,
                 'results' => $results,
-                'message' => 'Router API checks were queued through the paired site agents.',
-            ], 202);
+                'message' => $queued
+                    ? 'Router API checks were queued through the paired site agents.'
+                    : 'No router API checks could be queued. Pair a site agent with each router first.',
+            ], $queued ? 202 : 503);
         }
 
         if (! config('site_agent.allow_direct_router_connection')) {

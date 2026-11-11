@@ -214,6 +214,10 @@ class RouterProvisioningTest extends TestCase
 
     public function test_automated_provisioning_deploys_to_mikrotik_via_api(): void
     {
+        config([
+            'site_agent.required' => false,
+            'site_agent.allow_direct_router_connection' => true,
+        ]);
         $key = 'provision-router-'.$this->router->id;
         config(["mikrotik.routers.{$key}" => []]);
         $fake = MikrotikFake::fake([
