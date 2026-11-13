@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Session;
+use App\Services\RadiusAccountingService;
 use App\Services\RouterConnectionService;
 use App\Services\SiteAgentCommandService;
 use Illuminate\Console\Command;
@@ -18,6 +19,7 @@ class ExpireSessions extends Command
     public function handle(
         RouterConnectionService $routerService,
         SiteAgentCommandService $agentCommands,
+        RadiusAccountingService $radiusAccounting,
     ): int {
         $expiredCount = 0;
         $queuedCount = 0;
@@ -34,8 +36,27 @@ class ExpireSessions extends Command
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', now())
             ->orderBy('id')
-            ->chunkById(100, function ($sessions) use ($routerService, $agentCommands, &$expiredCount, &$queuedCount, &$retryCount): void {
+            ->chunkById(100, function ($sessions) use ($routerService, $agentCommands, $radiusAccounting, &$expiredCount, &$queuedCount, &$retryCount): void {
                 foreach ($sessions as $session) {
+                    if ($session->router?->access_backend === 'radius') {
+                        $session->update([
+                            'status' => 'disconnecting',
+                            'pending_revocation' => true,
+                            'pending_revocation_status' => 'expired',
+                        ]);
+
+                        if ($radiusAccounting->requestDisconnect(
+                            $session,
+                            "revocation:{$session->id}:expired",
+                        )) {
+                            $queuedCount++;
+                        } else {
+                            $retryCount++;
+                        }
+
+                        continue;
+                    }
+
                     $siteAgent = $session->router?->assignedSite?->agent;
                     if ($session->router?->site_id && $session->voucher
                         && $siteAgent && ! $siteAgent->revoked_at) {

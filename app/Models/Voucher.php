@@ -12,7 +12,7 @@ class Voucher extends Model
 
     protected $fillable = [
         'tenant_id', 'site_id', 'voucher_batch_id', 'package_id', 'code', 'status', 'redeemed_price',
-        'assigned_site', 'redeemed_by', 'redeemed_at', 'expires_at',
+        'assigned_site', 'redeemed_by', 'redeemed_at', 'expires_at', 'sale_transaction_id',
     ];
 
     protected $casts = [
@@ -38,5 +38,10 @@ class Voucher extends Model
     public function site()
     {
         return $this->belongsTo(Site::class);
+    }
+
+    public function saleTransaction()
+    {
+        return $this->belongsTo(Transaction::class, 'sale_transaction_id');
     }
 }

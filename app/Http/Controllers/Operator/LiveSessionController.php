@@ -155,14 +155,19 @@ class LiveSessionController extends Controller
             'disconnected',
         );
         $session->refresh();
+        $usesRadius = $session->router?->access_backend === 'radius';
         $siteAgentOnline = $this->siteAgentOnline($session);
 
         return response()->json([
             'success' => true,
             'status' => 'pending',
-            'message' => $queued
-                ? 'Voucher voided. Router access will be removed when the site agent confirms the command.'
-                : 'Voucher voided, but the router command could not be queued. Revocation will be retried; verify the site agent.',
+            'message' => $usesRadius
+                ? ($queued
+                    ? 'Voucher voided. The RADIUS adapter will retry the disconnect until accounting confirms the session has ended.'
+                    : 'Voucher voided, but no confirmed RADIUS session is available for a disconnect command. Revocation remains pending for reconciliation.')
+                : ($queued
+                    ? 'Voucher voided. Router access will be removed when the site agent confirms the command.'
+                    : 'Voucher voided, but the router command could not be queued. Revocation will be retried; verify the site agent.'),
             'site_agent_online' => $siteAgentOnline,
         ], 202);
     }

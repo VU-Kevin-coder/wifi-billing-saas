@@ -2,6 +2,8 @@
 
 > The user explicitly approved beginning Phase 1. They selected Local Docker Compose lab and MikroTik CHR 7.24.6 as the eventual lab targets. Proceed with Phase 1 only: repository/domain and payment-safety work described in the attached architecture plan, preserving existing agent behavior, API contracts, sales/access terms, and all current tests. First capture a fresh current-checkout baseline and investigate applicable code; make precise changes only. Do not run migrations against the default DB, do not deploy, do not modify/configure routers, and do not begin Phase 2 infrastructure/hub onboarding. The lab choices apply only to later isolated lab work, not permission to change infrastructure now. Stop at the Phase 1 release gate and report exact changes, test evidence, residual risks, and whether Phase 1 criteria pass; wait for explicit approval before Phase 2.
 
+> Explicit follow-up approval: The user authorized the narrowly scoped VoucherActivationService change and rollback tests. Only routers explicitly configured for RADIUS mode may take the new path; default and agent-managed routers retain existing behavior. Add focused tests for compatibility and per-router rollback to the agent backend. No production DB access/migrations, deployment, infrastructure, or real-router changes; stop at Phase 1 release gate.
+
 > Follow-up decision: The user confirmed phase-by-phase execution. Production DB is unknown; inspect repository configuration only, do not connect or migrate. Phase 1 tests may use only the existing automated SQLite test DB. Use a private authenticated Laravel policy API over a protected channel for the RADIUS boundary, not public RADIUS/database access. Generate per-router secrets, encrypt at rest, deliver once, use a separate RADIUS-to-Laravel service secret, and never expose APP_KEY. Use the existing documented platform retention policy; add no raw-event retention until verified. Proceed only with safely implementable Phase 1 work. Keep DB/migration execution and dependent production configuration blocked. Do not start Phase 2, infrastructure setup, deployment, or router changes. Stop at the Phase 1 release gate; do not ask to reconfirm phase-by-phase.
 
 **Project started**: 2026-11-13T18:10:44Z
@@ -36,11 +38,11 @@
 - ⏳ t10 [architect] Record the approved adapter and accounting policy decisions [deps: t9]
 
 
-### Phase: Phase 1 Domain Schema
+### Phase: Phase 1 Domain Schema 📌 b04c6d4
 - ✅ t12 [dba] Add the additive router, sale-link, and accounting schemas (20:09:07Z→20:13:17Z, 4m 10s) — migrations authored, not run; tests used SQLite :memory: [deps: t10.1, t11]
 
 ### Phase: Phase 1 Application Implementation
-- ⏳ t13 [backend] Implement the opt-in access path and payment-safe domain behavior [deps: t12]
+- ✅ t13 [backend] Implement the opt-in access path and payment-safe domain behavior (20:42:48Z→20:53:55Z, 11m 7s) — radius-only activation and tested per-router fallback; existing agent/payment contracts preserved [deps: t10, t11, t12]
 
 ### Phase: Phase 1 Regression Tests
 - ⏳ t14 [tester] Add isolated migration and focused domain regression tests [deps: t12, t13]
@@ -63,6 +65,10 @@
 
 ### Phase: Phase 1 Release Gate
 - ⏳ t21 [teamlead] Apply the binary Phase 1 release gate and stop [deps: t20]
+
+
+
+
 
 
 

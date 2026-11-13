@@ -360,12 +360,28 @@ class PaymentService
         $result = app(TenantContext::class)->runAs($tenant, fn () => DB::transaction(function () use ($tenant, $package, $phone, $transaction): array {
             $transaction = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
 
+            if ((int) $transaction->tenant_id !== (int) $tenant->id
+                || (int) $package->tenant_id !== (int) $tenant->id
+                || round((float) $transaction->amount, 2) !== round((float) $package->price, 2)) {
+                throw new \LogicException('The verified sale does not match its tenant and package.');
+            }
+
             if ($transaction->status !== 'pending') {
                 $voucherId = $transaction->meta['voucher_id'] ?? null;
+                $saleVoucher = Voucher::withoutTenancy()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('sale_transaction_id', $transaction->id)
+                    ->first();
 
-                if ($voucherId) {
+                if ($saleVoucher && $voucherId && (int) $voucherId !== (int) $saleVoucher->id) {
+                    throw new \LogicException("Transaction {$transaction->id} has inconsistent voucher linkage.");
+                }
+
+                if ($saleVoucher || $voucherId) {
                     return [
-                        'voucher' => Voucher::withoutTenancy()->findOrFail($voucherId),
+                        'voucher' => $saleVoucher ?? Voucher::withoutTenancy()
+                            ->where('tenant_id', $tenant->id)
+                            ->findOrFail($voucherId),
                         'session' => null,
                         'send_receipt' => false,
                     ];
@@ -414,6 +430,7 @@ class PaymentService
                 'tenant_id' => $tenant->id,
                 'voucher_batch_id' => $batch->id,
                 'package_id' => $package->id,
+                'sale_transaction_id' => $transaction->id,
                 'code' => 'ONL-'.strtoupper(Str::random(6)),
                 'status' => 'unused',
                 'redeemed_by' => $phone,

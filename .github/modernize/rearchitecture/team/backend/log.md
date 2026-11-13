@@ -18,3 +18,17 @@
 - Debugging dead-ends and what actually worked: Static web fetching returned the portal shell, while selecting Uganda in the browser redirected to account login; treating optional money echoes as mandatory would rely on an unconfirmed response shape.
 - Techniques/patterns worth reusing for future tasks: Make provider identity mandatory, compare echoed values if available, keep local transaction/package invariants, and record provider-contract uncertainty for sandbox confirmation.
 - Learnings consumed: [backend/current-voucher-fulfillment-seam]
+
+## [t13] Added guarded RADIUS policy/accounting domain
+- Codebase/domain discoveries: `PaymentService` remains the locked fulfillment seam; RADIUS accounting can reconcile only an existing Laravel `Session` bound to an explicitly configured router and redeemed voucher. Legacy active sessions without RADIUS evidence must be rejected.
+- Wrong assumptions and corrections: A successful disconnect delivery acknowledgement is not proof of a disconnected client and cannot terminate retries. Keep the same outbox command eligible for retry until a valid Stop closes its accounting generation.
+- Debugging dead-ends and what actually worked: Laravel feature tests that call internal routes through the HTTP kernel validate route/middleware/controller wiring without exposing a public API contract or contacting external infrastructure.
+- Techniques/patterns worth reusing for future tasks: Bind adapter identity to the router record; scope normalized event fingerprints to a NAS-session generation; schedule a retry after delivery acknowledgement until Stop; do not reconnect a blocked activation edit that the user explicitly undid.
+- Learnings consumed: [backend/current-voucher-fulfillment-seam]
+
+## [t13] Added opt-in activation and explicit per-router rollback
+- Codebase/domain discoveries: RADIUS activation can reuse the existing voucher/session transaction, persist `provisioning` without an agent command, and wait for accepted accounting to mark active. A router explicitly switched back to `site_agent` can resume a same-voucher pending session by queuing a command only when no provision command already exists.
+- Wrong assumptions and corrections: The database default `access_backend=site_agent` is not present on a newly created Eloquent instance until it is reloaded; assert the persisted default via `fresh()`. Rollback must target the same pending session to prove no payment or entitlement duplication.
+- Debugging dead-ends and what actually worked: Existing-session activation returns early, so explicit rollback recovery belongs immediately before that return and must be narrowly gated by current router backend, session state, and absence of an existing command.
+- Techniques/patterns worth reusing for future tasks: Treat rollback as an explicit router-mode change, never automatic fallback; preserve voucher/session identity and command idempotency. Validate the public portal route as well as the service-level agent path.
+- Learnings consumed: [backend/current-voucher-fulfillment-seam]
