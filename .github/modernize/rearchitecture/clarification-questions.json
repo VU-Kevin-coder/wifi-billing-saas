@@ -1,0 +1,590 @@
+{
+  "schema": "clarification-questions/v1",
+  "generated_at": "2026-11-13T17:46:16Z",
+  "user_input": "Implement the attached Wi-Fi SaaS architecture fully and incrementally, stopping at each release gate. Preserve the existing site-agent path and do not change production routers unless separately approved.",
+  "title": "Laravel Hotspot to Optional WireGuard and RADIUS",
+  "assessment_snapshot": {
+    "intro": "The supplied proposal and current repository facts describe an existing Laravel hotspot platform with an additive central WireGuard and FreeRADIUS target:",
+    "bullets": [
+      "The app uses Laravel 12 and PHP 8.2; the existing site-agent activation and provisioning path must remain operational.",
+      "The proposed central access path introduces FreeRADIUS 3.2 and router-initiated WireGuard, with per-router identity and tenant resolution.",
+      "The proposal calls for additive domain/accounting/payment-safety work and staged, evidence-based rollout; it explicitly forbids changing existing routers by default.",
+      "The existing UI is Laravel Blade with Tailwind CSS 3.1; portal changes should communicate truthful payment, access, session, and disconnect states."
+    ]
+  },
+  "proposed_outcome": "Add an optional, secure, per-router RADIUS access backend alongside the existing agent backend; preserve existing APIs, tenant boundaries, payments, and router behavior; introduce durable, idempotent entitlements and accounting; and advance only through tested release gates. No production router changes or cutover occur without explicit approval and verified rollback evidence.",
+  "scope": [
+    "frontend",
+    "backend",
+    "generic"
+  ],
+  "status": "answered",
+  "questions": [
+    {
+      "id": "F1",
+      "kit": "frontend",
+      "field": "target.framework",
+      "title": "Frontend framework",
+      "question": "Which frontend framework and version should the architecture work retain or target? The proposal keeps Laravel as the application and the current UI is Blade-rendered.",
+      "importance": "required",
+      "impact": 3,
+      "recommended": "Laravel Blade on Laravel 12 (retain current UI)",
+      "default": null,
+      "prefilled": true,
+      "prefilled_value": "Laravel Blade on Laravel 12 (retain current UI)",
+      "answer": {
+        "value": "Laravel Blade on Laravel 12 (retain current UI)",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Laravel Blade on Laravel 12 (retain current UI)",
+          "label": "Laravel Blade on Laravel 12 (retain current UI)"
+        },
+        {
+          "value": "Introduce a separate frontend framework",
+          "label": "Introduce a separate frontend framework"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F2",
+      "kit": "frontend",
+      "field": "target.component_library",
+      "title": "UI component library",
+      "question": "Which component/UI library should be used for the portal and operator status updates? The repository currently uses Tailwind CSS 3.1 and existing Blade components.",
+      "importance": "required",
+      "impact": 3,
+      "recommended": "Tailwind CSS 3.1 and existing Blade components",
+      "default": null,
+      "prefilled": true,
+      "prefilled_value": "Tailwind CSS 3.1 and existing Blade components",
+      "answer": {
+        "value": "Tailwind CSS 3.1 and existing Blade components",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Tailwind CSS 3.1 and existing Blade components",
+          "label": "Tailwind CSS 3.1 and existing Blade components"
+        },
+        {
+          "value": "Introduce a separate component library",
+          "label": "Introduce a separate component library"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F3",
+      "kit": "frontend",
+      "field": "visual.screenshots",
+      "title": "UI references",
+      "question": "Provide screenshot/recording paths or a staging URL for any portal screens whose appearance should be reproduced. If no redesign is intended, state that the current layout should be preserved and only the required status information should change.",
+      "importance": "required",
+      "impact": 3,
+      "recommended": null,
+      "default": null,
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": "No redesign is intended. The current layout should be preserved, and only the required status information should change.",
+        "source": "user"
+      },
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "F4",
+      "kit": "frontend",
+      "field": "visual.design_system",
+      "title": "Design system",
+      "question": "Which visual system should guide portal changes? The repository has Tailwind configuration and app CSS; the proposal asks to preserve the user experience.",
+      "importance": "required",
+      "impact": 3,
+      "recommended": "Preserve current Blade/Tailwind styles and tokens from tailwind.config.js and resources/css/app.css",
+      "default": "match existing pixel-by-pixel using extracted CSS custom properties",
+      "prefilled": true,
+      "prefilled_value": "Preserve current Blade/Tailwind styles and tokens from tailwind.config.js and resources/css/app.css",
+      "answer": {
+        "value": "Preserve current Blade/Tailwind styles and tokens from tailwind.config.js and resources/css/app.css",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Preserve current Blade/Tailwind styles and tokens from tailwind.config.js and resources/css/app.css",
+          "label": "Preserve current Blade/Tailwind styles and tokens"
+        },
+        {
+          "value": "Use a new design system (specify)",
+          "label": "Use a new design system (specify)"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F5",
+      "kit": "frontend",
+      "field": "compliance.accessibility",
+      "title": "Accessibility target",
+      "question": "Which accessibility standard should portal changes meet?",
+      "importance": "recommended",
+      "impact": 2,
+      "recommended": "WCAG 2.1 AA",
+      "default": "WCAG 2.1 AA",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": "WCAG 2.1 AA",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "WCAG 2.1 AA",
+          "label": "WCAG 2.1 AA"
+        },
+        {
+          "value": "WCAG 2.2 AA",
+          "label": "WCAG 2.2 AA"
+        },
+        {
+          "value": "Section 508",
+          "label": "Section 508"
+        },
+        {
+          "value": "none / not required",
+          "label": "None / not required"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F6",
+      "kit": "frontend",
+      "field": "compatibility.browsers",
+      "title": "Browser targets",
+      "question": "Which browsers/runtime versions must the customer and operator portals support?",
+      "importance": "recommended",
+      "impact": 2,
+      "recommended": "modern evergreen (Chrome, Firefox, Safari, Edge - latest 2 major versions)",
+      "default": "modern evergreen (Chrome, Firefox, Safari, Edge - latest 2 major versions)",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": "modern evergreen (Chrome, Firefox, Safari, Edge - latest 2 major versions)",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "modern evergreen (Chrome, Firefox, Safari, Edge - latest 2 major versions)",
+          "label": "Modern evergreen browsers (latest 2 major versions)"
+        },
+        {
+          "value": "Specify browsers and versions",
+          "label": "Specify browsers and versions"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F7",
+      "kit": "frontend",
+      "field": "responsive.breakpoints",
+      "title": "Responsive behavior",
+      "question": "What responsive strategy should be used for customer phones/laptops and operator screens?",
+      "importance": "recommended",
+      "impact": 2,
+      "recommended": "mobile-first using existing breakpoints",
+      "default": "mobile-first using existing breakpoints",
+      "prefilled": true,
+      "prefilled_value": "mobile-first using existing breakpoints",
+      "answer": {
+        "value": "mobile-first using existing breakpoints",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "mobile-first using existing breakpoints",
+          "label": "Mobile-first using existing breakpoints"
+        },
+        {
+          "value": "match current layout exactly",
+          "label": "Match current layout exactly"
+        },
+        {
+          "value": "Specify breakpoints",
+          "label": "Specify breakpoints"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F8",
+      "kit": "frontend",
+      "field": "i18n.locales",
+      "title": "Portal languages",
+      "question": "Which locales are in scope for the portal changes?",
+      "importance": "optional",
+      "impact": 1,
+      "recommended": "preserve current locales",
+      "default": "preserve current locales",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": [
+          "preserve current locales"
+        ],
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "preserve current locales",
+          "label": "Preserve current locales"
+        },
+        {
+          "value": "en",
+          "label": "English (en)"
+        }
+      ],
+      "allow_other": true,
+      "type": "multi_select"
+    },
+    {
+      "id": "F9",
+      "kit": "frontend",
+      "field": "state_mgmt.preference",
+      "title": "Frontend state",
+      "question": "What client-side state-management approach should be used for the added portal states?",
+      "importance": "optional",
+      "impact": 1,
+      "recommended": "preserve existing pattern if identifiable",
+      "default": "preserve existing pattern if identifiable",
+      "prefilled": true,
+      "prefilled_value": "preserve existing pattern if identifiable",
+      "answer": {
+        "value": "preserve existing pattern if identifiable",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "preserve existing pattern if identifiable",
+          "label": "Preserve existing pattern if identifiable"
+        },
+        {
+          "value": "component state only",
+          "label": "Component state only"
+        },
+        {
+          "value": "Introduce a state library",
+          "label": "Introduce a state library"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F10",
+      "kit": "frontend",
+      "field": "routing.preference",
+      "title": "Portal routing",
+      "question": "Should portal routing remain on the existing Laravel web routes, or should a separate client-side router be introduced?",
+      "importance": "optional",
+      "impact": 1,
+      "recommended": "match existing Laravel web routes",
+      "default": "use the de-facto router for the chosen target framework",
+      "prefilled": true,
+      "prefilled_value": "match existing Laravel web routes",
+      "answer": {
+        "value": "match existing Laravel web routes",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "match existing Laravel web routes",
+          "label": "Match existing Laravel web routes"
+        },
+        {
+          "value": "Introduce a client-side router",
+          "label": "Introduce a client-side router"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "B1",
+      "kit": "backend",
+      "field": "target.framework",
+      "title": "Backend frameworks",
+      "question": "Confirm the backend stack for the new access path. The proposal keeps Laravel as the policy/source-of-truth service and recommends FreeRADIUS 3.2 for RADIUS, pinned to a supported patched release.",
+      "importance": "required",
+      "impact": 4,
+      "recommended": "Retain Laravel 12 / PHP 8.2 and add FreeRADIUS 3.2",
+      "default": null,
+      "prefilled": true,
+      "prefilled_value": "Retain Laravel 12 / PHP 8.2 and add FreeRADIUS 3.2",
+      "answer": {
+        "value": "Retain Laravel 12 / PHP 8.2 and add FreeRADIUS 3.2",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Retain Laravel 12 / PHP 8.2 and add FreeRADIUS 3.2",
+          "label": "Retain Laravel 12 / PHP 8.2 and add FreeRADIUS 3.2"
+        },
+        {
+          "value": "Other framework/version plan",
+          "label": "Other framework/version plan"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "B2",
+      "kit": "backend",
+      "field": "api.contract_preservation",
+      "title": "API compatibility",
+      "question": "What compatibility policy should apply to existing REST/API contracts while the new RADIUS policy interface is added?",
+      "importance": "required",
+      "impact": 5,
+      "recommended": "must preserve",
+      "default": "must preserve",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": "must preserve",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "must preserve",
+          "label": "Must preserve existing contracts"
+        },
+        {
+          "value": "can break with versioning",
+          "label": "Breaking changes only with a new API version"
+        },
+        {
+          "value": "can break",
+          "label": "Existing clients may break"
+        },
+        {
+          "value": "partial: specify endpoints",
+          "label": "Preserve specified endpoints; list them"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "B3",
+      "kit": "backend",
+      "field": "data.migration_strategy",
+      "title": "Database migration",
+      "question": "How should the new entitlement, reservation, accounting, and fulfillment data be introduced? The proposal calls for additive/reversible migrations and preserving legacy records.",
+      "importance": "required",
+      "impact": 5,
+      "recommended": "in-place",
+      "default": "TBD / assess in research phase",
+      "prefilled": true,
+      "prefilled_value": "in-place",
+      "answer": {
+        "value": "in-place",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "in-place",
+          "label": "In-place additive migrations in the existing application database"
+        },
+        {
+          "value": "dual-write",
+          "label": "New schema alongside existing data with synchronization"
+        },
+        {
+          "value": "new schema",
+          "label": "New schema with ETL from current data"
+        },
+        {
+          "value": "no migration",
+          "label": "Leave the database unchanged"
+        },
+        {
+          "value": "TBD / assess in research phase",
+          "label": "Defer decision to discovery"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "B4",
+      "kit": "backend",
+      "field": "auth.framework",
+      "title": "Authentication strategy",
+      "question": "Should app-user authentication remain as implemented, while adding distinct per-router WireGuard keys and RADIUS secrets?",
+      "importance": "recommended",
+      "impact": 4,
+      "recommended": "preserve existing Laravel authentication; add per-router credentials for network services",
+      "default": "preserve existing auth mechanism; detect from codebase",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": "preserve existing Laravel authentication; add per-router credentials for network services",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "preserve existing Laravel authentication; add per-router credentials for network services",
+          "label": "Preserve Laravel authentication; add per-router network credentials"
+        },
+        {
+          "value": "introduce a new app-user identity provider",
+          "label": "Introduce a new app-user identity provider"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "B5",
+      "kit": "backend",
+      "field": "nfr.sla",
+      "title": "Service objectives",
+      "question": "What latency, throughput, availability, and recovery targets should gate production rollout? If no targets are established, should discovery measure the current baseline and avoid regressions?",
+      "importance": "recommended",
+      "impact": 4,
+      "recommended": null,
+      "default": "match current production baseline; no regression",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": "**Baseline and regression, no invented SLOs.** Formal SLOs should be set *after* discovery measures the current baseline. Do not invent targets now.\n\n- **Latency:** Gate on the current baseline (likely sub-200ms within the EU, but this must be measured). No regressions allowed.\n- **Throughput:** Gate on the current baseline (the Contabo VPS comfortably handles 5–10 tenants). No regressions allowed.\n- **Availability:** Gate on the current baseline. No 99.9% uptime guarantee until a monitoring stack (e.g., Uptime Kuma) is live.\n- **Recovery:** Gate on the current baseline (manual restore from local backup). Automated backups and RTO/RPO targets are pending.\n\n**Verdict:** Discovery should measure the current baseline and strictly avoid regressions during the test rollout.",
+        "source": "user"
+      },
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "G1",
+      "kit": "generic",
+      "field": "success.definition",
+      "title": "Definition of done",
+      "question": "Confirm the success criteria for this staged implementation.",
+      "importance": "required",
+      "impact": 5,
+      "recommended": null,
+      "default": "feature parity with the current system; all existing user-facing behaviors preserved",
+      "prefilled": true,
+      "prefilled_value": "An optional per-router WireGuard + FreeRADIUS access path works end-to-end on supported lab hardware: tenant-safe authentication and policy, measured customer browsing, durable/idempotent payment fulfillment and accounting, truthful portal states, verified disconnect/reconciliation, and tested failure/recovery behavior. Existing site-agent routers, API contracts, sales, and access terms continue unchanged. No production cutover until each release gate passes and the operator explicitly approves it.",
+      "answer": {
+        "value": "An optional per-router WireGuard + FreeRADIUS access path works end-to-end on supported lab hardware: tenant-safe authentication and policy, measured customer browsing, durable/idempotent payment fulfillment and accounting, truthful portal states, verified disconnect/reconciliation, and tested failure/recovery behavior. Existing site-agent routers, API contracts, sales, and access terms continue unchanged. No production cutover until each release gate passes and the operator explicitly approves it.",
+        "source": "user"
+      },
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "G2",
+      "kit": "generic",
+      "field": "out_of_scope",
+      "title": "Safety boundaries",
+      "question": "Confirm what must stay out of scope until separate approval.",
+      "importance": "recommended",
+      "impact": 5,
+      "recommended": null,
+      "default": "no explicit exclusions; agent will infer from project structure",
+      "prefilled": true,
+      "prefilled_value": "No production router changes, production deployment, global agent-requirement disablement, existing entitlement/payment mutation, or live cutover without explicit approval and a tested per-router rollback plan. Keep existing agent-managed routers operational.",
+      "answer": {
+        "value": "No production router changes, production deployment, global agent-requirement disablement, existing entitlement/payment mutation, or live cutover without explicit approval and a tested per-router rollback plan. Keep existing agent-managed routers operational.",
+        "source": "user"
+      },
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "G3",
+      "kit": "generic",
+      "field": "existing_tests.posture",
+      "title": "Test policy",
+      "question": "What must-pass policy should apply to the existing test suite during this phased migration?",
+      "importance": "recommended",
+      "impact": 4,
+      "recommended": "must pass",
+      "default": "must pass",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": {
+        "value": "must pass",
+        "source": "user"
+      },
+      "depends_on": null,
+      "options": [
+        {
+          "value": "must pass",
+          "label": "All existing tests must pass (zero regressions)"
+        },
+        {
+          "value": "can rewrite",
+          "label": "Tests may be replaced with equivalent coverage"
+        },
+        {
+          "value": "ignore",
+          "label": "Ignore existing tests and write new tests"
+        },
+        {
+          "value": "partial: specify suites",
+          "label": "Only specified suites must pass"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "G5",
+      "kit": "generic",
+      "field": "constraints.additional",
+      "title": "Additional constraints",
+      "question": "Add any additional requirements, exclusions, dependencies, compliance rules, or operational constraints not covered above.",
+      "importance": "optional",
+      "impact": 2,
+      "recommended": null,
+      "default": "None beyond the decisions listed in this specification.",
+      "prefilled": true,
+      "prefilled_value": "None beyond the decisions listed in this specification.",
+      "answer": {
+        "value": "None beyond the decisions listed in this specification.",
+        "source": "user"
+      },
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    }
+  ]
+}

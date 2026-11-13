@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Services\PaymentService;
+use App\Services\PesapalOrderVerifier;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
@@ -488,6 +489,7 @@ class PortalController extends Controller
     public function pesapalCallback(
         Request $request,
         TenantContext $context,
+        PesapalOrderVerifier $orderVerifier,
         ?string $tenant = null
     ) {
         $tenantModel = $this->resolveTenant($request, $context, $tenant);
@@ -522,25 +524,21 @@ class PortalController extends Controller
 
             $status = $statusResponse->json('payment_status_description') ?? 'FAILED';
 
-            $transaction = Transaction::withoutGlobalScopes()
-                ->where('tenant_id', $tenantModel->id)
-                ->where(function ($q) use ($merchantReference, $orderTrackingId) {
-                    if ($merchantReference) {
-                        $q->where('reference', $merchantReference);
-                    }
-                    if ($orderTrackingId) {
-                        $q->orWhere('provider_reference', $orderTrackingId);
-                    }
-                })
-                ->first();
+            $providerDetails = $statusResponse->json();
+            $transaction = $orderVerifier->findTransaction(
+                $orderTrackingId,
+                $merchantReference,
+                (string) $tenantModel->id
+            );
 
-            if (strtoupper($status) === 'COMPLETED' && $transaction && $transaction->status === 'pending') {
+            if ($transaction && $orderVerifier->matchesMerchantReference($transaction, $providerDetails)
+                && strtoupper($status) === 'COMPLETED' && $transaction->status === 'pending') {
                 $package = Package::withoutGlobalScopes()
                     ->where('tenant_id', $tenantModel->id)
                     ->find($transaction->meta['package_id'] ?? null);
                 $phone = $transaction->phone ?? ($transaction->meta['phone'] ?? '');
 
-                if ($package) {
+                if ($package && $orderVerifier->matchesCompletedPayment($transaction, $package, $providerDetails)) {
                     $voucher = app(PaymentService::class)->handleSuccessfulPackagePayment(
                         $tenantModel,
                         $package,
@@ -554,12 +552,18 @@ class PortalController extends Controller
                 }
             }
 
-            if (strtoupper($status) === 'COMPLETED' && $transaction && $transaction->status === 'completed') {
+            if ($transaction && $orderVerifier->matchesMerchantReference($transaction, $providerDetails)
+                && strtoupper($status) === 'COMPLETED' && $transaction->status === 'completed') {
+                $package = Package::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantModel->id)
+                    ->find($transaction->meta['package_id'] ?? null);
                 $voucherCode = $transaction->meta['voucher_code'] ?? null;
 
-                return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
-                    ->with('voucher_code', $voucherCode)
-                    ->with('auto_activate', true);
+                if ($package && $orderVerifier->matchesCompletedPayment($transaction, $package, $providerDetails)) {
+                    return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
+                        ->with('voucher_code', $voucherCode)
+                        ->with('auto_activate', true);
+                }
             }
         } catch (\Throwable $e) {
             Log::error('Pesapal callback error: '.$e->getMessage());

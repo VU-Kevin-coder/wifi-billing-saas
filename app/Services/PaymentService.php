@@ -284,9 +284,34 @@ class PaymentService
         $reportedAmount = $providerTransaction['amount'] ?? null;
         $reportedCurrency = $providerTransaction['currency'] ?? null;
 
-        return ($reportedId === null || (string) $reportedId === $transaction->provider_reference)
-            && ($reportedAmount === null || (is_numeric($reportedAmount)
-                && (float) $reportedAmount === (float) $transaction->amount))
+        // Airtel's v1 status response identifies the queried payment by ID and
+        // reports its status; amount and currency may not be returned. Always
+        // bind the result to the stored provider ID and local purchase terms,
+        // while validating amount/currency whenever Airtel includes them.
+        $providerReference = (string) ($transaction->provider_reference ?? '');
+        if ($providerReference === ''
+            || ! is_string($reportedId)
+            || $reportedId === ''
+            || ! hash_equals($providerReference, $reportedId)) {
+            return false;
+        }
+
+        $packageId = $transaction->meta['package_id'] ?? null;
+        $package = $packageId
+            ? Package::withoutTenancy()
+                ->where('tenant_id', $transaction->tenant_id)
+                ->find($packageId)
+            : null;
+        if (! $package
+            || strtoupper((string) $package->currency) !== 'UGX'
+            || (float) $package->price <= 0
+            || (float) $package->price !== (float) round((float) $package->price)
+            || (float) $package->price !== (float) $transaction->amount) {
+            return false;
+        }
+
+        return ($reportedAmount === null || (is_numeric($reportedAmount)
+                && (float) $reportedAmount === (float) $package->price))
             && ($reportedCurrency === null || strtoupper((string) $reportedCurrency) === 'UGX');
     }
 
