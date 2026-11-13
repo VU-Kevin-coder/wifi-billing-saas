@@ -150,11 +150,16 @@
                                 testResult = null;
                                 window.apiFetch('{{ route('operator.routers.test', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
                                     method: 'POST',
+                                    feedback: false,
                                 })
                                 .then(data => {
                                     testResult = data;
+                                    window.toast[data.ok ? 'success' : 'error'](data.message);
                                 })
-                                .catch(error => testResult = { ok: false, message: error.message || 'The connection test could not be completed.' })
+                                .catch(error => {
+                                    testResult = { ok: false, message: error.message || 'The connection test could not be completed.' };
+                                    window.toast.error(testResult.message);
+                                })
                                 .finally(() => testing = false);
                             "
                             :disabled="testing"
@@ -171,9 +176,16 @@
                                     telemetryResult = null;
                                     window.apiFetch('{{ route('operator.routers.telemetry', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
                                         method: 'POST',
+                                        feedback: false,
                                     })
-                                    .then(data => telemetryResult = data)
-                                    .catch(error => telemetryResult = { message: error.message || 'Telemetry could not be requested.' })
+                                    .then(data => {
+                                        telemetryResult = data;
+                                        window.toast.info(data.message);
+                                    })
+                                    .catch(error => {
+                                        telemetryResult = { message: error.message || 'Telemetry could not be requested.' };
+                                        window.toast.error(telemetryResult.message);
+                                    })
                                     .finally(() => requestingTelemetry = false);
                                 "
                                 :disabled="requestingTelemetry"
@@ -256,13 +268,18 @@
                     this.deploying = true;
                     this.deployResult = null;
                     try {
-                        const data = await window.apiFetch('{{ route('operator.routers.provision', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', { method: 'POST' });
+                        const data = await window.apiFetch('{{ route('operator.routers.provision', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                            method: 'POST',
+                            feedback: false,
+                        });
                         this.deployResult = data;
+                        await window.toast[data.ok ? 'success' : 'error'](data.message);
                         if (data.ok) {
-                            setTimeout(() => window.location.reload(), 1500);
+                            window.location.reload();
                         }
                     } catch (error) {
                         this.deployResult = { ok: false, message: error.message || 'Network error communicating with router API.' };
+                        window.toast.error(this.deployResult.message);
                     } finally {
                         this.deploying = false;
                     }

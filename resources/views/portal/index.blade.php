@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>{{ $tenant->settings['portal_title'] ?: $tenant->name }} · Wi-Fi</title>
+    @include('partials.sweetalert-assets')
     @vite('resources/css/public.css')
     @vite('resources/js/public.js')
     <style>
@@ -284,6 +285,7 @@
         document.getElementById('checking-title').focus();
     });
 </script>
-<x-ui.toast />
+@include('partials.swal-flash')
+<x-ui.toast :show-initial="false" />
 </body>
 </html>

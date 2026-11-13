@@ -26,12 +26,17 @@
             this.testMessage = '';
 
             try {
-                const data = await window.apiFetch('{{ route('operator.settings.router.test') }}', { method: 'POST' });
+                const data = await window.apiFetch('{{ route('operator.settings.router.test') }}', {
+                    method: 'POST',
+                    feedback: false,
+                });
                 this.testResult = data.success ? 'success' : 'error';
                 this.testMessage = data.message;
+                window.toast[data.success ? 'success' : 'error'](data.message);
             } catch (err) {
                 this.testResult = 'error';
                 this.testMessage = err.message || 'Network error while attempting router ping.';
+                window.toast.error(this.testMessage);
             } finally {
                 this.testingConnection = false;
             }

@@ -246,7 +246,7 @@
                                     <div class="pt-8 flex gap-3">
                                         <button type="button" @click="resetForm()" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors">Cancel</button>
                                         <button type="button" 
-                                                @click="if (amount >= minWithdrawal && phone.length >= 9) { step = 2; } else { alert('Please enter at least {{ $currency }} ' + minWithdrawal.toLocaleString() + ' and a valid phone number.'); }" 
+                                                @click="if (amount >= minWithdrawal && phone.length >= 9) { step = 2; } else { window.toast.error('Please enter at least {{ $currency }} ' + minWithdrawal.toLocaleString() + ' and a valid phone number.'); }"
                                                 class="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
                                             Next Step &rarr;
                                         </button>

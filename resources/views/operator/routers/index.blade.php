@@ -535,14 +535,14 @@
                                                         @click="
                                                             testing = true;
                                                             result = null;
-                                                            window.apiFetch('{{ route('operator.routers.test', $router) }}', { method: 'POST' })
+                                                            window.apiFetch('{{ route('operator.routers.test', $router) }}', { method: 'POST', feedback: false })
                                                             .then(data => {
                                                                 result = data;
-                                                                alert((data.ok ? '✅ ' : '❌ ') + data.message);
+                                                                window.toast[data.ok ? 'success' : 'error'](data.message);
                                                             })
                                                             .catch(error => {
                                                                 result = { ok: false, message: error.message || 'Network Error' };
-                                                                alert(error.message || 'Network Error');
+                                                                window.toast.error(error.message || 'Network Error');
                                                             })
                                                             .finally(() => testing = false);
                                                         "

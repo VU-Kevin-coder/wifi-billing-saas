@@ -28,7 +28,7 @@ window.notificationBell = function notificationBell() {
             this.loading = true;
             this.error = false;
             try {
-                const result = await window.apiFetch('/api/notifications');
+                const result = await window.apiFetch('/api/notifications', { feedback: false });
                 this.notifications = result.notifications;
                 this.unreadCount = result.unread_count;
                 this.latestUnreadId = this.notifications.find((item) => !item.read_at)?.id || this.latestUnreadId;
@@ -42,7 +42,7 @@ window.notificationBell = function notificationBell() {
 
         async fetchUnreadCount(initial = false) {
             try {
-                const result = await window.apiFetch('/api/notifications/unread-count');
+                const result = await window.apiFetch('/api/notifications/unread-count', { feedback: false });
                 const previousCount = this.unreadCount;
                 this.unreadCount = result.unread_count;
                 const latest = result.latest_unread;
