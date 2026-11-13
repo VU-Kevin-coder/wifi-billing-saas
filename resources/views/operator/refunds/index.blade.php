@@ -37,7 +37,8 @@
                                     <td class="px-4 py-3">{{ $currency }} {{ number_format($sale->amount, 0) }}</td>
                                     <td class="px-4 py-3">{{ $currency }} {{ number_format($sale->refundable, 0) }}</td>
                                     <td class="px-4 py-3">
-                                        <form method="POST" action="{{ route('operator.refunds.store', ['tenant' => $tenant->slug]) }}" class="flex flex-wrap items-center gap-2">
+                                        <form method="POST" action="{{ route('operator.refunds.store', ['tenant' => $tenant->slug]) }}" class="flex flex-wrap items-center gap-2"
+                                              data-confirm-action="Submit this refund request? It will be reviewed by the platform before any refund is issued.">
                                             @csrf
                                             <input type="hidden" name="transaction_id" value="{{ $sale->id }}">
                                             <label class="sr-only" for="amount-{{ $sale->id }}">Amount</label>
@@ -73,7 +74,8 @@
                                     <td class="px-4 py-3 capitalize">{{ $refund->status }}@if($refund->decision_note) <span class="text-xs text-gray-500">({{ $refund->decision_note }})</span>@endif</td>
                                     <td class="px-4 py-3">
                                         @if ($refund->status === 'pending')
-                                            <form method="POST" action="{{ route('operator.refunds.cancel', ['tenant' => $tenant->slug, 'refund' => $refund->id]) }}">
+                                            <form method="POST" action="{{ route('operator.refunds.cancel', ['tenant' => $tenant->slug, 'refund' => $refund->id]) }}"
+                                                  data-confirm-action="Cancel this pending refund request?">
                                                 @csrf
                                                 <button type="submit" class="text-xs font-medium text-red-600 hover:underline">Cancel</button>
                                             </form>

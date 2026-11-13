@@ -22,7 +22,7 @@ class PlatformMailService
         $encryption = PlatformSetting::get('smtp_encryption', 'tls');
         $username = PlatformSetting::get('smtp_username');
         $password = PlatformSetting::get('smtp_password');
-        $fromAddress = PlatformSetting::get('mail_from_address', config('mail.from.address', 'notifications@hamnet.com'));
+        $fromAddress = PlatformSetting::get('mail_from_address', config('mail.from.address'));
         $fromName = PlatformSetting::get('mail_from_name', config('mail.from.name', 'Hamnet Platform'));
 
         config([
@@ -92,7 +92,7 @@ class PlatformMailService
         }
 
         $platformName = PlatformSetting::get('platform_name', 'Hamnet');
-        $fromAddress = PlatformSetting::get('mail_from_address', 'notifications@hamnet.com');
+        $fromAddress = PlatformSetting::get('mail_from_address', config('mail.from.address'));
         $timestamp = now()->format('Y-m-d H:i:s T');
 
         $subject = "✅ {$platformName} SMTP Gateway Test";

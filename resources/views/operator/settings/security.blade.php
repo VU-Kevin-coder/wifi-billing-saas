@@ -46,7 +46,7 @@
             <p class="text-xs text-gray-300">Save before leaving this page.</p>
         </div>
         <div class="flex gap-2">
-            <button type="button" @click="hasChanges = false; $el.closest('form').reset()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Discard</button>
+            <button type="button" @click="const form = $el.closest('form'); window.confirmAction('Discard all unsaved security settings?').then(confirmed => { if (confirmed) { hasChanges = false; form.reset(); } })" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Discard</button>
             <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Save Security Settings</button>
         </div>
     </div>

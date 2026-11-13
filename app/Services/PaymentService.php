@@ -77,7 +77,7 @@ class PaymentService
         $pesapalKey = PlatformSetting::get('pesapal_consumer_key');
         $pesapalSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
         if (filled($pesapalKey) && filled($pesapalSecret)) {
-            return $this->initiatePesapalPayment($tenant, $package, $phone, $transaction);
+            return $this->initiatePesapalPayment($tenant, $package, $phone, $transaction, $email);
         }
 
         $currency = strtoupper((string) ($package->currency ?: PlatformSetting::get('currency', 'UGX')));
@@ -164,6 +164,11 @@ class PaymentService
 
             return ['status' => 'pending', 'message' => 'Payment status is being confirmed. Check your phone.'];
         }
+    }
+
+    public function normalizePurchasePhone(string $phone): ?string
+    {
+        return $this->normalizeUgandanPhone($phone);
     }
 
     public function reconcilePendingPayment(Transaction $transaction, ?string $provider = null): string
@@ -393,8 +398,13 @@ class PaymentService
         }));
     }
 
-    public function initiatePesapalPayment(Tenant $tenant, Package $package, string $phone, Transaction $transaction): array
-    {
+    public function initiatePesapalPayment(
+        Tenant $tenant,
+        Package $package,
+        string $phone,
+        Transaction $transaction,
+        ?string $email = null,
+    ): array {
         $amount = (float) $package->price;
         $consumerKey = PlatformSetting::get('pesapal_consumer_key');
         $consumerSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
@@ -444,7 +454,7 @@ class PaymentService
                     'notification_id' => $ipnId,
                     'billing_address' => [
                         'phone_number' => $msisdn,
-                        'email_address' => 'customer@hamnet.com',
+                        'email_address' => $email ?: config('mail.from.address'),
                         'first_name' => 'Hamnet',
                         'last_name' => 'Customer',
                         'country_code' => 'UG',

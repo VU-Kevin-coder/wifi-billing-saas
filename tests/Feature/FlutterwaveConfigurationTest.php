@@ -2,9 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -77,6 +81,68 @@ class FlutterwaveConfigurationTest extends TestCase
 
         $this->assertSame('FLWSECK_TEST', PlatformSetting::getSecret('flutterwave_secret_key'));
         $this->assertSame('production', PlatformSetting::get('flutterwave_environment'));
+    }
+
+    public function test_flutterwave_charge_callback_retry_does_not_fulfill_twice(): void
+    {
+        PlatformSetting::setSecret('flutterwave_webhook_secret', 'webhook-secret');
+        PlatformSetting::setSecret('flutterwave_secret_key', 'flutterwave-secret');
+
+        $tenant = Tenant::create([
+            'name' => 'Callback tenant',
+            'slug' => 'callback-tenant',
+            'status' => 'active',
+            'commission_rate' => 5,
+        ]);
+        $package = Package::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'One hour',
+            'price' => 2000,
+            'currency' => 'UGX',
+            'duration_value' => 1,
+            'duration_unit' => 'hours',
+            'speed_limit_mbps' => 10,
+            'device_limit' => 1,
+        ]);
+        $transaction = Transaction::withoutTenancy()->create([
+            'tenant_id' => $tenant->id,
+            'type' => 'voucher_sale',
+            'amount' => 2000,
+            'status' => 'pending',
+            'reference' => 'ONL-FW-RETRY',
+            'phone' => '0771234567',
+            'meta' => ['package_id' => $package->id, 'phone' => '0771234567'],
+        ]);
+
+        Http::fake([
+            'https://api.flutterwave.com/v3/transactions/12345/verify' => Http::response([
+                'status' => 'success',
+                'data' => [
+                    'id' => 12345,
+                    'tx_ref' => $transaction->reference,
+                    'status' => 'successful',
+                    'currency' => 'UGX',
+                    'amount' => 2000,
+                ],
+            ]),
+        ]);
+
+        $payload = [
+            'event' => 'charge.completed',
+            'data' => ['id' => 12345, 'tx_ref' => $transaction->reference],
+        ];
+
+        $this->postJson('/api/webhooks/flutterwave', $payload, ['verif-hash' => 'webhook-secret'])
+            ->assertOk()
+            ->assertJson(['status' => 'ok']);
+        $this->postJson('/api/webhooks/flutterwave', $payload, ['verif-hash' => 'webhook-secret'])
+            ->assertOk()
+            ->assertJson(['status' => 'ignored']);
+
+        $this->assertSame('completed', $transaction->fresh()->status);
+        $this->assertDatabaseCount('vouchers', 1);
+        $this->assertDatabaseCount('sessions_log', 1);
+        Http::assertSentCount(1);
     }
 
     public function test_mtn_and_airtel_secrets_are_encrypted_and_blank_values_keep_saved_credentials(): void

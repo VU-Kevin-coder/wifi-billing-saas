@@ -3,12 +3,18 @@
 namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Models\BlockedDevice;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
-use App\Models\Voucher;
+use App\Models\SiteAgentCommand;
+use App\Services\AccessRevoker;
+use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class LiveSessionController extends Controller
 {
@@ -17,50 +23,17 @@ class LiveSessionController extends Controller
         $tenant = $context->getTenant();
         $tenantId = $context->getTenantId();
 
-        // Synchronize any redeemed vouchers that don't have an active session logged yet
-        $unloggedVouchers = Voucher::with('package')
+        $query = Session::with(['customer', 'package', 'router', 'router.assignedSite.agent', 'voucher', 'site.agent'])
             ->where('tenant_id', $tenantId)
-            ->where('status', 'redeemed')
-            ->whereDoesntHave('sessions')
-            ->get();
-
-        foreach ($unloggedVouchers as $v) {
-            $pkg = $v->package;
-            $redeemedTime = $v->redeemed_at ?? now();
-            $expiresAt = $pkg?->expiresAt($redeemedTime) ?? $redeemedTime->copy()->addHours(2);
-
-            if ($expiresAt > now()) {
-                $r = $v->site_id
-                    ? Router::where('tenant_id', $tenantId)->where('site_id', $v->site_id)->first()
-                    : null;
-                $r ??= Router::where('tenant_id', $tenantId)
-                    ->when($v->assigned_site, fn ($q) => $q->where('site', $v->assigned_site))
-                    ->first() ?? Router::where('tenant_id', $tenantId)->first();
-
-                Session::create([
-                    'tenant_id' => $tenantId,
-                    'site_id' => $v->site_id ?? $r?->site_id,
-                    'customer_id' => null,
-                    'voucher_id' => $v->id,
-                    'package_id' => $v->package_id,
-                    'router_id' => $r?->id,
-                    'status' => 'active',
-                    'started_at' => $v->redeemed_at ?? now(),
-                    'expires_at' => $expiresAt,
-                    'ip_address' => '10.50.1.'.rand(10, 250),
-                    'mac_address' => null,
-                    'bytes_in' => 1024 * 128,
-                    'bytes_out' => 1024 * 512,
-                    'rate_in' => 1024 * 64,
-                    'rate_out' => 1024 * 256,
-                ]);
-            }
-        }
-
-        $query = Session::with(['customer', 'package', 'router', 'voucher', 'site'])
-            ->where('tenant_id', $tenantId)
-            ->where('status', 'active')
-            ->where('expires_at', '>', now());
+            ->where(function ($query): void {
+                $query->where(function ($activeQuery): void {
+                    $activeQuery->whereIn('status', ['active', 'disconnecting'])
+                        ->where('expires_at', '>', now());
+                })->orWhere(function ($expiredQuery): void {
+                    $expiredQuery->where('pending_revocation', true)
+                        ->where('pending_revocation_status', 'expired');
+                });
+            });
 
         // Search filter
         if ($search = $request->input('search')) {
@@ -82,10 +55,25 @@ class LiveSessionController extends Controller
         }
 
         $activeSessions = $query->orderBy('started_at', 'desc')->paginate(20)->withQueryString();
+        $sessionIds = $activeSessions->getCollection()->pluck('id');
+        $deviceBanCommands = SiteAgentCommand::query()
+            ->whereIn('session_id', $sessionIds)
+            ->where('operation', 'ban_mac')
+            ->latest('id')
+            ->get()
+            ->unique('session_id')
+            ->keyBy('session_id');
+        $blockedDevices = BlockedDevice::query()
+            ->with(['router', 'session'])
+            ->where('tenant_id', $tenantId)
+            ->latest()
+            ->limit(100)
+            ->get();
 
         // KPI aggregates across ALL active sessions for this tenant (not just current page)
         $allActive = Session::where('tenant_id', $tenantId)
             ->where('status', 'active')
+            ->where('pending_revocation', false)
             ->where('expires_at', '>', now());
 
         $connectedNow = $allActive->count();
@@ -103,6 +91,8 @@ class LiveSessionController extends Controller
         return view('operator.sessions.index', compact(
             'tenant',
             'activeSessions',
+            'deviceBanCommands',
+            'blockedDevices',
             'connectedNow',
             'downloadThroughput',
             'uploadThroughput',
@@ -118,23 +108,200 @@ class LiveSessionController extends Controller
      * Disconnect (terminate) a specific session.
      * Strictly scoped to the current tenant — no cross-tenant access possible.
      */
-    public function disconnect(Request $request, Session $session, TenantContext $context)
-    {
+    public function disconnect(
+        Request $request,
+        string $tenant,
+        Session $session,
+        TenantContext $context,
+        AccessRevoker $revoker,
+    ) {
         $tenantId = $context->getTenantId();
 
-        // Tenant isolation check
         if ($session->tenant_id !== $tenantId) {
             return response()->json(['success' => false, 'message' => 'Session not found in this workspace.'], 403);
         }
 
-        $session->update([
-            'status' => 'disconnected',
-            'expires_at' => now(),
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
         ]);
+        $session->loadMissing(['voucher', 'router.assignedSite.agent', 'site.agent']);
+
+        if (! $session->voucher || ! $session->router) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This session is not linked to a router voucher and cannot be revoked from this page.',
+            ], 409);
+        }
+
+        if ($session->pending_revocation) {
+            return response()->json([
+                'success' => true,
+                'status' => 'pending',
+                'message' => 'Voucher revocation is already waiting for router confirmation.',
+                'site_agent_online' => $this->siteAgentOnline($session),
+            ], 202);
+        }
+
+        if (! in_array($session->status, ['active', 'provisioning'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This session is no longer active.',
+            ], 409);
+        }
+
+        $queued = $revoker->revoke(
+            $session->voucher,
+            'manual_disconnect: '.$validated['reason'],
+            'disconnected',
+        );
+        $session->refresh();
+        $siteAgentOnline = $this->siteAgentOnline($session);
 
         return response()->json([
             'success' => true,
-            'message' => "Session for {$session->customer?->name} has been terminated.",
+            'status' => 'pending',
+            'message' => $queued
+                ? 'Voucher voided. Router access will be removed when the site agent confirms the command.'
+                : 'Voucher voided, but the router command could not be queued. Revocation will be retried; verify the site agent.',
+            'site_agent_online' => $siteAgentOnline,
+        ], 202);
+    }
+
+    public function banDevice(
+        Request $request,
+        string $tenant,
+        Session $session,
+        TenantContext $context,
+        SiteAgentCommandService $commands,
+    ) {
+        $tenantId = $context->getTenantId();
+        abort_unless($session->tenant_id === $tenantId, 404);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
         ]);
+        $session->loadMissing(['voucher', 'router.assignedSite.agent', 'site.agent']);
+        if (! $session->voucher || ! $session->router || ! in_array($session->status, ['active', 'provisioning'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A device ban requires an active voucher session assigned to a router.',
+            ], 409);
+        }
+
+        $pending = BlockedDevice::query()
+            ->where('tenant_id', $tenantId)
+            ->where('router_id', $session->router_id)
+            ->where('session_id', $session->id)
+            ->whereIn('status', ['pending', 'blocked', 'unban_pending'])
+            ->first();
+        if ($pending) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A device ban or unban is already recorded for this session.',
+            ], 409);
+        }
+
+        $blockedDevice = BlockedDevice::create([
+            'tenant_id' => $tenantId,
+            'router_id' => $session->router_id,
+            'session_id' => $session->id,
+            'mac_address' => null,
+            'status' => 'pending',
+            'reason' => $validated['reason'],
+        ]);
+        $session->update([
+            'status' => 'disconnecting',
+            'pending_device_ban' => true,
+        ]);
+        AuditLog::record('device.mac_block_requested', $session, [
+            'blocked_device_id' => $blockedDevice->id,
+            'router_id' => $session->router_id,
+            'reason' => $validated['reason'],
+        ]);
+
+        $queued = false;
+        try {
+            $commands->banDevice($session->router, $session, $session->voucher, $blockedDevice);
+            $queued = true;
+        } catch (Throwable $exception) {
+            Log::warning('Unable to queue a router-verified MAC block.', [
+                'session_id' => $session->id,
+                'blocked_device_id' => $blockedDevice->id,
+                'exception' => $exception::class,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => 'pending',
+            'message' => $queued
+                ? 'Device ban queued. The router must identify and confirm the device before the session is shown as disconnected.'
+                : 'Device ban is pending because no usable site agent is available. It will be retried when one is paired.',
+            'site_agent_online' => $this->siteAgentOnline($session),
+        ], 202);
+    }
+
+    public function unbanDevice(
+        Request $request,
+        string $tenant,
+        BlockedDevice $blockedDevice,
+        TenantContext $context,
+        SiteAgentCommandService $commands,
+    ) {
+        abort_unless($blockedDevice->tenant_id === $context->getTenantId(), 404);
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+        if (! in_array($blockedDevice->status, ['blocked', 'unban_pending', 'unban_failed'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This device is not currently blocked.',
+            ], 409);
+        }
+
+        $blockedDevice->loadMissing('router.assignedSite.agent');
+        $queued = false;
+        try {
+            $commands->unbanDevice($blockedDevice);
+            $queued = true;
+            $blockedDevice->update(['status' => 'unban_pending', 'last_error' => null]);
+        } catch (Throwable $exception) {
+            Log::warning('Unable to queue a router MAC unblock.', [
+                'blocked_device_id' => $blockedDevice->id,
+                'router_id' => $blockedDevice->router_id,
+                'exception' => $exception::class,
+            ]);
+            $blockedDevice->update([
+                'status' => 'unban_pending',
+                'last_error' => 'Waiting for a paired site agent.',
+            ]);
+        }
+
+        AuditLog::record('device.mac_unblock_requested', $blockedDevice, [
+            'mac_address' => $blockedDevice->mac_address,
+            'router_id' => $blockedDevice->router_id,
+            'reason' => $validated['reason'],
+        ]);
+
+        $agent = $blockedDevice->router?->assignedSite?->agent;
+        $agentOnline = $agent && ! $agent->revoked_at
+            && $agent->last_seen_at?->greaterThanOrEqualTo(now()->subMinutes(2));
+
+        return response()->json([
+            'success' => true,
+            'status' => 'pending',
+            'message' => $queued
+                ? 'Unban queued. The router will allow this MAC again after the site agent confirms.'
+                : 'Unban is pending because no usable site agent is available. It will be retried when one is paired.',
+            'site_agent_online' => (bool) $agentOnline,
+        ], 202);
+    }
+
+    private function siteAgentOnline(Session $session): bool
+    {
+        $agent = $session->site?->agent ?? $session->router?->assignedSite?->agent;
+
+        return (bool) ($agent && ! $agent->revoked_at
+            && $agent->last_seen_at?->greaterThanOrEqualTo(now()->subMinutes(2)));
     }
 }

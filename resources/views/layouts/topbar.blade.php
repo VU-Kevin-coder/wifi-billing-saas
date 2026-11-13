@@ -1,8 +1,9 @@
 @php
+    $systemHealth = app(\App\Services\SystemHealthService::class)->current();
     $currentTenant = app(\App\Services\Tenancy\TenantContext::class)->getTenant();
     $routeName = request()->route()?->getName() ?? '';
     $isPlatform = str_starts_with($routeName, 'platform.') || !$currentTenant;
-    $tenantName = $currentTenant?->name ?? ($isPlatform ? 'Platform Admin' : 'KampalaLink Internet');
+    $tenantName = $currentTenant?->name ?? ($isPlatform ? 'Platform Admin' : config('app.name'));
     
     $breadcrumbTitle = 'Dashboard';
     if (str_contains($routeName, 'platform.configuration')) {
@@ -74,10 +75,13 @@
             </div>
         </div>
 
-        <!-- Systems Live Pill Badge -->
-        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Systems live</span>
+        <!-- System health badge reflects the last dependency and scheduler check -->
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+            {{ $systemHealth['overall'] === 'healthy' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : ($systemHealth['overall'] === 'degraded' ? 'bg-amber-50 text-amber-700 border border-amber-200/60' : 'bg-gray-100 text-gray-600 border border-gray-200') }}"
+             title="{{ $systemHealth['checked_at'] ? 'Checked '.$systemHealth['checked_at'] : 'Health check has not run yet' }}">
+            <span class="w-1.5 h-1.5 rounded-full
+                {{ $systemHealth['overall'] === 'healthy' ? 'bg-emerald-500' : ($systemHealth['overall'] === 'degraded' ? 'bg-amber-500' : 'bg-gray-400') }}"></span>
+            <span>{{ $systemHealth['overall'] === 'healthy' ? 'Systems operational' : ($systemHealth['overall'] === 'degraded' ? 'Systems degraded' : 'System status unknown') }}</span>
         </div>
 
         <!-- Help Icon Button -->

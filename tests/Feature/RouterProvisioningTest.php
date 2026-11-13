@@ -129,6 +129,16 @@ class RouterProvisioningTest extends TestCase
         $this->assertStringContainsString('existing security settings are preserved', $script);
     }
 
+    public function test_generated_api_account_uses_the_configured_default_username(): void
+    {
+        config(['services.mikrotik.api_username' => 'router_api_default']);
+        $this->router->forceFill(['api_username' => null])->save();
+
+        $script = (new RouterProvisioningService)->generateScript($this->router);
+
+        $this->assertStringContainsString('name="router_api_default"', $script);
+    }
+
     public function test_generated_routeros_values_are_escaped_and_generated_password_is_persisted(): void
     {
         $router = Router::create([

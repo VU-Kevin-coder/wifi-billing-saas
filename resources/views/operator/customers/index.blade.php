@@ -45,6 +45,7 @@
             this.showViewOverlay = true;
             window.apiFetch('{{ url('/operator/customers') }}/' + id, {
                 responseType: 'text',
+                feedback: false,
             })
             .then(html => {
                 this.customerHtml = html;

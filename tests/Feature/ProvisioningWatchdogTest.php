@@ -203,7 +203,7 @@ class ProvisioningWatchdogTest extends TestCase
 
         $this->assertSame('expired', $this->inspect());
 
-        $this->assertSame('expired', $this->session->fresh()->status);
+        $this->assertSame('disconnecting', $this->session->fresh()->status);
         $this->assertSame('failed', $this->command->fresh()->status);
         $this->assertSame('pending', SiteAgentCommand::query()->where('operation', 'expire_user')->sole()->status,
             'the agent must remove a router user that may already exist');
@@ -222,7 +222,7 @@ class ProvisioningWatchdogTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.self::TOKEN)
             ->postJson("/api/site-agent/commands/{$this->command->id}/complete", ['success' => true])
             ->assertStatus(409);
-        $this->assertSame('expired', $this->session->fresh()->status);
+        $this->assertSame('disconnecting', $this->session->fresh()->status);
     }
 
     // ── Delay compensation ──────────────────────────────────────────────────

@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>{{ $pageTitle }} · {{ config('app.name', 'Hamnet') }}</title>
+    @include('partials.sweetalert-assets')
     @vite('resources/css/public.css')
+    @vite('resources/js/public.js')
     <style>
         :root {
             color-scheme: light;
@@ -225,5 +227,7 @@
         renderCode();
     })();
 </script>
+@include('partials.swal-flash')
+<x-ui.toast :show-initial="false" />
 </body>
 </html>

@@ -6,12 +6,14 @@ use Tests\TestCase;
 
 class ConfirmDialogTest extends TestCase
 {
-    public function test_confirmations_use_sweetalert_with_a_native_fallback(): void
+    public function test_confirmations_use_sweetalert_and_fail_closed_without_it(): void
     {
         $script = file_get_contents(resource_path('js/confirm.js'));
 
         $this->assertStringContainsString('window.Swal?.fire', $script);
-        $this->assertStringContainsString('window.confirm(message)', $script);
+        $this->assertStringContainsString('return Promise.resolve(false)', $script);
+        $this->assertStringNotContainsString('window.confirm(', $script);
+        $this->assertStringNotContainsString('window.prompt(', $script);
         $this->assertStringContainsString('form.dataset.confirmAction', $script);
         $this->assertStringContainsString('form.requestSubmit', $script);
     }

@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
     <title>My plan · {{ $tenant->settings['portal_title'] ?: $tenant->name }}</title>
+    @include('partials.sweetalert-assets')
     @vite('resources/css/public.css')
+    @vite('resources/js/public.js')
     <style>
         :root { --paper:#f2eee6; --panel:#fbf9f4; --ink:#1c1a17; --muted:#6f6a60; --line:#ddd6c8; --accent:{{ $tenant->settings['primary_color'] ?? '#3B82F6' }}; --accent-dark:color-mix(in srgb,var(--accent),black 18%); --accent-soft:color-mix(in srgb,var(--accent),white 92%); }
         * { box-sizing:border-box; }
@@ -75,5 +77,7 @@
 
         <a href="{{ route('portal.index', ['tenant' => $tenant->slug], false) }}" class="back">Back to Wi-Fi portal</a>
     </main>
+    @include('partials.swal-flash')
+    <x-ui.toast :show-initial="false" />
 </body>
 </html>

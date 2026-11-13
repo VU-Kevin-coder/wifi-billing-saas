@@ -55,8 +55,13 @@ class ExpireSessions extends Command
                     }
 
                     if (config('site_agent.required') && $session->router && $session->voucher) {
+                        $session->update([
+                            'status' => 'disconnecting',
+                            'pending_revocation' => true,
+                            'pending_revocation_status' => 'expired',
+                        ]);
                         $retryCount++;
-                        Log::error('Expired session has no paired site agent; it remains active until router access is revoked.', [
+                        Log::error('Expired session has no paired site agent; it remains pending until router access is revoked.', [
                             'session_id' => $session->id,
                             'router_id' => $session->router_id,
                         ]);
@@ -65,6 +70,12 @@ class ExpireSessions extends Command
                     }
 
                     if ($session->router && $session->voucher) {
+                        $session->update([
+                            'status' => 'disconnecting',
+                            'pending_revocation' => true,
+                            'pending_revocation_status' => 'expired',
+                        ]);
+
                         try {
                             $disconnected = $routerService->disconnectUser(
                                 $session->router,
@@ -91,7 +102,11 @@ class ExpireSessions extends Command
                         }
                     }
 
-                    $session->update(['status' => 'expired']);
+                    $session->update([
+                        'status' => 'expired',
+                        'pending_revocation' => false,
+                        'pending_revocation_status' => null,
+                    ]);
                     $expiredCount++;
                 }
             });

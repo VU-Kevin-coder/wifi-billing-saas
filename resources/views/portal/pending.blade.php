@@ -6,6 +6,7 @@
     <title>Processing payment · {{ $tenant->settings['portal_title'] ?: $tenant->name }}</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700&display=swap" rel="stylesheet">
+    @include('partials.sweetalert-assets')
     @vite('resources/css/public.css')
     @vite('resources/js/public.js')
     <style>
@@ -65,8 +66,6 @@
         </a>
     </main>
 
-    <x-ui.toast />
-
     <script>
         const checkUrl = @json($checkUrl);
         const successUrl = @json($successUrl);
@@ -77,6 +76,7 @@
             try {
                 const result = await window.apiFetch(checkUrl, {
                     cache: 'no-store',
+                    feedback: false,
                 });
 
                 if (result.status === 'completed') {
@@ -104,5 +104,7 @@
 
         document.addEventListener('DOMContentLoaded', checkPayment, { once: true });
     </script>
+    @include('partials.swal-flash')
+    <x-ui.toast :show-initial="false" />
 </body>
 </html>

@@ -208,7 +208,8 @@
                                 <td class="px-4 py-4 whitespace-nowrap text-right">
                                     <div class="flex items-center justify-end gap-2" x-data="{ open: false }">
                                         <!-- Switch into button -->
-                                        <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="inline">
+                                        <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="inline"
+                                              data-confirm-action="Open {{ $tenant->name }}'s workspace as an audited platform administrator?">
                                             @csrf
                                             <button type="submit"
                                                class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
@@ -231,7 +232,8 @@
                                                  x-transition:leave-start="opacity-100 scale-100"
                                                  x-transition:leave-end="opacity-0 scale-95"
                                                  class="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 text-left">
-                                                <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="w-full">
+                                                <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="w-full"
+                                                      data-confirm-action="Open {{ $tenant->name }}'s workspace as an audited platform administrator?">
                                                     @csrf
                                                     <button type="submit"
                                                        class="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 font-medium">
@@ -393,7 +395,7 @@
                                                             <input type="text" id="tenant_slug" name="slug" x-model="slug" @input="slugManual = true" required placeholder="nile-internet"
                                                                    class="block w-full min-w-0 flex-1 rounded-none rounded-l-lg border-gray-300 text-xs font-mono focus:border-blue-500 focus:ring-blue-500">
                                                             <span class="inline-flex items-center rounded-r-lg border border-l-0 border-gray-300 bg-gray-50 px-3 text-xs text-gray-500 font-mono">
-                                                                .localhost:8000
+                                                                .{{ \App\Models\Tenant::domainSuffix() }}
                                                             </span>
                                                         </div>
                                                         @error('slug')

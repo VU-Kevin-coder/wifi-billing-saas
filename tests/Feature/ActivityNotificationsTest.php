@@ -57,6 +57,7 @@ class ActivityNotificationsTest extends TestCase
                 'name' => 'North-01',
                 'status' => 'provisioning',
             ]);
+            Cache::forget('router-health-alert:'.$router->id);
             $router->update(['status' => 'offline']);
 
             VoucherBatch::create([

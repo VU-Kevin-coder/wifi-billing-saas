@@ -6,6 +6,7 @@
     <title>Connected · {{ $tenant->settings['portal_title'] ?: $tenant->name }}</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
+    @include('partials.sweetalert-assets')
     @vite('resources/css/public.css')
     @vite('resources/js/public.js')
     <style>
@@ -99,6 +100,7 @@
                 const payment = await window.apiFetch(paymentStatusUrl, {
                     headers: { 'X-Payment-Token': paymentToken },
                     cache: 'no-store',
+                    feedback: false,
                 });
 
                 if (payment.status === 'completed') {
@@ -181,6 +183,7 @@
             Connect now
         </a>
     </div>
-    <x-ui.toast />
+    @include('partials.swal-flash')
+    <x-ui.toast :show-initial="false" />
 </body>
 </html>

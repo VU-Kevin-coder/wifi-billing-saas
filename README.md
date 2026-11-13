@@ -576,6 +576,14 @@ cron service) so session expiry, stale-router health checks, and
 Payment reconciliation checks provider status for mobile-money charges that
 remain pending; it does not trust webhook status alone.
 
+The scheduler also runs `system:health-check` each minute and sends email when
+the monitored state changes. `/health/ready` reports database, cache,
+scheduler-heartbeat, and queue status; configure an external monitor to poll
+this endpoint so a stopped web or scheduler process is detected independently.
+Queue workers are reported as unverified when `QUEUE_CONNECTION` is not
+`sync`, because this deployment does not publish a queue-worker heartbeat.
+Configure SMTP and `MAIL_FROM_ADDRESS` to receive alerts.
+
 ### Step 7: Run the tests
 
 ```bash
@@ -614,6 +622,8 @@ APP_NAME="Wi-Fi Billing SaaS"
 APP_ENV=local
 APP_DEBUG=true
 APP_URL=http://localhost:8000
+# Optional. Defaults to the host (and non-standard port) in APP_URL.
+TENANT_BASE_DOMAIN=
 
 DB_CONNECTION=mysql
 DB_HOST=db
@@ -635,6 +645,17 @@ MIKROTIK_PORT=8728
 MIKROTIK_USERNAME=
 MIKROTIK_PASSWORD=
 MIKROTIK_USE_SSL=false
+MIKROTIK_DEFAULT_API_PORT=8728
+MIKROTIK_DEFAULT_API_USERNAME=billing_api
+MIKROTIK_HOTSPOT_DOMAIN=hotspot.local
+MIKROTIK_DEFAULT_HOTSPOT_NETWORK=10.10.0.0/16
+MIKROTIK_DEFAULT_GATEWAY=10.10.0.1
+MIKROTIK_DEFAULT_DNS_SERVERS=8.8.8.8,8.8.4.4
+MIKROTIK_DEFAULT_CLIENT_PORTS=ether2,ether3
+
+# Readiness and health alerts
+HEALTH_SCHEDULER_STALE_SECONDS=120
+MAIL_FROM_ADDRESS=hello@example.com
 
 # Flutterwave legacy collections and operator payouts (never commit real credentials)
 FLUTTERWAVE_PUBLIC_KEY=
@@ -645,7 +666,7 @@ FLUTTERWAVE_ENVIRONMENT=sandbox
 PAYMENT_SIMULATION_ENABLED=false
 ```
 
-These values are illustrative. The final settings must match the service names, credentials, and ports defined by the actual Compose configuration.
+These values are illustrative. The final settings must match the service names, credentials, and ports defined by the actual Compose configuration. `APP_URL` supplies the tenant-domain default; set `TENANT_BASE_DOMAIN` only when tenant subdomains live on a different host. The configurable MikroTik hotspot domain (default `hotspot.local`) is a RouterOS captive-portal DNS name, not the SaaS application URL.
 
 ### Rules for environment variables
 

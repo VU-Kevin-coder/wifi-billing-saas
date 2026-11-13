@@ -114,10 +114,15 @@ class Tenant extends Model
      */
     public function host(): string
     {
-        $host = $this->slug.'.'.config('tenancy.base_domain', 'localhost');
+        return $this->slug.'.'.self::domainSuffix();
+    }
+
+    public static function domainSuffix(): string
+    {
+        $host = (string) config('tenancy.base_domain');
         $port = parse_url((string) config('app.url'), PHP_URL_PORT);
 
-        return $port && ! in_array($port, [80, 443], true) ? $host.':'.$port : $host;
+        return $port && ! in_array((int) $port, [80, 443], true) ? $host.':'.$port : $host;
     }
 
     /**
@@ -126,10 +131,6 @@ class Tenant extends Model
     public function url(string $path = '/'): string
     {
         $scheme = parse_url((string) config('app.url'), PHP_URL_SCHEME) ?: 'https';
-
-        if (app()->environment(['local', 'testing'])) {
-            $scheme = 'http';
-        }
 
         return $scheme.'://'.$this->host().'/'.ltrim($path, '/');
     }

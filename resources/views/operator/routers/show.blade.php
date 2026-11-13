@@ -97,7 +97,7 @@
                         </div>
                         <div class="flex justify-between gap-4 py-3">
                             <dt class="text-sm text-gray-500">API Port</dt>
-                            <dd class="text-sm font-medium text-gray-900">{{ $router->api_port ?: 8728 }}</dd>
+                            <dd class="text-sm font-medium text-gray-900">{{ $router->api_port ?: config('services.mikrotik.api_port') }}</dd>
                         </div>
                         <div class="flex justify-between gap-4 py-3">
                             <dt class="text-sm text-gray-500">API Username</dt>
@@ -150,11 +150,16 @@
                                 testResult = null;
                                 window.apiFetch('{{ route('operator.routers.test', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
                                     method: 'POST',
+                                    feedback: false,
                                 })
                                 .then(data => {
                                     testResult = data;
+                                    window.toast[data.ok ? 'success' : 'error'](data.message);
                                 })
-                                .catch(error => testResult = { ok: false, message: error.message || 'The connection test could not be completed.' })
+                                .catch(error => {
+                                    testResult = { ok: false, message: error.message || 'The connection test could not be completed.' };
+                                    window.toast.error(testResult.message);
+                                })
                                 .finally(() => testing = false);
                             "
                             :disabled="testing"
@@ -171,9 +176,16 @@
                                     telemetryResult = null;
                                     window.apiFetch('{{ route('operator.routers.telemetry', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
                                         method: 'POST',
+                                        feedback: false,
                                     })
-                                    .then(data => telemetryResult = data)
-                                    .catch(error => telemetryResult = { message: error.message || 'Telemetry could not be requested.' })
+                                    .then(data => {
+                                        telemetryResult = data;
+                                        window.toast.info(data.message);
+                                    })
+                                    .catch(error => {
+                                        telemetryResult = { message: error.message || 'Telemetry could not be requested.' };
+                                        window.toast.error(telemetryResult.message);
+                                    })
                                     .finally(() => requestingTelemetry = false);
                                 "
                                 :disabled="requestingTelemetry"
@@ -256,13 +268,18 @@
                     this.deploying = true;
                     this.deployResult = null;
                     try {
-                        const data = await window.apiFetch('{{ route('operator.routers.provision', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', { method: 'POST' });
+                        const data = await window.apiFetch('{{ route('operator.routers.provision', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                            method: 'POST',
+                            feedback: false,
+                        });
                         this.deployResult = data;
+                        await window.toast[data.ok ? 'success' : 'error'](data.message);
                         if (data.ok) {
-                            setTimeout(() => window.location.reload(), 1500);
+                            window.location.reload();
                         }
                     } catch (error) {
                         this.deployResult = { ok: false, message: error.message || 'Network error communicating with router API.' };
+                        window.toast.error(this.deployResult.message);
                     } finally {
                         this.deploying = false;
                     }
@@ -311,19 +328,19 @@
                 <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">
                         <span class="text-gray-400 block mb-0.5">Hotspot Network</span>
-                        <span class="font-mono font-semibold text-gray-800">{{ $router->hotspot_config['network'] ?? '10.10.0.0/16' }}</span>
+                        <span class="font-mono font-semibold text-gray-800">{{ $router->hotspot_config['network'] ?? config('services.mikrotik.hotspot_network') }}</span>
                     </div>
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">
                         <span class="text-gray-400 block mb-0.5">Gateway IP</span>
-                        <span class="font-mono font-semibold text-gray-800">{{ $router->hotspot_config['gateway'] ?? '10.10.0.1' }}</span>
+                        <span class="font-mono font-semibold text-gray-800">{{ $router->hotspot_config['gateway'] ?? config('services.mikrotik.gateway') }}</span>
                     </div>
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">
                         <span class="text-gray-400 block mb-0.5">Login Domain</span>
-                        <span class="font-mono font-semibold text-gray-800">{{ $router->hotspot_config['domain'] ?? 'hotspot.local' }}</span>
+                        <span class="font-mono font-semibold text-gray-800">{{ $router->hotspot_config['domain'] ?? config('services.mikrotik.hotspot_domain') }}</span>
                     </div>
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">
                         <span class="text-gray-400 block mb-0.5">Assigned Ports</span>
-                        <span class="font-mono font-semibold text-gray-800">{{ implode(', ', $router->ethernet_ports ?? ['ether2', 'ether3']) }}</span>
+                        <span class="font-mono font-semibold text-gray-800">{{ implode(', ', $router->ethernet_ports ?? config('services.mikrotik.client_ports')) }}</span>
                     </div>
                     @if($router->has_wireless)
                         <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">

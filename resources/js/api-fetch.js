@@ -27,7 +27,12 @@ function responseMessage(payload, response) {
 }
 
 window.apiFetch = async function apiFetch(url, options = {}) {
-    const { responseType = 'json', headers: suppliedHeaders, ...fetchOptions } = options;
+    const {
+        responseType = 'json',
+        feedback = true,
+        headers: suppliedHeaders,
+        ...fetchOptions
+    } = options;
     const headers = new Headers(suppliedHeaders || {});
     const method = (fetchOptions.method || 'GET').toUpperCase();
     const mutating = !['GET', 'HEAD', 'OPTIONS'].includes(method);
@@ -49,7 +54,9 @@ window.apiFetch = async function apiFetch(url, options = {}) {
     try {
         response = await fetch(url, { ...fetchOptions, method, headers });
     } catch (error) {
-        window.toast?.error('Network error — check your connection and try again.');
+        if (feedback) {
+            window.toast?.error('Network error — check your connection and try again.');
+        }
         throw error;
     }
 
@@ -61,7 +68,9 @@ window.apiFetch = async function apiFetch(url, options = {}) {
 
     if (!response.ok) {
         const message = responseMessage(payload, response);
-        window.toast?.error(message);
+        if (feedback) {
+            window.toast?.error(message);
+        }
         throw new Error(message);
     }
 
@@ -71,7 +80,9 @@ window.apiFetch = async function apiFetch(url, options = {}) {
 
     if (!isJson && response.status !== 204) {
         const message = 'The server returned an unexpected response.';
-        window.toast?.error(message);
+        if (feedback) {
+            window.toast?.error(message);
+        }
         throw new Error(message);
     }
 

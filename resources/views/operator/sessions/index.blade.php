@@ -15,6 +15,7 @@
              },
              closePanel() {
                  this.panelOpen = false;
+                 this.session = null;
              },
 
              // Format bytes helper
@@ -38,9 +39,13 @@
             <div>
                 <div class="flex items-center gap-3">
                     <h1 class="text-2xl font-bold tracking-tight text-gray-900">Live sessions</h1>
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        Systems live
+                    @php
+                        $systemHealth = app(\App\Services\SystemHealthService::class)->current();
+                    @endphp
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border
+                        {{ $systemHealth['overall'] === 'healthy' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ($systemHealth['overall'] === 'degraded' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200') }}">
+                        <span class="w-1.5 h-1.5 rounded-full {{ $systemHealth['overall'] === 'healthy' ? 'bg-emerald-500' : ($systemHealth['overall'] === 'degraded' ? 'bg-amber-500' : 'bg-gray-400') }}"></span>
+                        {{ $systemHealth['overall'] === 'healthy' ? 'Systems operational' : ($systemHealth['overall'] === 'degraded' ? 'Systems degraded' : 'System status unknown') }}
                     </span>
                 </div>
                 <p class="text-gray-500 text-xs sm:text-sm mt-1">
@@ -295,12 +300,19 @@
                                 $customerName = $session->customer?->name 
                                     ?? ($session->voucher ? 'Voucher ' . $session->voucher->code : 'Wi-Fi Guest');
 
+                                $siteAgent = $session->site?->agent ?? $session->router?->assignedSite?->agent;
+                                $siteAgentOnline = $siteAgent
+                                    && ! $siteAgent->revoked_at
+                                    && $siteAgent->last_seen_at?->greaterThanOrEqualTo(now()->subMinutes(2));
+                                $banCommand = $deviceBanCommands->get($session->id);
+
                                 // Build the JS-safe session object for the side panel
                                 $sessionJs = json_encode([
                                     'id'          => $session->id,
                                     'customer'    => $customerName,
                                     'email'       => $session->customer?->email ?? '—',
                                     'type'        => $sessionType,
+                                    'voucher'     => $session->voucher?->code,
                                     'mac'         => $session->mac_address ?? '—',
                                     'ip'          => $session->ip_address ?? '—',
                                     'router'      => $session->router?->name ?? '—',
@@ -317,7 +329,17 @@
                                     'bytes_out'   => $session->bytes_out,
                                     'rate_in'     => $session->rate_in,
                                     'rate_out'    => $session->rate_out,
+                                    'hasVoucher' => (bool) $session->voucher,
+                                    'hasRouter' => (bool) $session->router,
+                                    'disconnecting' => $session->status === 'disconnecting',
+                                    'pendingRevocation' => (bool) $session->pending_revocation,
+                                    'pendingRevocationStatus' => $session->pending_revocation_status,
+                                    'pendingDeviceBan' => (bool) $session->pending_device_ban,
+                                    'siteAgentOnline' => (bool) $siteAgentOnline,
+                                    'banCommandStatus' => $banCommand?->status,
+                                    'banCommandFailure' => $banCommand?->failure_reason,
                                     'disconnectUrl' => route('operator.sessions.disconnect', $session->id),
+                                    'banUrl' => route('operator.sessions.ban-device', $session->id),
                                 ]);
                             @endphp
                             <tr class="hover:bg-blue-50/40 cursor-pointer transition-colors group"
@@ -344,7 +366,12 @@
                                                     · <span class="font-mono text-gray-400">{{ $session->voucher->code }}</span>
                                                 @endif
                                                 @if($session->mac_address)
-                                                    · <span class="font-mono text-gray-400">{{ $session->mac_address }}</span>
+                                                    · <span class="font-mono text-gray-400" title="Reported by the client; router-verified MAC is used for device bans">{{ $session->mac_address }} (reported)</span>
+                                                @endif
+                                                @if($session->pending_revocation && $session->pending_revocation_status === 'expired')
+                                                    · <span class="font-semibold text-amber-700">Expired · awaiting router enforcement</span>
+                                                @elseif($session->status === 'disconnecting')
+                                                    · <span class="font-semibold text-amber-700">Awaiting router confirmation</span>
                                                 @endif
                                             </p>
                                         </div>
@@ -422,6 +449,103 @@
 
         </div>
 
+        <section class="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h2 class="text-sm font-bold text-gray-900">Blocked devices</h2>
+                <p class="mt-1 text-xs text-gray-500">Showing the latest 100 records. MAC blocks apply only to the selected router, can be spoofed, and do not void the associated voucher.</p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
+                        <tr>
+                            <th class="px-5 py-3 font-semibold">Device MAC</th>
+                            <th class="px-5 py-3 font-semibold">Router</th>
+                            <th class="px-5 py-3 font-semibold">Status</th>
+                            <th class="px-5 py-3 font-semibold">Reason / latest error</th>
+                            <th class="px-5 py-3 font-semibold">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        @forelse($blockedDevices as $device)
+                            @php
+                                $deviceStatusClass = match ($device->status) {
+                                    'blocked' => 'bg-red-50 text-red-700',
+                                    'unblocked' => 'bg-gray-100 text-gray-600',
+                                    'ban_failed', 'unban_failed' => 'bg-red-50 text-red-700',
+                                    default => 'bg-amber-50 text-amber-800',
+                                };
+                            @endphp
+                            <tr>
+                                <td class="px-5 py-3 font-mono text-gray-800">{{ $device->mac_address ?? 'Awaiting router MAC' }}</td>
+                                <td class="px-5 py-3 text-gray-700">{{ $device->router?->name ?? '—' }}</td>
+                                <td class="px-5 py-3">
+                                    <span class="rounded-full px-2 py-1 font-semibold {{ $deviceStatusClass }}">{{ str_replace('_', ' ', $device->status) }}</span>
+                                </td>
+                                <td class="px-5 py-3 text-gray-600">
+                                    <span>{{ $device->last_error ?: $device->reason ?: '—' }}</span>
+                                </td>
+                                <td class="px-5 py-3" x-data="{
+                                    loading: false,
+                                    pending: false,
+                                    message: '',
+                                    agentOnline: true,
+                                    async unblockDevice() {
+                                        const reason = await window.confirmWithReason(
+                                            'Remove this MAC block from the router? The device will be allowed to connect again.',
+                                            { title: 'Unban device', inputLabel: 'Reason for unblocking this MAC' }
+                                        );
+                                        if (reason === null) return;
+
+                                        this.loading = true;
+                                        try {
+                                            const result = await window.apiFetch('{{ route('operator.blocked-devices.unban', $device->id) }}', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ reason }),
+                                                feedback: false,
+                                            });
+                                            if (result.success) {
+                                                this.pending = true;
+                                                this.message = result.message;
+                                                this.agentOnline = result.site_agent_online;
+                                                window.toast.info(result.message);
+                                            } else {
+                                                window.toast.error(result.message || 'Unban was not queued.');
+                                            }
+                                        } catch (error) {
+                                            window.toast.error(error.message || 'Network error.');
+                                        } finally {
+                                            this.loading = false;
+                                        }
+                                    },
+                                }">
+                                    @if(in_array($device->status, ['blocked', 'unban_pending', 'unban_failed'], true))
+                                        <button type="button"
+                                                x-show="!pending"
+                                                :disabled="loading"
+                                                @click="unblockDevice()"
+                                                class="font-semibold text-blue-700 hover:text-blue-900 disabled:opacity-50">
+                                            <span x-text="loading ? 'Queueing…' : ( '{{ $device->status }}' === 'blocked' ? 'Unban' : 'Retry unban' )">Unban</span>
+                                        </button>
+                                        <span x-show="pending" class="text-amber-800">
+                                            Unban pending<span x-show="!agentOnline">; site agent offline</span>
+                                            <span x-show="message" x-text="': ' + message"></span>
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="px-5 py-8 text-center text-gray-500">No blocked devices have been recorded.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         {{-- ══════════════════════════════════
              Footer cards
         ══════════════════════════════════ --}}
@@ -432,7 +556,7 @@
                     <button type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">Manage policies</button>
                 </div>
                 <p class="text-xs text-gray-500 leading-relaxed">
-                    Click any row to inspect a session's MAC address, traffic and RADIUS details. Disconnecting requires a reason and is recorded in the audit log.
+                    Click any row to inspect session details. Voiding a voucher and blocking a router-verified MAC require a reason and are recorded in the audit log.
                 </p>
             </div>
 
@@ -441,17 +565,15 @@
                     <h3 class="text-sm font-bold text-gray-900">Enforcement status</h3>
                 </div>
                 <div class="flex items-center gap-2 mb-3">
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        CoA reachable
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">
+                        Site-agent command queue
                     </span>
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Limits applied
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200/60">
+                        Router confirmation required
                     </span>
                 </div>
                 <p class="text-xs text-gray-500">
-                    Idle timeout: <strong>15 min</strong> · Accounting interval: <strong>5 min</strong> · Expiry: disconnects on expiry.
+                    Commands are retried while pending. A queued action is not proof of enforcement; verify the router-confirmed status before treating a customer as disconnected or blocked.
                 </p>
             </div>
         </div>
@@ -511,9 +633,11 @@
 
             {{-- Status badge --}}
             <div class="flex items-center gap-2">
-                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Active
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border"
+                      :class="session?.pendingRevocation || session?.disconnecting ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
+                    <span class="w-1.5 h-1.5 rounded-full animate-pulse"
+                          :class="session?.pendingRevocation || session?.disconnecting ? 'bg-amber-500' : 'bg-emerald-500'"></span>
+                    <span x-text="session?.pendingRevocationStatus === 'expired' ? 'Expired · enforcement pending' : (session?.disconnecting ? 'Enforcement pending' : 'Active')">Active</span>
                 </span>
                 <span class="text-xs text-gray-400" x-text="session ? 'Session #' + session.id : ''"></span>
             </div>
@@ -550,7 +674,7 @@
                         <span class="font-mono font-semibold text-gray-900" x-text="session?.ip ?? '—'"></span>
                     </div>
                     <div class="flex items-center justify-between px-4 py-2.5">
-                        <span class="text-gray-500">MAC address</span>
+                        <span class="text-gray-500">Client-reported MAC</span>
                         <span class="font-mono text-gray-700" x-text="session?.mac ?? '—'"></span>
                     </div>
                     <div class="flex items-center justify-between px-4 py-2.5">
@@ -614,72 +738,159 @@
                 Extend Session
             </button>
 
-            {{-- Disconnect --}}
-            <div x-data="{ confirming: false, loading: false, done: false, error: '' }">
-                <template x-if="!confirming && !done">
+            <div x-show="session?.hasVoucher && session?.hasRouter"
+                 class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <p x-show="!session?.siteAgentOnline">
+                    <strong>Site agent offline.</strong> Router actions will wait for the agent to reconnect. The customer may remain online until the router confirms enforcement.
+                </p>
+                <p x-show="session?.siteAgentOnline">
+                    Router actions are asynchronous; access is not considered revoked until the site agent confirms the router change.
+                </p>
+            </div>
+
+            {{-- Void voucher and disconnect --}}
+            <div x-data="{
+                sessionId: null,
+                loading: false,
+                pending: false,
+                message: '',
+                async revokeAccess() {
+                    const requestSessionId = session?.id;
+                    const reason = await window.confirmWithReason(
+                        'This permanently voids voucher ' + (session?.voucher ?? '') + ' and asks the router to disable its user and kick the active session.',
+                        { title: 'Void voucher & disconnect', inputLabel: 'Reason for revocation', confirmButtonText: 'Void voucher & disconnect' }
+                    );
+                    if (reason === null || session?.id !== requestSessionId) return;
+
+                    this.loading = true;
+                    try {
+                        const result = await window.apiFetch(session.disconnectUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reason }),
+                            feedback: false,
+                        });
+                        if (session?.id !== requestSessionId) return;
+                        if (!result.success) {
+                            window.toast.error(result.message || 'Failed to disconnect.');
+                            return;
+                        }
+
+                        this.pending = true;
+                        this.message = result.message;
+                        session.siteAgentOnline = result.site_agent_online;
+                        session.pendingRevocation = true;
+                        session.disconnecting = true;
+                        window.toast[result.site_agent_online ? 'info' : 'warning'](result.message);
+                    } catch (error) {
+                        window.toast.error(error.message || 'Network error.');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+            }"
+            x-effect="if (sessionId !== session?.id) { sessionId = session?.id; loading = false; pending = false; message = ''; }">
+                <template x-if="session?.pendingRevocation">
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        <span x-text="session?.pendingRevocationStatus === 'expired' ? 'Session time has expired; waiting for the router to enforce disconnection.' : 'Voucher revoked in the app; waiting for the router to disable the user and disconnect the session.'"></span>
+                    </div>
+                </template>
+                <template x-if="!session?.pendingRevocation && !session?.pendingDeviceBan && !pending && session?.hasVoucher && session?.hasRouter">
                     <button type="button"
-                            @click="confirming = true"
+                            @click="revokeAccess()"
+                            :disabled="loading"
                             class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-red-200 hover:bg-red-50 rounded-xl text-sm font-semibold text-red-600 transition-colors">
+                        <svg x-show="!session?.siteAgentOnline" class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Site agent offline; router enforcement will be delayed" x-cloak>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.3 3.86L1.82 18a2 2 0 001.7 3h16.96a2 2 0 001.7-3L13.7 3.86a2 2 0 00-3.4 0z"/>
+                        </svg>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829M3 3l18 18"/>
                         </svg>
-                        Disconnect User
+                        Void voucher & disconnect
                     </button>
                 </template>
 
-                {{-- Confirm step --}}
-                <template x-if="confirming && !done">
-                    <div class="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
-                        <p class="text-xs font-semibold text-red-700">
-                            This will immediately terminate the session for
-                            <strong x-text="session?.customer ?? 'this user'"></strong>.
-                            The action is logged in the audit trail.
-                        </p>
-                        <div class="flex gap-2">
-                            <button type="button"
-                                    @click="confirming = false"
-                                    class="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                                Cancel
-                            </button>
-                            <button type="button"
-                                    :disabled="loading"
-                                    @click="
-                                        loading = true;
-                                        error = '';
-                                        window.apiFetch(session.disconnectUrl, { method: 'POST' })
-                                        .then(d => {
-                                            if (d.success) { done = true; }
-                                            else { error = d.message || 'Failed to disconnect.'; loading = false; confirming = false; }
-                                        })
-                                        .catch(e => { error = e.message || 'Network error.'; loading = false; confirming = false; });
-                                    "
-                                    class="flex-1 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-xs font-semibold text-white disabled:opacity-50 flex items-center justify-center gap-1.5">
-                                <svg x-show="loading" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" x-cloak>
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                </svg>
-                                <span x-text="loading ? 'Disconnecting...' : 'Yes, disconnect'">Yes, disconnect</span>
-                            </button>
-                        </div>
-                        <p x-show="error" x-text="error" class="text-xs text-red-600 font-medium" x-cloak></p>
+                <template x-if="pending">
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        <strong>Revocation pending.</strong>
+                        <span x-text="message"></span>
+                        <p x-show="!session?.siteAgentOnline" class="mt-1 font-semibold">Site agent offline; router enforcement waits until it reconnects.</p>
                     </div>
                 </template>
 
-                {{-- Success state --}}
-                <template x-if="done">
-                    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3">
-                        <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
-                        <div>
-                            <p class="text-xs font-bold text-emerald-800">Disconnected successfully</p>
-                            <p class="text-[11px] text-emerald-600">Session has been terminated. Page will refresh.</p>
-                        </div>
+                <template x-if="!session?.hasVoucher || !session?.hasRouter">
+                    <p class="text-xs text-gray-500">This session has no router-linked voucher, so it cannot be revoked from this page.</p>
+                </template>
+            </div>
+
+            {{-- Ban the router-verified MAC without voiding the voucher --}}
+            <div x-data="{
+                sessionId: null,
+                loading: false,
+                pending: false,
+                message: '',
+                async banDevice() {
+                    const requestSessionId = session?.id;
+                    const reason = await window.confirmWithReason(
+                        'The site agent will block the router-reported MAC on this router and disconnect it. This does not void the voucher; another device may still use it. MAC addresses can be spoofed.',
+                        { title: 'Ban device (MAC)', inputLabel: 'Reason for device ban', confirmButtonText: 'Ban device' }
+                    );
+                    if (reason === null || session?.id !== requestSessionId) return;
+
+                    this.loading = true;
+                    try {
+                        const result = await window.apiFetch(session.banUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reason }),
+                            feedback: false,
+                        });
+                        if (session?.id !== requestSessionId) return;
+                        if (!result.success) {
+                            window.toast.error(result.message || 'Device ban was not queued.');
+                            return;
+                        }
+
+                        this.pending = true;
+                        this.message = result.message;
+                        session.siteAgentOnline = result.site_agent_online;
+                        session.pendingDeviceBan = true;
+                        session.disconnecting = true;
+                        window.toast[result.site_agent_online ? 'info' : 'warning'](result.message);
+                    } catch (error) {
+                        window.toast.error(error.message || 'Network error.');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+            }"
+            x-effect="if (sessionId !== session?.id) { sessionId = session?.id; loading = false; pending = false; message = ''; }">
+                <template x-if="session?.pendingDeviceBan">
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        Device ban pending router confirmation.
+                        <span x-show="session?.banCommandStatus === 'failed'" class="block mt-1 text-red-700">
+                            Last attempt failed: <span x-text="session?.banCommandFailure"></span>. Automatic retry is scheduled.
+                        </span>
                     </div>
-                    {{-- Auto-close panel and refresh after 1.5s --}}
-                    <script>
-                        setTimeout(() => { window.location.reload(); }, 1500);
-                    </script>
+                </template>
+                <template x-if="!session?.pendingDeviceBan && !session?.pendingRevocation && !pending && session?.hasVoucher && session?.hasRouter">
+                    <button type="button"
+                            @click="banDevice()"
+                            :disabled="loading"
+                            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-700 hover:bg-red-800 rounded-xl text-sm font-semibold text-white transition-colors">
+                        <svg x-show="!session?.siteAgentOnline" class="w-4 h-4 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Site agent offline; router enforcement will be delayed" x-cloak>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.3 3.86L1.82 18a2 2 0 001.7 3h16.96a2 2 0 001.7-3L13.7 3.86a2 2 0 00-3.4 0z"/>
+                        </svg>
+                        Ban device (MAC)
+                    </button>
+                </template>
+
+                <template x-if="pending">
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        <strong>Device ban pending.</strong>
+                        <span x-text="message"></span>
+                        <p x-show="!session?.siteAgentOnline" class="mt-1 font-semibold">Site agent offline; router enforcement waits until it reconnects.</p>
+                    </div>
                 </template>
             </div>
 

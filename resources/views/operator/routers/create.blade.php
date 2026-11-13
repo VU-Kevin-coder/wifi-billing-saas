@@ -130,7 +130,7 @@
                         <div>
                             <label for="api_port" class="mb-1 block text-sm font-medium text-gray-700">API Port</label>
                             <input id="api_port" name="api_port" type="number" min="1" max="65535"
-                                   value="{{ old('api_port', 8728) }}"
+                                   value="{{ old('api_port', config('services.mikrotik.api_port')) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
                             <p class="mt-1 text-xs text-gray-500">8728 uses the unencrypted API; 8729 uses API-SSL. Restrict its allowed source subnet.</p>
                             @error('api_port') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
@@ -139,7 +139,7 @@
                         <div>
                             <label for="api_username" class="mb-1 block text-sm font-medium text-gray-700">API Username</label>
                             <input id="api_username" name="api_username" type="text" maxlength="100"
-                                   value="{{ old('api_username', 'billing_api') }}"
+                                   value="{{ old('api_username', config('services.mikrotik.api_username')) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
                             @error('api_username') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
@@ -184,28 +184,28 @@
                         <div>
                             <label for="hotspot_network" class="mb-1 block text-sm font-medium text-gray-700">Hotspot network</label>
                             <input id="hotspot_network" name="hotspot_network" type="text" maxlength="50"
-                                   value="{{ old('hotspot_network', '10.10.0.0/16') }}"
+                                   value="{{ old('hotspot_network', config('services.mikrotik.hotspot_network')) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
                             @error('hotspot_network') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
                         <div>
                             <label for="gateway_ip" class="mb-1 block text-sm font-medium text-gray-700">Gateway IP</label>
                             <input id="gateway_ip" name="gateway_ip" type="text" maxlength="50"
-                                   value="{{ old('gateway_ip', '10.10.0.1') }}"
+                                   value="{{ old('gateway_ip', config('services.mikrotik.gateway')) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
                             @error('gateway_ip') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
                         <div>
                             <label for="dns_servers" class="mb-1 block text-sm font-medium text-gray-700">DNS servers</label>
                             <input id="dns_servers" name="dns_servers" type="text" maxlength="100"
-                                   value="{{ old('dns_servers', '8.8.8.8,8.8.4.4') }}"
+                                   value="{{ old('dns_servers', config('services.mikrotik.dns_servers')) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
                             @error('dns_servers') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
                         <div>
                             <label for="hotspot_domain" class="mb-1 block text-sm font-medium text-gray-700">Hotspot login domain</label>
                             <input id="hotspot_domain" name="hotspot_domain" type="text" maxlength="100"
-                                   value="{{ old('hotspot_domain', 'hotspot.local') }}"
+                                   value="{{ old('hotspot_domain', config('services.mikrotik.hotspot_domain')) }}"
                                    class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
                             @error('hotspot_domain') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
@@ -217,7 +217,7 @@
                             @foreach (['ether2', 'ether3', 'ether4', 'ether5'] as $port)
                                 <label class="flex items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm text-gray-700">
                                     <input type="checkbox" name="ethernet_ports[]" value="{{ $port }}"
-                                           @checked(in_array($port, old('ethernet_ports', ['ether2', 'ether3']), true))
+                                           @checked(in_array($port, old('ethernet_ports', config('services.mikrotik.client_ports')), true))
                                            class="rounded border-gray-300 text-orange-500 focus:ring-orange-500">
                                     <span class="font-mono">{{ $port }}</span>
                                 </label>

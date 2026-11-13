@@ -19,6 +19,9 @@ class Session extends Model
         'bytes_in', 'bytes_out', 'rate_in', 'rate_out',
         'provisioning_requeues', 'provisioning_alerted_at', 'provisioned_at',
         'expiry_reminder_sent_at', 'renew_token',
+        'pending_revocation',
+        'pending_revocation_status',
+        'pending_device_ban',
     ];
 
     protected $casts = [
@@ -28,6 +31,8 @@ class Session extends Model
         'provisioned_at' => 'datetime',
         'expiry_reminder_sent_at' => 'datetime',
         'provisioning_requeues' => 'integer',
+        'pending_revocation' => 'boolean',
+        'pending_device_ban' => 'boolean',
         'bytes_in' => 'integer',
         'bytes_out' => 'integer',
         'rate_in' => 'integer',

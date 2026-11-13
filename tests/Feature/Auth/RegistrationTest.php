@@ -43,8 +43,8 @@ class RegistrationTest extends TestCase
             'name' => 'Swift Owner',
             'email' => 'owner@swift.test',
             'email_code' => '123456',
-            'password' => 'password',
-            'password_confirmation' => 'password',
+            'password' => 'Pass12345678',
+            'password_confirmation' => 'Pass12345678',
         ]);
 
         $this->assertAuthenticated();
@@ -95,8 +95,8 @@ class RegistrationTest extends TestCase
             'name' => 'Swift Owner',
             'email' => 'owner@swift.test',
             'email_code' => '000000',
-            'password' => 'password',
-            'password_confirmation' => 'password',
+            'password' => 'Pass12345678',
+            'password_confirmation' => 'Pass12345678',
         ]);
 
         $response->assertRedirect('/register')

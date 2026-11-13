@@ -49,11 +49,13 @@
                                     <td class="px-6 py-4 text-sm text-gray-600">{{ $adj->reason }}</td>
                                     <td class="px-6 py-4 text-sm text-gray-500">{{ $adj->expires_at?->format('d M, H:i') }}</td>
                                     <td class="px-6 py-4 text-right">
-                                        <form method="POST" action="{{ route('platform.revenue.adjustments.approve', $adj->id) }}" class="inline">
+                                        <form method="POST" action="{{ route('platform.revenue.adjustments.approve', $adj->id) }}" class="inline"
+                                              data-confirm-action="Approve this {{ $adj->amount < 0 ? 'debit' : 'credit' }} adjustment of UGX {{ number_format(abs($adj->amount)) }} for {{ $adj->tenant->name }}?">
                                             @csrf
                                             <button class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded">Approve</button>
                                         </form>
-                                        <form method="POST" action="{{ route('platform.revenue.adjustments.reject', $adj->id) }}" class="inline ml-1">
+                                        <form method="POST" action="{{ route('platform.revenue.adjustments.reject', $adj->id) }}" class="inline ml-1"
+                                              data-confirm-action="Reject this wallet adjustment request for {{ $adj->tenant->name }}?">
                                             @csrf
                                             <input type="hidden" name="note" value="Rejected by {{ auth()->user()->name }}">
                                             <button class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded">Reject</button>

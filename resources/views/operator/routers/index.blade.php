@@ -128,7 +128,7 @@
                         </svg>
                     </div>
                 </div>
-                <p class="text-[11px] font-medium text-emerald-600 mt-3">{{ $onlineRouters > 0 ? 'Live polling active' : 'No routers online' }}</p>
+                <p class="text-[11px] font-medium text-emerald-600 mt-3">{{ $onlineRouters > 0 ? 'Latest router reports' : 'No recent router reports' }}</p>
             </div>
 
             <!-- Offline -->
@@ -183,7 +183,7 @@
                     <div>
                         <p class="text-xs font-bold text-gray-900">{{ $unreachableRouter->name }} is unreachable</p>
                         <p class="text-xs text-gray-600 mt-0.5">
-                            Last seen {{ $unreachableRouter->last_seen_at ? $unreachableRouter->last_seen_at->format('H:i T') : 'Recently' }} · API and ICMP checks failed. Check power, uplink and VPN tunnel.
+                            Last seen {{ $unreachableRouter->last_seen_at ? $unreachableRouter->last_seen_at->format('H:i T') : 'Recently' }} · API and ICMP checks failed.                             Check power, uplink, VPN tunnel, and the site's agent connection.
                         </p>
                     </div>
                 </div>
@@ -217,7 +217,7 @@
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center" x-text="selected.length"></span>
                 <span class="text-xs font-semibold text-slate-200">
-                    <span x-text="selected.length"></span> router(s) selected for workspace <strong>{{ $tenant->name ?? 'Acme' }}</strong>
+                    <span x-text="selected.length"></span> router(s) selected for workspace                     <strong>{{ $tenant->name }}</strong>
                 </span>
             </div>
 
@@ -535,14 +535,14 @@
                                                         @click="
                                                             testing = true;
                                                             result = null;
-                                                            window.apiFetch('{{ route('operator.routers.test', $router) }}', { method: 'POST' })
+                                                            window.apiFetch('{{ route('operator.routers.test', $router) }}', { method: 'POST', feedback: false })
                                                             .then(data => {
                                                                 result = data;
-                                                                alert((data.ok ? '✅ ' : '❌ ') + data.message);
+                                                                window.toast[data.ok ? 'success' : 'error'](data.message);
                                                             })
                                                             .catch(error => {
                                                                 result = { ok: false, message: error.message || 'Network Error' };
-                                                                alert(error.message || 'Network Error');
+                                                                window.toast.error(error.message || 'Network Error');
                                                             })
                                                             .finally(() => testing = false);
                                                         "
@@ -554,12 +554,11 @@
                                                           :class="result && result.ok ? 'text-emerald-700' : 'text-red-600'"></span>
                                                 </button>
 
-                                                <button type="button" 
-                                                        @click="navigator.clipboard.writeText('/tool fetch mode=https url=\'https://{{ $tenant->slug }}.sopraent.com/provision/demo\''); open = false; alert('Provisioning script copied to clipboard!');" 
-                                                        class="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 text-left">
+                                                <a href="{{ route('operator.routers.provision-script', ['router' => $router->id, 'download' => 1]) }}"
+                                                   class="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 text-left">
                                                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
-                                                    <span>Copy provision script</span>
-                                                </button>
+                                                    <span>Download provisioning script</span>
+                                                </a>
 
                                                 <form method="POST" action="{{ route('operator.routers.reboot', $router) }}" data-confirm-action="Reboot router {{ $router->name }}?">
                                                     @csrf
@@ -588,7 +587,7 @@
                         @empty
                             <tr>
                                 <td colspan="8" class="px-6 py-12 text-center text-gray-400 text-xs">
-                                    No routers found in workspace <strong>{{ $tenant->name ?? 'Acme' }}</strong>. Click "Connect router" to add your first MikroTik device.
+                                    No routers found in workspace <strong>{{ $tenant->name }}</strong>. Click "Connect router" to add your first MikroTik device.
                                 </td>
                             </tr>
                         @endforelse
@@ -608,50 +607,42 @@
 
         </div>
 
-        <!-- Footer Overview Widgets (Configuration & Backup + RADIUS Service) -->
+        <!-- Footer Overview Widgets -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
             
             <!-- Configuration & backup -->
             <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex flex-col justify-between">
                 <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-sm font-bold text-gray-900">Configuration & backup</h3>
-                    <form method="POST" action="{{ route('operator.routers.ping-all') }}">
-                        @csrf
-                        <button type="submit" class="text-xs font-semibold text-blue-600 hover:text-blue-700">Check All Backups</button>
-                    </form>
+                    <h3 class="text-sm font-bold text-gray-900">Provisioning scripts</h3>
+                    <a href="{{ route('operator.routers.create') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700">Connect a router</a>
                 </div>
                 <p class="text-xs text-gray-500 mb-4">
-                    {{ $onlineRouters }} of {{ $totalRouters }} routers backed up today. Offline router retries when connectivity is restored.
+                    Download a router-specific .rsc file from its detail page. The generated script uses that router's saved configuration.
                 </p>
                 <div class="flex items-center gap-2">
                     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">
                         <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                        Scheduled
+                        Router-specific
                     </span>
-                    <span class="text-[11px] text-gray-400">Isolated workspace: {{ $tenant->slug ?? 'acme' }}</span>
+                    <span class="text-[11px] text-gray-400">Workspace: {{ $tenant->slug }}</span>
                 </div>
             </div>
 
-            <!-- RADIUS service -->
+            <!-- Router connectivity -->
             <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex flex-col justify-between">
                 <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-sm font-bold text-gray-900">RADIUS service</h3>
-                    <a href="{{ route('operator.settings.router') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700">Integration settings</a>
+                    <h3 class="text-sm font-bold text-gray-900">Router connectivity</h3>
+                    <a href="{{ route('operator.settings.router') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-700">Router settings</a>
                 </div>
                 <p class="text-xs text-gray-500 mb-4">
-                    12 ms auth latency · 99.98% availability · Auto-sync enabled
+                    {{ $onlineRouters }} of {{ $totalRouters }} routers currently report online status.
                 </p>
                 <div class="flex items-center justify-between">
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Healthy
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold {{ $totalRouters > 0 && $onlineRouters === $totalRouters ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60' }}">
+                        <span class="w-1.5 h-1.5 rounded-full {{ $totalRouters > 0 && $onlineRouters === $totalRouters ? 'bg-emerald-500' : 'bg-amber-500' }}"></span>
+                        {{ $totalRouters === 0 ? 'No routers' : ($onlineRouters === $totalRouters ? 'All reporting' : 'Needs attention') }}
                     </span>
-                    <form method="POST" action="{{ route('operator.settings.router.sync-all') }}">
-                        @csrf
-                        <button type="submit" class="text-xs font-semibold text-blue-600 hover:text-blue-800">
-                            Sync All Routers &rarr;
-                        </button>
-                    </form>
+                    <a href="{{ route('operator.routers.index') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-800">View routers &rarr;</a>
                 </div>
             </div>
 
@@ -690,8 +681,8 @@
                                 📡
                             </div>
                             <div>
-                                <h3 class="text-base font-bold text-gray-900" id="modal-title">MikroTik Router Provisioning Guide</h3>
-                                <p class="text-xs text-gray-500">Dedicated multi-tenant onboarding for workspace: <strong>{{ $tenant->name ?? 'Acme' }}</strong></p>
+                                <h3 class="text-base font-bold text-gray-900" id="modal-title">MikroTik Router Setup Guide</h3>
+                                <p class="text-xs text-gray-500">Setup for workspace: <strong>{{ $tenant->name }}</strong></p>
                             </div>
                         </div>
                         <button type="button" @click="setupGuideOpen = false" class="text-gray-400 hover:text-gray-600 p-1 rounded-lg">
@@ -700,32 +691,25 @@
                     </div>
 
                     <div class="mt-4 space-y-4 text-xs">
-                        <div class="p-3 rounded-xl bg-blue-50/70 border border-blue-200/60 text-blue-800">
-                            <strong>Multi-Tenant Isolation Notice:</strong> Each router connected under your workspace is strictly isolated. Captive portal sessions and RADIUS accounting records are tagged with your workspace ID (<strong>#{{ $tenant->id ?? 1 }}</strong>).
+                        <div>
+                            <h4 class="font-bold text-gray-900 mb-1">Step 1: Add the router</h4>
+                            <p class="text-gray-500 mb-2">Use the router wizard to save its management address, credentials, site, and optional hotspot settings.</p>
+                            <a href="{{ route('operator.routers.create') }}" class="font-semibold text-blue-600 hover:underline">Open router wizard &rarr;</a>
                         </div>
 
                         <div>
-                            <h4 class="font-bold text-gray-900 mb-1">Step 1: Open Terminal or SSH</h4>
-                            <p class="text-gray-500 mb-2">Connect to your MikroTik device using WinBox (Terminal icon) or standard SSH.</p>
+                            <h4 class="font-bold text-gray-900 mb-1">Step 2: Download and import its script</h4>
+                            <p class="text-gray-500">Open the router's detail page, download its generated .rsc file, transfer it to the device with WinBox, and import the reviewed file from RouterOS Terminal.</p>
                         </div>
 
                         <div>
-                            <h4 class="font-bold text-gray-900 mb-1">Step 2: Run Zero-Touch Fetch Command</h4>
-                            <div class="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] overflow-x-auto relative group">
-                                <code>/tool fetch mode=https url="https://{{ $tenant->slug ?? 'acme' }}.sopraent.com/provision/{{ base64_encode($tenant->slug ?? 'acme') }}" dst-path=sopraent_init.rsc; /import sopraent_init.rsc</code>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 class="font-bold text-gray-900 mb-1">Step 3: Verify Automated Connection</h4>
-                            <p class="text-gray-500">Once imported, the router will automatically register, create the hotspot interface, and report its telemetry here.</p>
+                            <h4 class="font-bold text-gray-900 mb-1">Step 3: Verify connectivity</h4>
+                            <p class="text-gray-500">Use the router detail page's connection test or wait for its site agent to report. Script import alone does not confirm that the device is online.</p>
                         </div>
                     </div>
 
                     <div class="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <a href="{{ route('operator.settings.router') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-800">
-                            Configure Router API Settings &rarr;
-                        </a>
+                        <a href="{{ route('operator.settings.router') }}" class="text-xs font-semibold text-blue-600 hover:text-blue-800">Router connection settings &rarr;</a>
                         <button type="button" @click="setupGuideOpen = false" class="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-xs font-semibold">
                             Got It
                         </button>

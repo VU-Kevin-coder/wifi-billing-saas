@@ -5,6 +5,8 @@
 #   hamnet-app        web     nginx + php-fpm (runs migrations on boot)
 #   hamnet-scheduler  worker  `schedule:work` — session expiry, payment and
 #                             withdrawal reconciliation. Must always be running.
+#   /health/ready is the dependency/readiness endpoint; an external monitor
+#   should poll it so scheduler outages can be detected independently.
 #   hamnet-redis      keyvalue sessions, cache, rate limits, scheduler locks
 #   hamnet-db         postgres
 #

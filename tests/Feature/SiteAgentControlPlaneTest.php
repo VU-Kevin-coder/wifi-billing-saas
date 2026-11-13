@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\BlockedDevice;
 use App\Models\Package;
 use App\Models\Router;
 use App\Models\Session;
@@ -12,6 +13,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
+use App\Services\AccessRevoker;
 use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
@@ -84,6 +86,142 @@ class SiteAgentControlPlaneTest extends TestCase
         ])->assertOk()->assertJsonPath('status', 'completed');
 
         $this->assertSame('expired', Session::withoutTenancy()->findOrFail($session->id)->status);
+    }
+
+    public function test_manual_session_disconnect_voids_voucher_and_waits_for_router_confirmation(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, , , $agent, $voucher] = $this->createSiteSetup();
+        $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole(Role::findOrCreate('operator_admin', 'web'));
+        $agent->update(['token_hash' => hash('sha256', 'manual-disconnect-token')]);
+
+        $this->actingAs($operator)
+            ->postJson("http://{$tenant->slug}.localhost/operator/sessions/{$session->id}/disconnect", [
+                'reason' => 'Repeated policy violations',
+            ])
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'pending');
+
+        $this->assertSame('voided', $voucher->fresh()->status);
+        $this->assertSame('disconnecting', $session->fresh()->status);
+        $this->assertTrue($session->fresh()->pending_revocation);
+        $command = SiteAgentCommand::query()->where('operation', 'expire_user')->sole();
+        $this->assertSame('disconnected', $command->payload['session_status']);
+
+        $this->withHeader('Authorization', 'Bearer manual-disconnect-token')
+            ->getJson('/api/site-agent/commands')
+            ->assertOk();
+        $this->withHeader('Authorization', 'Bearer manual-disconnect-token')
+            ->postJson("/api/site-agent/commands/{$command->id}/complete", ['success' => true])
+            ->assertOk()
+            ->assertJsonPath('status', 'completed');
+
+        $this->assertSame('disconnected', $session->fresh()->status);
+        $this->assertFalse($session->fresh()->pending_revocation);
+    }
+
+    public function test_router_confirmed_mac_ban_disconnects_device_without_voiding_voucher(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, , $router, $agent, $voucher] = $this->createSiteSetup();
+        $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole(Role::findOrCreate('operator_network', 'web'));
+        $agent->update(['token_hash' => hash('sha256', 'mac-ban-token')]);
+
+        $this->actingAs($operator)
+            ->postJson("http://{$tenant->slug}.localhost/operator/sessions/{$session->id}/ban-device", [
+                'reason' => 'Repeated policy violations',
+            ])
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'pending');
+
+        $this->assertSame('disconnecting', $session->fresh()->status);
+        $this->assertTrue($session->fresh()->pending_device_ban);
+        $command = SiteAgentCommand::query()->where('operation', 'ban_mac')->sole();
+        $this->assertSame($router->id, $command->router_id);
+
+        $this->withHeader('Authorization', 'Bearer mac-ban-token')
+            ->getJson('/api/site-agent/commands')
+            ->assertOk();
+        $this->withHeader('Authorization', 'Bearer mac-ban-token')
+            ->postJson("/api/site-agent/commands/{$command->id}/complete", [
+                'success' => true,
+                'result' => ['mac_address' => 'AA:BB:CC:DD:EE:FF'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('status', 'completed');
+
+        $blocked = BlockedDevice::query()->sole();
+        $this->assertSame('AA:BB:CC:DD:EE:FF', $blocked->mac_address);
+        $this->assertSame('blocked', $blocked->status);
+        $this->assertSame('disconnected', $session->fresh()->status);
+        $this->assertFalse($session->fresh()->pending_device_ban);
+        $this->assertSame('redeemed', $voucher->fresh()->status);
+    }
+
+    public function test_voucher_revocation_also_queues_during_a_pending_device_ban(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, , , , $voucher] = $this->createSiteSetup();
+        $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+        $session->update([
+            'status' => 'disconnecting',
+            'pending_device_ban' => true,
+        ]);
+
+        app(TenantContext::class)->runAs($tenant, fn () => app(AccessRevoker::class)
+            ->revoke($voucher, 'operator requested full revocation', 'disconnected'));
+
+        $this->assertTrue($session->fresh()->pending_device_ban);
+        $this->assertTrue($session->fresh()->pending_revocation);
+        $this->assertSame('disconnected', SiteAgentCommand::query()
+            ->where('operation', 'expire_user')
+            ->sole()
+            ->payload['session_status']);
+    }
+
+    public function test_pending_revocation_remains_pending_when_site_agent_is_unavailable(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, $site, , $agent, $voucher] = $this->createSiteSetup();
+        $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole(Role::findOrCreate('operator_admin', 'web'));
+        $agent->delete();
+
+        $this->actingAs($operator)
+            ->postJson("http://{$tenant->slug}.localhost/operator/sessions/{$session->id}/disconnect", [
+                'reason' => 'Repeated policy violations',
+            ])
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'pending')
+            ->assertJsonPath('site_agent_online', false);
+
+        $this->assertSame('voided', $voucher->fresh()->status);
+        $this->assertSame('disconnecting', $session->fresh()->status);
+        $this->assertTrue($session->fresh()->pending_revocation);
+        $this->assertDatabaseMissing('site_agent_commands', ['operation' => 'expire_user']);
+
+        SiteAgent::create([
+            'tenant_id' => $tenant->id,
+            'site_id' => $site->id,
+            'name' => 'Replacement Agent',
+            'token_hash' => hash('sha256', 'replacement-token'),
+            'last_seen_at' => now(),
+        ]);
+        $this->artisan('sessions:retry-revocations')->assertSuccessful();
+
+        $command = SiteAgentCommand::query()->where('operation', 'expire_user')->sole();
+        $this->assertSame('pending', $command->status);
+        $this->assertSame('disconnected', $command->payload['session_status']);
+        $this->assertTrue($session->fresh()->pending_revocation);
     }
 
     public function test_production_activation_fails_closed_when_router_is_ambiguous(): void

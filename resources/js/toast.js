@@ -34,13 +34,11 @@ window.uiToast = uiToast;
 function showToast(type, message) {
     if (window.Swal?.fire) {
         return window.Swal.fire({
-            toast: true,
-            position: 'bottom-end',
             icon: type,
-            title: String(message),
-            showConfirmButton: false,
-            timer: type === 'error' ? 6000 : 4000,
-            timerProgressBar: true,
+            title: type === 'success' ? 'Success' : type === 'error' ? 'Something went wrong' : type === 'warning' ? 'Attention' : 'Information',
+            text: String(message),
+            confirmButtonText: 'OK',
+            confirmButtonColor: type === 'error' ? '#dc2626' : '#2563eb',
         });
     }
 

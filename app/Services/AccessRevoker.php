@@ -25,23 +25,39 @@ class AccessRevoker
     /**
      * @param  string  $reason  recorded in the audit log, e.g. "manual" or "refund"
      */
-    public function revoke(Voucher $voucher, string $reason): void
+    public function revoke(Voucher $voucher, string $reason, string $finalSessionStatus = 'expired'): bool
     {
+        if (! in_array($finalSessionStatus, ['expired', 'disconnected'], true)) {
+            throw new \InvalidArgumentException('Unsupported final session status for access revocation.');
+        }
+
         $voucher->update(['status' => 'voided']);
         AuditLog::record('voucher.voided', $voucher, ['reason' => $reason]);
 
         $session = Session::withoutTenancy()
             ->where('tenant_id', $voucher->tenant_id)
             ->where('voucher_id', $voucher->id)
-            ->whereIn('status', ['active', 'provisioning'])
+            ->whereIn('status', ['active', 'provisioning', 'disconnecting'])
             ->latest('id')
             ->first();
 
         if (! $session) {
-            return;
+            return true;
         }
 
-        $queued = false;
+        if ($session->pending_revocation) {
+            return true;
+        }
+
+        $session->update([
+            'status' => 'disconnecting',
+            'pending_revocation' => true,
+            'pending_revocation_status' => $finalSessionStatus,
+        ]);
+        AuditLog::record('session.revocation_requested', $session, [
+            'reason' => $reason,
+            'final_status' => $finalSessionStatus,
+        ]);
 
         try {
             $router = $session->router_id
@@ -50,8 +66,14 @@ class AccessRevoker
             $tenant = Tenant::find($voucher->tenant_id);
 
             if ($router && $tenant) {
-                $this->context->runAs($tenant, fn () => $this->commands->expire($router, $session, $voucher));
-                $queued = true; // the site agent marks the session expired once the router user is removed
+                $this->context->runAs($tenant, fn () => $this->commands->expire(
+                    $router,
+                    $session,
+                    $voucher,
+                    $finalSessionStatus,
+                ));
+
+                return true;
             }
         } catch (Throwable $exception) {
             Log::error('Unable to queue the removal of a revoked voucher from the router.', [
@@ -60,8 +82,6 @@ class AccessRevoker
             ]);
         }
 
-        if (! $queued) {
-            $session->update(['status' => 'expired']); // nothing on a router to remove (or none reachable)
-        }
+        return false;
     }
 }

@@ -53,7 +53,7 @@ class LoginRequest extends FormRequest
 
         if (Auth::user()?->deactivated_at) {
             Auth::logout();
-            RateLimiter::hit($this->throttleKey());
+            $this->hit();
 
             throw ValidationException::withMessages([
                 'email' => 'This account has been deactivated. Contact your administrator.',
@@ -71,14 +71,27 @@ class LoginRequest extends FormRequest
     public function ensureIsNotRateLimited(): void
     {
         $maxAttempts = (int) Policy::get('security.login_throttle_attempts', 6);
+        $maxIpAttempts = (int) Policy::get('security.login_throttle_ip_attempts', 5);
+        $limitedKeys = [];
 
-        if (! RateLimiter::tooManyAttempts($this->throttleKey(), $maxAttempts)) {
+        if (RateLimiter::tooManyAttempts($this->throttleKey(), $maxAttempts)) {
+            $limitedKeys[] = $this->throttleKey();
+        }
+
+        if (RateLimiter::tooManyAttempts($this->ipThrottleKey(), $maxIpAttempts)) {
+            $limitedKeys[] = $this->ipThrottleKey();
+        }
+
+        if ($limitedKeys === []) {
             return;
         }
 
         event(new Lockout($this));
 
-        $seconds = RateLimiter::availableIn($this->throttleKey());
+        $seconds = max(array_map(
+            static fn (string $key): int => RateLimiter::availableIn($key),
+            $limitedKeys,
+        ));
 
         throw ValidationException::withMessages([
             'email' => trans('auth.throttle', [
@@ -96,9 +109,15 @@ class LoginRequest extends FormRequest
         return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
     }
 
+    private function ipThrottleKey(): string
+    {
+        return 'login:ip:'.$this->ip();
+    }
+
     public function hit(): void
     {
         $decaySeconds = (int) Policy::get('security.login_throttle_decay', 1) * 60;
         RateLimiter::hit($this->throttleKey(), $decaySeconds);
+        RateLimiter::hit($this->ipThrottleKey(), $decaySeconds);
     }
 }

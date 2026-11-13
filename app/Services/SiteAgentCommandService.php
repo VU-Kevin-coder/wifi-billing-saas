@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\BlockedDevice;
 use App\Models\Package;
 use App\Models\Router;
 use App\Models\Session;
@@ -12,6 +13,100 @@ use App\Services\Policy\Policy;
 
 class SiteAgentCommandService
 {
+    public function banDevice(Router $router, Session $session, Voucher $voucher, BlockedDevice $blockedDevice): SiteAgentCommand
+    {
+        $agent = $this->agentFor($router);
+        $command = SiteAgentCommand::query()
+            ->where('session_id', $session->id)
+            ->where('operation', 'ban_mac')
+            ->first();
+
+        if ($command && in_array($command->status, ['pending', 'claimed'], true)) {
+            return $command;
+        }
+
+        if (! $command) {
+            $command = new SiteAgentCommand;
+        }
+
+        $command->fill([
+            'site_agent_id' => $agent->id,
+            'tenant_id' => $router->tenant_id,
+            'router_id' => $router->id,
+            'session_id' => $session->id,
+            'operation' => 'ban_mac',
+            'payload' => [
+                'username' => $voucher->code,
+                'blocked_device_id' => $blockedDevice->id,
+                'session_id' => $session->id,
+            ],
+            'status' => 'pending',
+            'attempts' => 0,
+            'claimed_at' => null,
+            'completed_at' => null,
+            'failure_reason' => null,
+        ])->save();
+
+        return $command;
+    }
+
+    public function unbanDevice(BlockedDevice $blockedDevice): SiteAgentCommand
+    {
+        $router = Router::withoutTenancy()
+            ->where('tenant_id', $blockedDevice->tenant_id)
+            ->findOrFail($blockedDevice->router_id);
+        $agent = $this->agentFor($router);
+        $command = SiteAgentCommand::query()
+            ->whereNull('session_id')
+            ->where('operation', 'unban_mac')
+            ->whereIn('status', ['pending', 'claimed'])
+            ->get()
+            ->first(fn (SiteAgentCommand $item): bool => (int) ($item->payload['blocked_device_id'] ?? 0) === $blockedDevice->id);
+
+        if ($command) {
+            return $command;
+        }
+
+        return SiteAgentCommand::create([
+            'site_agent_id' => $agent->id,
+            'tenant_id' => $router->tenant_id,
+            'router_id' => $router->id,
+            'session_id' => null,
+            'operation' => 'unban_mac',
+            'payload' => [
+                'blocked_device_id' => $blockedDevice->id,
+                'mac_address' => $blockedDevice->mac_address,
+            ],
+            'status' => 'pending',
+            'attempts' => 0,
+        ]);
+    }
+
+    public function retryDeviceAction(BlockedDevice $blockedDevice): void
+    {
+        if (in_array($blockedDevice->status, ['pending', 'ban_failed'], true)) {
+            $session = Session::withoutTenancy()
+                ->where('tenant_id', $blockedDevice->tenant_id)
+                ->findOrFail($blockedDevice->session_id);
+            $router = Router::withoutTenancy()
+                ->where('tenant_id', $blockedDevice->tenant_id)
+                ->findOrFail($blockedDevice->router_id);
+            $voucher = Voucher::withoutTenancy()
+                ->where('tenant_id', $blockedDevice->tenant_id)
+                ->findOrFail($session->voucher_id);
+
+            $this->banDevice($router, $session, $voucher, $blockedDevice);
+            $blockedDevice->update(['status' => 'pending', 'last_error' => null]);
+
+            return;
+        }
+
+        if (in_array($blockedDevice->status, ['unban_pending', 'unban_failed'], true)) {
+            $this->unbanDevice($blockedDevice);
+            $blockedDevice->update(['status' => 'unban_pending', 'last_error' => null]);
+        }
+    }
+
     public function provision(Router $router, Session $session, Voucher $voucher): SiteAgentCommand
     {
         $agent = $this->agentFor($router);
@@ -149,8 +244,22 @@ class SiteAgentCommandService
         return $command;
     }
 
-    public function expire(Router $router, Session $session, Voucher $voucher): SiteAgentCommand
-    {
+    public function expire(
+        Router $router,
+        Session $session,
+        Voucher $voucher,
+        string $finalSessionStatus = 'expired',
+    ): SiteAgentCommand {
+        if (! in_array($finalSessionStatus, ['expired', 'disconnected'], true)) {
+            throw new \InvalidArgumentException('Unsupported final session status for an expiry command.');
+        }
+
+        $session->update([
+            'status' => 'disconnecting',
+            'pending_revocation' => true,
+            'pending_revocation_status' => $finalSessionStatus,
+        ]);
+
         $agent = $this->agentFor($router);
         $command = SiteAgentCommand::query()->firstOrNew([
             'session_id' => $session->id,
@@ -158,6 +267,26 @@ class SiteAgentCommandService
         ]);
 
         if ($command->exists && in_array($command->status, ['pending', 'claimed', 'completed'], true)) {
+            if ($command->status === 'completed') {
+                $session->update([
+                    'status' => $finalSessionStatus,
+                    'pending_revocation' => false,
+                    'pending_revocation_status' => null,
+                ]);
+
+                return $command;
+            }
+
+            if ($command->status !== 'completed') {
+                $command->update([
+                    'site_agent_id' => $agent->id,
+                    'payload' => [
+                        'username' => $voucher->code,
+                        'session_status' => $finalSessionStatus,
+                    ],
+                ]);
+            }
+
             return $command;
         }
 
@@ -165,7 +294,10 @@ class SiteAgentCommandService
             'site_agent_id' => $agent->id,
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,
-            'payload' => ['username' => $voucher->code],
+            'payload' => [
+                'username' => $voucher->code,
+                'session_status' => $finalSessionStatus,
+            ],
             'status' => 'pending',
             'attempts' => 0,
             'claimed_at' => null,
