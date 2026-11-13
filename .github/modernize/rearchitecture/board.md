@@ -28,7 +28,7 @@
 - ✅ t8 [teamlead] Quality-gate Phase 1 plan and strategy (19:30:27Z→19:35:52Z, 5m 25s) — 0 HIGH/CRITICAL; traceability inconsistency resolved by t8.1 [deps: t7]
 - ✅ t8.1 [teamlead] Align T005 plan traceability and rerun mapping validation (19:38:02Z→19:41:27Z, 3m 25s) — 0 mapping findings [deps: t7, t8]
 
-### Phase: Phase 1 Decision Gates
+### Phase: Phase 1 Decision Gates 📌 ca02263
 - ✅ t9 [dba] Confirm the supported production database and isolated test target (19:54:37Z→19:55:35Z, 58s) — production engine remains unknown; SQLite in-memory tests only [deps: clarification.md]
 - ✅ t10 [architect] Record the approved adapter and accounting policy decisions (19:57:28Z→19:59:30Z, 2m 2s) — user boundary recorded; DB and retention remain constrained [deps: t9]
 - ✅ t10.1 [dba] Refine disconnect outbox and NAS-session generation schema proposal (20:00:39Z→20:03:34Z, 2m 55s) — ambiguous reused NAS IDs remain pending for reconciliation [deps: t6, t10]
@@ -37,7 +37,7 @@
 
 
 ### Phase: Phase 1 Domain Schema
-- ⏳ t12 [dba] Add the additive router, sale-link, and accounting schemas [deps: t11]
+- ✅ t12 [dba] Add the additive router, sale-link, and accounting schemas (20:09:07Z→20:13:17Z, 4m 10s) — migrations authored, not run; tests used SQLite :memory: [deps: t10.1, t11]
 
 ### Phase: Phase 1 Application Implementation
 - ⏳ t13 [backend] Implement the opt-in access path and payment-safe domain behavior [deps: t12]
@@ -63,6 +63,8 @@
 
 ### Phase: Phase 1 Release Gate
 - ⏳ t21 [teamlead] Apply the binary Phase 1 release gate and stop [deps: t20]
+
+
 
 
 

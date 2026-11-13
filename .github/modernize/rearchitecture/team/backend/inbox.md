@@ -9,3 +9,6 @@ Remediation is required before advancing Phase 1: the security audit reported a 
 
 ## 2026-11-13T19:59:30Z — architect [t10]
 Phase 1 adapter decision recorded: private authenticated Laravel policy API; FreeRADIUS has no database access; keep per-router opt-in and site-agent behavior unchanged. Accounting and disconnect status require idempotent, authoritative evidence.
+
+## 2026-11-13T20:13:17Z — dba [t12]
+t12 added `routers.access_backend` (default `site_agent`), `radius_nas_identifier`, and `radius_shared_secret`. Add the Laravel encrypted cast and serialization protection before any write path; preserve one-time secret delivery and existing agent behavior.

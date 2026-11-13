@@ -18,3 +18,10 @@
 - Debugging dead-ends and what actually worked: `context.md` and `decisions.md` are absent in this workspace; t6/t10, clarification.md, board.md, and DBA learnings supplied the required decision context.
 - Techniques/patterns worth reusing: persist outbox intent before network I/O; lock briefly, lease/retry the same command ID, bind it to a session generation, and require accounting Stop or approved authoritative reconciliation for terminal status. Quarantine events whose generation/order cannot be established.
 - Learnings consumed: [dba/production-engine-evidence-boundary, dba/radius-accounting-schema]
+
+## [t12] Add additive router, sale-link, and accounting schemas
+- Codebase/domain discoveries: `transactions`, `vouchers`, `routers`, and `sessions_log` already form the authoritative business model; composite unique parent keys are needed before tenant-safe composite foreign keys can reference them. PHPUnit runs with forced in-memory SQLite.
+- Wrong assumptions and corrections: repository MySQL defaults do not prove the production engine; only the standard SQLite test run is evidence for this task. No standalone migration or production DB operation was authorized.
+- Debugging dead-ends and what actually worked: `git diff --check` surfaced only pre-existing blank-line issues in `project-profile.yaml` and `board.md`; syntax lint and the full PHP test suite passed after the migrations were added.
+- Techniques/patterns worth reusing: make migration up paths check columns, indexes, and FK names before creation; preserve the site-agent default; guard rollback against populated credentials, sale links, cursors, events, and outbox rows.
+- Learnings consumed: [dba/production-engine-evidence-boundary, dba/radius-accounting-schema]
