@@ -271,7 +271,7 @@
                         <div class="rounded-xl border border-gray-200 p-4">
                             <h3 class="text-sm font-semibold text-gray-900">Your Workspace</h3>
                             <p class="mt-2 text-sm text-gray-700">{{ $tenant->name }}</p>
-                            <p class="mt-1 text-xs text-gray-500">{{ $tenant->slug }}.localhost</p>
+                            <p class="mt-1 text-xs text-gray-500">{{ $tenant->host() }}</p>
                         </div>
                     </div>
 

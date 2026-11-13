@@ -74,7 +74,7 @@
                         </div>
                         <div>
                             <label for="api_port" class="mb-1 block text-sm font-medium text-gray-700">API port</label>
-                            <input id="api_port" name="api_port" type="number" min="1" max="65535" required value="{{ old('api_port', $router->api_port ?: 8728) }}"
+                            <input id="api_port" name="api_port" type="number" min="1" max="65535" required value="{{ old('api_port', $router->api_port ?: config('services.mikrotik.api_port')) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
                         <div>

@@ -30,7 +30,9 @@ class ExpireSessionsTest extends TestCase
 
         $this->artisan('sessions:expire')->assertSuccessful();
 
-        $this->assertSame('expired', Session::withoutTenancy()->findOrFail($session->id)->status);
+        $expired = Session::withoutTenancy()->findOrFail($session->id);
+        $this->assertSame('expired', $expired->status);
+        $this->assertFalse($expired->pending_revocation);
     }
 
     public function test_failed_router_disconnect_keeps_expired_session_pending_for_retry(): void
@@ -47,7 +49,10 @@ class ExpireSessionsTest extends TestCase
 
         $this->artisan('sessions:expire')->assertExitCode(1);
 
-        $this->assertSame('active', Session::withoutTenancy()->findOrFail($session->id)->status);
+        $pending = Session::withoutTenancy()->findOrFail($session->id);
+        $this->assertSame('disconnecting', $pending->status);
+        $this->assertTrue($pending->pending_revocation);
+        $this->assertSame('expired', $pending->pending_revocation_status);
     }
 
     private function createExpiredSession(): array

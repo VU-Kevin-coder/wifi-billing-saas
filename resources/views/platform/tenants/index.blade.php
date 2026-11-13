@@ -393,7 +393,7 @@
                                                             <input type="text" id="tenant_slug" name="slug" x-model="slug" @input="slugManual = true" required placeholder="nile-internet"
                                                                    class="block w-full min-w-0 flex-1 rounded-none rounded-l-lg border-gray-300 text-xs font-mono focus:border-blue-500 focus:ring-blue-500">
                                                             <span class="inline-flex items-center rounded-r-lg border border-l-0 border-gray-300 bg-gray-50 px-3 text-xs text-gray-500 font-mono">
-                                                                .localhost:8000
+                                                                .{{ \App\Models\Tenant::domainSuffix() }}
                                                             </span>
                                                         </div>
                                                         @error('slug')

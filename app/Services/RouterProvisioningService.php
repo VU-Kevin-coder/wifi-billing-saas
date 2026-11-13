@@ -46,10 +46,10 @@ class RouterProvisioningService
         }
         $escapedWifiSsid = $this->escapeRouterOs(mb_strcut($wifiSsid, 0, 32, 'UTF-8'));
 
-        $gatewayIp = (string) ($hotspotConfig['gateway'] ?? '10.10.0.1');
-        $network = (string) ($hotspotConfig['network'] ?? '10.10.0.0/16');
-        $domain = (string) ($hotspotConfig['domain'] ?? 'hotspot.local');
-        $dnsServers = (string) ($hotspotConfig['dns'] ?? '8.8.8.8,8.8.4.4');
+        $gatewayIp = (string) ($hotspotConfig['gateway'] ?? config('services.mikrotik.gateway'));
+        $network = (string) ($hotspotConfig['network'] ?? config('services.mikrotik.hotspot_network'));
+        $domain = (string) ($hotspotConfig['domain'] ?? config('services.mikrotik.hotspot_domain'));
+        $dnsServers = (string) ($hotspotConfig['dns'] ?? config('services.mikrotik.dns_servers'));
         $managementSubnet = $hotspotConfig['management_subnet'] ?? null;
         [$prefix, $poolStart, $poolEnd] = $this->hotspotNetworkDetails($network, $gatewayIp);
         $this->validateDnsServers($dnsServers);
@@ -63,9 +63,9 @@ class RouterProvisioningService
             $managementSubnet = null;
         }
 
-        $ports = $router->ethernet_ports ?? ['ether2', 'ether3'];
+        $ports = $router->ethernet_ports ?? config('services.mikrotik.client_ports');
         if (empty($ports)) {
-            $ports = ['ether2', 'ether3'];
+            $ports = config('services.mikrotik.client_ports');
         }
         foreach ($ports as $port) {
             if (! is_string($port) || ! preg_match('/^(ether|wlan)\d+$/', $port)) {
@@ -73,7 +73,7 @@ class RouterProvisioningService
             }
         }
 
-        $apiUsername = $router->api_username ?: 'billing_api';
+        $apiUsername = $router->api_username ?: config('services.mikrotik.api_username');
 
         // Password handling: NEVER use literal ****** or hardcoded dummy passwords
         $apiPassword = $router->api_password;
@@ -90,7 +90,7 @@ class RouterProvisioningService
         $baseDomain = config('tenancy.base_domain', 'localhost');
         $this->validateHostname((string) $baseDomain, 'Tenant base domain');
         $escapedBaseDomain = $this->escapeRouterOs((string) $baseDomain);
-        $apiPort = (int) ($router->api_port ?: 8728);
+        $apiPort = (int) ($router->api_port ?: config('services.mikrotik.api_port'));
         $apiService = $apiPort === 8729 ? 'api-ssl' : 'api';
         $tenantName = preg_replace('/[\r\n\x00-\x1F]/', ' ', $tenant?->name ?? 'Default');
         $gatewayWithPrefix = "{$gatewayIp}/{$prefix}";
@@ -298,7 +298,7 @@ class RouterProvisioningService
         DynamicMikrotikRouterConfig::set($key, [
             'username' => $router->api_username,
             'password' => $router->api_password,
-            ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: 8728), $router->id),
+            ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: config('services.mikrotik.api_port')), $router->id),
             'timeout' => 8,
         ]);
 

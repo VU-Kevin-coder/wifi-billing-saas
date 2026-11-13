@@ -142,9 +142,13 @@ class VoucherController extends Controller
             return back()->withErrors(['error' => 'Only unused or active vouchers can be voided.']);
         }
 
-        $revoker->revoke($model, 'voided by '.($request->user()?->email ?? 'staff'));
+        $queued = $revoker->revoke($model, 'voided by '.($request->user()?->email ?? 'staff'));
 
-        return back()->with('status', "Voucher {$model->code} was voided.");
+        $response = back()->with('status', "Voucher {$model->code} was voided.");
+
+        return $queued
+            ? $response->with('warning', 'Router revocation is pending until the site agent confirms the user was disabled.')
+            : $response->with('warning', 'Voucher voided, but router revocation could not be queued. The session remains pending; check the site agent and router.');
     }
 
     /**

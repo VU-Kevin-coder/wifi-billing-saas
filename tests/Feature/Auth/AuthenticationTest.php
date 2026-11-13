@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Services\Policy\Policy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules\Password;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -87,6 +89,7 @@ class AuthenticationTest extends TestCase
     {
         Policy::set('security.login_throttle_attempts', 2);
         Policy::set('security.login_throttle_decay', 1);
+        RateLimiter::clear('login:ip:127.0.0.1');
         RateLimiter::clear('user@example.test|127.0.0.1');
 
         User::factory()->create(['email' => 'user@example.test']);
@@ -99,7 +102,40 @@ class AuthenticationTest extends TestCase
             ->assertSessionHasErrors('email');
 
         $this->assertEquals(2, RateLimiter::attempts('user@example.test|127.0.0.1'));
+        $this->assertEquals(2, RateLimiter::attempts('login:ip:127.0.0.1'));
         $this->assertGreaterThan(0, RateLimiter::availableIn('user@example.test|127.0.0.1'));
+    }
+
+    public function test_login_throttle_limits_attempts_per_ip_across_different_emails(): void
+    {
+        Policy::set('security.login_throttle_attempts', 6);
+        Policy::set('security.login_throttle_ip_attempts', 2);
+        Policy::set('security.login_throttle_decay', 1);
+        RateLimiter::clear('login:ip:127.0.0.1');
+
+        $this->post('/login', ['email' => 'first@example.test', 'password' => 'wrong-password'])
+            ->assertSessionHasErrors('email');
+        $this->post('/login', ['email' => 'second@example.test', 'password' => 'wrong-password'])
+            ->assertSessionHasErrors('email');
+        $this->post('/login', ['email' => 'third@example.test', 'password' => 'wrong-password'])
+            ->assertSessionHasErrors('email');
+
+        $this->assertEquals(2, RateLimiter::attempts('login:ip:127.0.0.1'));
+    }
+
+    public function test_password_defaults_require_at_least_twelve_characters(): void
+    {
+        $underMinimum = Validator::make(
+            ['password' => 'Pass1234567'],
+            ['password' => Password::defaults()],
+        );
+        $atMinimum = Validator::make(
+            ['password' => 'Pass12345678'],
+            ['password' => Password::defaults()],
+        );
+
+        $this->assertTrue($underMinimum->fails());
+        $this->assertTrue($atMinimum->passes());
     }
 
     public function test_users_can_logout(): void

@@ -101,10 +101,13 @@ class PesapalPaymentTest extends TestCase
         $response = $this->post(route('portal.direct.purchase', ['tenant' => $this->tenant->slug]), [
             'package_id' => $this->package->id,
             'phone' => '0771234567',
+            'email' => 'buyer@example.test',
             '_idempotency_key' => $this->idempotencyKey(),
         ]);
 
         $response->assertRedirect('https://cybqa.pesapal.com/pesapalv3/checkout?orderTrackingId=trk-12345-67890');
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/Transactions/SubmitOrderRequest')
+            && $request['billing_address']['email_address'] === 'buyer@example.test');
 
         $transaction = Transaction::withoutTenancy()->where('tenant_id', $this->tenant->id)->latest()->firstOrFail();
         $this->assertSame('pending', $transaction->status);
@@ -134,6 +137,30 @@ class PesapalPaymentTest extends TestCase
 
         Http::assertSent(fn ($request) => str_ends_with($request->url(), '/Transactions/SubmitOrderRequest')
             && $request['currency'] === 'KES');
+    }
+
+    public function test_pesapal_uses_configured_sender_address_when_customer_email_is_blank(): void
+    {
+        config(['mail.from.address' => 'billing@example.test']);
+        PlatformSetting::set('pesapal_consumer_key', 'test-key');
+        PlatformSetting::setSecret('pesapal_consumer_secret', 'test-secret');
+
+        Http::fake([
+            'https://cybqa.pesapal.com/pesapalv3/api/Auth/RequestToken' => Http::response(['token' => 'mock-token']),
+            'https://cybqa.pesapal.com/pesapalv3/api/Transactions/SubmitOrderRequest' => Http::response([
+                'order_tracking_id' => 'trk-email-fallback',
+                'redirect_url' => 'https://cybqa.pesapal.com/checkout',
+            ]),
+        ]);
+
+        $this->post(route('portal.direct.purchase', ['tenant' => $this->tenant->slug]), [
+            'package_id' => $this->package->id,
+            'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertRedirect('https://cybqa.pesapal.com/checkout');
+
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/Transactions/SubmitOrderRequest')
+            && $request['billing_address']['email_address'] === 'billing@example.test');
     }
 
     public function test_pesapal_callback_fulfills_payment_on_completed_status(): void
@@ -220,7 +247,15 @@ class PesapalPaymentTest extends TestCase
                 'orderTrackingId' => 'trk-ipn-1',
             ]);
 
+        $this->postJson(route('api.webhooks.pesapal'), [
+            'OrderTrackingId' => 'trk-ipn-1',
+            'OrderMerchantReference' => 'ONL-IPN-1',
+            'OrderNotificationType' => 'IPNCHANGE',
+        ])->assertOk();
+
         $transaction->refresh();
         $this->assertSame('completed', $transaction->status);
+        $this->assertDatabaseCount('vouchers', 1);
+        $this->assertSame(1800.0, (float) $this->tenant->fresh()->wallet_balance);
     }
 }

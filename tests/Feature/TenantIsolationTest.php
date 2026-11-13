@@ -73,6 +73,21 @@ class TenantIsolationTest extends TestCase
         $this->assertEquals($this->acme->id, $customer->tenant_id);
     }
 
+    public function test_tenant_urls_use_the_configured_application_host_and_scheme(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.url' => 'https://billing.example.test:8443',
+            'tenancy.base_domain' => 'wifi.example.test',
+        ]);
+
+        $this->assertSame('acme.wifi.example.test:8443', $this->acme->host());
+        $this->assertSame(
+            'https://acme.wifi.example.test:8443/operator',
+            $this->acme->url('/operator'),
+        );
+    }
+
     public function test_operator_cannot_access_platform_area(): void
     {
         $user = User::factory()->create(['tenant_id' => $this->acme->id]);

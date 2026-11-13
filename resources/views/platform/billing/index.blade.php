@@ -250,7 +250,7 @@
                                     <a href="{{ route('platform.tenants.show', $tenant) }}" class="text-sm font-bold text-blue-600 hover:underline block">
                                         {{ $tenant->name }}
                                     </a>
-                                    <div class="text-[11px] text-gray-400 font-mono">{{ $tenant->slug }}.localhost</div>
+                                    <div class="text-[11px] text-gray-400 font-mono">{{ $tenant->host() }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">

@@ -35,7 +35,7 @@
                     required placeholder="acme"
                     class="flex-1 min-w-0 block w-full border-0 text-sm py-2.5 px-3 outline-none bg-transparent">
                 <span class="inline-flex items-center px-3 bg-gray-50 text-gray-400 text-sm border-l border-gray-300 whitespace-nowrap">
-                    .hamnet.com
+                    .{{ \App\Models\Tenant::domainSuffix() }}
                 </span>
             </div>
             @error('subdomain')

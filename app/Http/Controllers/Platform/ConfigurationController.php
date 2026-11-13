@@ -83,7 +83,7 @@ class ConfigurationController extends Controller
             'smtp_encryption' => PlatformSetting::get('smtp_encryption', 'tls'),
             'smtp_username' => PlatformSetting::get('smtp_username'),
             'smtp_password' => PlatformSetting::get('smtp_password'),
-            'mail_from_address' => PlatformSetting::get('mail_from_address', 'notifications@hamnet.com'),
+            'mail_from_address' => PlatformSetting::get('mail_from_address', config('mail.from.address')),
             'mail_from_name' => PlatformSetting::get('mail_from_name', 'Hamnet Platform'),
             'email_status' => PlatformSetting::get('email_status', 'Not Tested'),
 

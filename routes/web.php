@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Operator\AnalyticsController;
 use App\Http\Controllers\Operator\CustomerController;
 use App\Http\Controllers\Operator\DashboardController as OperatorDashboard;
@@ -36,6 +37,10 @@ use App\Models\Voucher;
 use App\Services\PaymentService;
 use App\Support\HotspotLogin;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/health/ready', [HealthController::class, 'ready'])
+    ->middleware('throttle:30,1')
+    ->name('health.ready');
 
 // ─── Public / Landing Page ──────────────────────────────────
 Route::get('/', function () {
@@ -221,6 +226,10 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                         ->middleware('idempotency')
                         ->name('routers.store');
                     Route::post('/sessions/{session}/disconnect', [LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
+                    Route::post('/sessions/{session}/ban-device', [LiveSessionController::class, 'banDevice'])->name('sessions.ban-device');
+                    Route::post('/blocked-devices/{blockedDevice}/unban', [LiveSessionController::class, 'unbanDevice'])
+                        ->whereNumber('blockedDevice')
+                        ->name('blocked-devices.unban');
                     Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
                 });
 

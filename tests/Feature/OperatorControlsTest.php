@@ -89,7 +89,7 @@ class OperatorControlsTest extends TestCase
         $this->assertSame(0, Session::withoutTenancy()->count());
     }
 
-    public function test_voiding_a_redeemed_voucher_disconnects_the_customer(): void
+    public function test_voiding_a_redeemed_voucher_without_a_router_does_not_claim_disconnection(): void
     {
         $voucher = $this->voucher('unused', 'VOID-002');
         $session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
@@ -99,7 +99,8 @@ class OperatorControlsTest extends TestCase
         $this->actingAs($this->admin)->post(route('operator.vouchers.void', $voucher->id))->assertSessionHasNoErrors();
 
         $this->assertSame('voided', $voucher->fresh()->status);
-        $this->assertSame('expired', $session->fresh()->status, 'nothing on a router to remove, so it is closed straight away');
+        $this->assertSame('disconnecting', $session->fresh()->status);
+        $this->assertTrue($session->fresh()->pending_revocation);
     }
 
     public function test_voiding_a_connected_voucher_asks_the_site_agent_to_remove_the_router_user(): void
@@ -116,6 +117,44 @@ class OperatorControlsTest extends TestCase
 
         $this->assertSame('pending', SiteAgentCommand::query()->where('operation', 'expire_user')->sole()->status);
         $this->assertNotSame('expired', $session->fresh()->status, 'the agent confirms the removal');
+    }
+
+    public function test_expired_session_pending_router_enforcement_is_visible_in_live_sessions(): void
+    {
+        $router = Router::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Session router',
+            'management_ip' => '192.0.2.15',
+        ]);
+        $voucher = $this->voucher('redeemed', 'EXPIRED-PENDING');
+        Session::create([
+            'tenant_id' => $this->tenant->id,
+            'router_id' => $router->id,
+            'voucher_id' => $voucher->id,
+            'package_id' => $this->package->id,
+            'status' => 'disconnecting',
+            'started_at' => now()->subHours(2),
+            'expires_at' => now()->subMinute(),
+            'pending_revocation' => true,
+            'pending_revocation_status' => 'expired',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get('http://acme.localhost/operator/sessions')
+            ->assertOk()
+            ->assertSee('EXPIRED-PENDING')
+            ->assertSee('Expired · awaiting router enforcement');
+    }
+
+    public function test_live_sessions_does_not_invent_network_metrics_for_untracked_vouchers(): void
+    {
+        $this->voucher('redeemed', 'UNTRACKED-VOUCHER');
+
+        $this->actingAs($this->admin)
+            ->get('http://acme.localhost/operator/sessions')
+            ->assertOk();
+
+        $this->assertDatabaseCount('sessions_log', 0);
     }
 
     public function test_a_voided_or_foreign_voucher_cannot_be_voided_again(): void

@@ -21,6 +21,7 @@ class Transaction extends Model
         'reference',
         'provider_reference',
         'payment_token_hash',
+        'purchase_intent_hash',
         'phone',
         'description',
         'meta',

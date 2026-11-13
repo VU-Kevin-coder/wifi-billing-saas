@@ -228,14 +228,27 @@
                         </div>
                         @endif
 
-                        {{-- Generic health notice --}}
-                        <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <div class="p-1.5 bg-gray-100 rounded-full text-gray-500 mt-0.5 shrink-0">
+                        @php
+                            $systemHealth = app(\App\Services\SystemHealthService::class)->current();
+                        @endphp
+                        <div class="flex items-start gap-3 p-3 rounded-lg border {{ $systemHealth['overall'] === 'healthy' ? 'bg-green-50 border-green-100' : 'bg-amber-50 border-amber-200' }}">
+                            <div class="p-1.5 rounded-full mt-0.5 shrink-0 {{ $systemHealth['overall'] === 'healthy' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-700' }}">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
                             </div>
                             <div>
-                                <p class="text-sm font-bold text-gray-900">Platform is Healthy</p>
-                                <p class="text-xs text-gray-500 mt-1">All services operational.</p>
+                                <p class="text-sm font-bold text-gray-900">
+                                    {{ $systemHealth['overall'] === 'healthy' ? 'System dependencies healthy' : ($systemHealth['overall'] === 'unknown' ? 'System health unknown' : 'System health degraded') }}
+                                </p>
+                                <div class="mt-1 space-y-0.5">
+                                    @foreach($systemHealth['checks'] as $name => $check)
+                                        <p class="text-xs {{ $check['status'] === 'healthy' ? 'text-gray-500' : 'text-amber-800' }}">
+                                            {{ ucfirst($name) }}: {{ $check['message'] }}
+                                        </p>
+                                    @endforeach
+                                    <p class="text-[11px] text-gray-400">
+                                        {{ $systemHealth['checked_at'] ? 'Last check '.$systemHealth['checked_at'] : 'Waiting for first scheduled health check' }}
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
@@ -273,7 +286,7 @@
                                     </div>
                                     <div>
                                         <div class="text-sm font-bold text-gray-900">{{ $tenant->name }}</div>
-                                        <div class="text-[11px] text-gray-400 font-mono">{{ $tenant->slug }}.localhost</div>
+                                        <div class="text-[11px] text-gray-400 font-mono">{{ $tenant->host() }}</div>
                                     </div>
                                 </div>
                             </td>

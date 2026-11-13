@@ -43,11 +43,12 @@ class RunSiteAgent extends Command
                 foreach ($commands as $command) {
                     $success = false;
                     $message = null;
-                    $telemetry = null;
+                    $result = null;
+                    $operation = (string) ($command['operation'] ?? '');
                     try {
-                        $telemetry = $routers->execute(
+                        $result = $routers->execute(
                             (int) ($command['router_id'] ?? 0),
-                            (string) ($command['operation'] ?? ''),
+                            $operation,
                             is_array($command['payload'] ?? null) ? $command['payload'] : [],
                         );
                         $success = true;
@@ -60,8 +61,8 @@ class RunSiteAgent extends Command
                         'success' => $success,
                         'message' => $message,
                     ];
-                    if ($telemetry !== null) {
-                        $completion['telemetry'] = $telemetry;
+                    if ($result !== null) {
+                        $completion[$operation === 'telemetry' ? 'telemetry' : 'result'] = $result;
                     }
 
                     $http->post($baseUrl.'/api/site-agent/commands/'.(int) $command['id'].'/complete', $completion)->throw();

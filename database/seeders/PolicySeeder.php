@@ -66,6 +66,7 @@ class PolicySeeder extends Seeder
             'security.step_up_minutes' => [10,   'How long an MFA verification is considered recent'],
             'security.password_reset_ttl' => [60,   'Password reset link validity (minutes)'],
             'security.login_throttle_attempts' => [6,    'Login attempts allowed per minute per IP+email'],
+            'security.login_throttle_ip_attempts' => [5, 'Failed login attempts allowed per minute per IP'],
             'security.login_throttle_decay' => [1,    'Lockout window after failed attempts (minutes)'],
 
             // ── Wallet ──

@@ -15,6 +15,7 @@ use App\Services\VoucherActivationService;
 use App\Support\HotspotLogin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -122,32 +123,84 @@ class PortalController extends Controller
         $package = Package::withoutTenancy()
             ->where('tenant_id', $tenantModel->id)
             ->findOrFail($request->integer('package_id'));
+        $phone = $request->input('phone');
+        $canonicalPhone = $paymentService->normalizePurchasePhone($phone)
+            ?? (string) preg_replace('/\D+/', '', $phone);
+        $purchaseIntentHash = hash('sha256', implode('|', [
+            $tenantModel->id,
+            $package->id,
+            $canonicalPhone,
+        ]));
+        $lock = Cache::lock('portal-purchase-intent:'.$purchaseIntentHash, 15);
+
+        if (! $lock->get()) {
+            return back()->withErrors([
+                'phone' => 'A payment request for this package and number is already being submitted. Please wait.',
+            ]);
+        }
+
         $paymentToken = Str::random(64);
 
-        $transaction = Transaction::create([
-            'tenant_id' => $tenantModel->id,
-            'type' => 'voucher_sale',
-            'amount' => $package->price,
-            'status' => 'pending',
-            'reference' => 'ONL-'.strtoupper(Str::random(8)),
-            'phone' => $request->input('phone'),
-            'payment_token_hash' => hash('sha256', $paymentToken),
-            'description' => "Online Purchase: {$package->name}",
-            'meta' => [
-                'package_id' => $package->id,
-                'phone' => $request->input('phone'),
-                'router_id' => $request->input('router_id'),
-                'router' => $request->input('router'),
-                'ip' => $request->ip(),
-                'mac' => $request->input('mac') ?? $request->header('X-Client-Mac'),
-                'email' => $request->input('email'),
-            ],
-        ]);
+        try {
+            $pendingPurchases = Transaction::withoutGlobalScopes()
+                ->where('tenant_id', $tenantModel->id)
+                ->where('type', 'voucher_sale')
+                ->where('status', 'pending')
+                ->where(function ($query) use ($purchaseIntentHash, $package): void {
+                    $query->where('purchase_intent_hash', $purchaseIntentHash)
+                        ->orWhere(function ($legacyQuery) use ($package): void {
+                            $legacyQuery->whereNull('purchase_intent_hash')
+                                ->where('meta->package_id', $package->id);
+                        });
+                })
+                ->get(['purchase_intent_hash', 'phone', 'meta']);
+
+            $hasMatchingPendingPurchase = $pendingPurchases->contains(function (Transaction $pending) use ($canonicalPhone, $paymentService): bool {
+                if ($pending->purchase_intent_hash !== null) {
+                    return true;
+                }
+
+                $pendingPhone = (string) ($pending->phone ?? $pending->meta['phone'] ?? '');
+                $pendingCanonicalPhone = $paymentService->normalizePurchasePhone($pendingPhone)
+                    ?? (string) preg_replace('/\D+/', '', $pendingPhone);
+
+                return $pendingCanonicalPhone === $canonicalPhone;
+            });
+
+            if ($hasMatchingPendingPurchase) {
+                return back()->withErrors([
+                    'phone' => 'A payment for this package and number is already pending. Complete it or wait for its status to update.',
+                ]);
+            }
+
+            $transaction = Transaction::create([
+                'tenant_id' => $tenantModel->id,
+                'type' => 'voucher_sale',
+                'amount' => $package->price,
+                'status' => 'pending',
+                'reference' => 'ONL-'.strtoupper(Str::random(8)),
+                'phone' => $phone,
+                'purchase_intent_hash' => $purchaseIntentHash,
+                'payment_token_hash' => hash('sha256', $paymentToken),
+                'description' => "Online Purchase: {$package->name}",
+                'meta' => [
+                    'package_id' => $package->id,
+                    'phone' => $phone,
+                    'router_id' => $request->input('router_id'),
+                    'router' => $request->input('router'),
+                    'ip' => $request->ip(),
+                    'mac' => $request->input('mac') ?? $request->header('X-Client-Mac'),
+                    'email' => $request->input('email'),
+                ],
+            ]);
+        } finally {
+            $lock->release();
+        }
 
         $result = $paymentService->initiatePackagePayment(
             $tenantModel,
             $package,
-            $request->input('phone'),
+            $phone,
             $transaction,
             $request->input('email'),
             $this->portalUrl($request, 'success', $tenantModel)

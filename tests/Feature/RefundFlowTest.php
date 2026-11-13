@@ -192,7 +192,7 @@ class RefundFlowTest extends TestCase
 
     // ── Approving ───────────────────────────────────────────────────────────
 
-    public function test_a_full_refund_debits_the_operators_share_reverses_the_fee_and_removes_access(): void
+    public function test_a_full_refund_debits_the_operators_share_and_keeps_revocation_pending_without_router_confirmation(): void
     {
         $sale = $this->sale();
         $voucher = Voucher::withoutTenancy()->findOrFail($sale->meta['voucher_id']);
@@ -220,7 +220,9 @@ class RefundFlowTest extends TestCase
         $this->assertSame($entry->id, $refund->wallet_ledger_entry_id);
 
         $this->assertSame('voided', $voucher->fresh()->status);
-        $this->assertSame('expired', Session::withoutTenancy()->where('voucher_id', $voucher->id)->latest('id')->first()->status);
+        $session = Session::withoutTenancy()->where('voucher_id', $voucher->id)->latest('id')->firstOrFail();
+        $this->assertSame('disconnecting', $session->status);
+        $this->assertTrue($session->pending_revocation);
         $this->assertSame(1, AuditLog::where('action', 'refund.approved')->count());
         $this->artisan('wallet:reconcile')->assertSuccessful();
     }

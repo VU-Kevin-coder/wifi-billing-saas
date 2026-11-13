@@ -110,7 +110,8 @@ class MobileMoneyPaymentFlowTest extends TestCase
                 'status' => 'SUCCESSFUL',
             ]);
         });
-        [$tenant, $package] = $this->createPendingPayment();
+        [$tenant, $package, $unusedTransaction] = $this->createPendingPayment();
+        $unusedTransaction->delete();
 
         $response = $this->post('/portal/'.$tenant->slug.'/purchase', [
             'package_id' => $package->id,
@@ -256,7 +257,8 @@ class MobileMoneyPaymentFlowTest extends TestCase
             self::MTN_URL.'/collection/token/' => Http::response(['access_token' => 'mtn-access-token']),
             self::MTN_URL.'/collection/v1_0/requesttopay' => Http::response([], 202),
         ]);
-        [$tenant, $package] = $this->createPendingPayment();
+        [$tenant, $package, $unusedTransaction] = $this->createPendingPayment();
+        $unusedTransaction->delete();
 
         $this->post('http://'.$tenant->slug.'.localhost/portal/purchase', [
             'package_id' => $package->id,
@@ -311,6 +313,12 @@ class MobileMoneyPaymentFlowTest extends TestCase
         $this->assertSame('completed', $transaction->fresh()->status);
         $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
         $this->assertDatabaseCount('vouchers', 1);
+
+        $this->postJson('/api/webhooks/mtn', ['referenceId' => $transaction->provider_reference])
+            ->assertOk()
+            ->assertJson(['status' => 'ignored']);
+        $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
+        $this->assertDatabaseCount('vouchers', 1);
     }
 
     public function test_mtn_webhook_status_is_not_trusted_without_a_successful_provider_check(): void
@@ -336,6 +344,42 @@ class MobileMoneyPaymentFlowTest extends TestCase
 
         $this->assertSame('pending', $transaction->fresh()->status);
         $this->assertDatabaseCount('vouchers', 0);
+    }
+
+    public function test_pending_portal_payment_is_deduplicated_and_retry_is_allowed_after_failure(): void
+    {
+        Http::fake([
+            self::MTN_URL.'/collection/token/' => Http::response(['access_token' => 'mtn-access-token']),
+            self::MTN_URL.'/collection/v1_0/requesttopay' => Http::response([], 202),
+        ]);
+        [$tenant, $package, $unusedTransaction] = $this->createPendingPayment();
+        $unusedTransaction->delete();
+
+        $this->post("/portal/{$tenant->slug}/purchase", [
+            'package_id' => $package->id,
+            'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertRedirect();
+
+        $this->post("/portal/{$tenant->slug}/purchase", [
+            'package_id' => $package->id,
+            'phone' => '256771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertSessionHasErrors('phone');
+
+        $this->assertSame(1, Transaction::withoutTenancy()->where('tenant_id', $tenant->id)->count());
+        $pending = Transaction::withoutTenancy()->where('tenant_id', $tenant->id)->firstOrFail();
+        $this->assertSame('pending', $pending->status);
+
+        $pending->update(['status' => 'failed']);
+
+        $this->post("/portal/{$tenant->slug}/purchase", [
+            'package_id' => $package->id,
+            'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertRedirect();
+
+        $this->assertSame(2, Transaction::withoutTenancy()->where('tenant_id', $tenant->id)->count());
     }
 
     public function test_mtn_collection_with_a_mismatched_verified_amount_is_not_fulfilled(): void
