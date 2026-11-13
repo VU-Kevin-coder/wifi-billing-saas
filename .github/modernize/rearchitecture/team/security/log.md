@@ -18,3 +18,10 @@
 - Debugging dead-ends and what actually worked: The specialized security-review agent could not start due to a routing network error; completing the focused direct review and running the payment tests provided evidence without changing source. PHPUnit's root configuration pins SQLite in-memory.
 - Techniques/patterns worth reusing: For payment verification, trace provider callback/status identity through the same local order, tenant/package price, currency, and the locked fulfillment path; distinguish provider-schema uncertainty from an exploitable mismatch bypass.
 - Learnings consumed: []
+
+## [t11] Approve secret-isolation and least-privilege boundary
+- Codebase/domain discoveries: The approved adapter boundary keeps Laravel authoritative and FreeRADIUS database-less; separate the per-router RADIUS secret from the dedicated service credential and never disclose `APP_KEY`.
+- Wrong assumptions and corrections: A protected channel plus an opaque service bearer alone does not provide the request-level integrity and replay guarantees required by the accepted API design; bind method, canonical path, body digest, timestamp, and unique nonce.
+- Debugging dead-ends and what actually worked: No implementation was present to audit in this decision task; reviewed t10/t10.1 plus clarification and prior security evidence directly, with no tests or database operations.
+- Techniques/patterns worth reusing: Approve boundary decisions conditionally on explicit testable controls; distinguish architecture approval from implementation/release approval and keep production, router, and Phase 2 permissions separate.
+- Learnings consumed: []

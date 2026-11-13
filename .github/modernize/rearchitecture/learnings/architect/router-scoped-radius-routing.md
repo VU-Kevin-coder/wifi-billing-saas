@@ -8,5 +8,8 @@ In wifi-billing-saas task t1, source inspection found that `SITE_AGENT_REQUIRED`
 ## Takeaway
 Use an explicit router-scoped backend selector with a safe legacy default. For RADIUS, derive tenant identity from authenticated NAS/router identity before looking up a voucher, and keep RADIUS activation/accounting state distinct from provider payment completion. Never silently fall back between access backends.
 
+For the service boundary, separately authenticate the FreeRADIUS service and resolve the router from its verified NAS identifier; do not accept a tenant claim from `User-Name` or accounting attributes, grant database access to FreeRADIUS, or reuse `APP_KEY`. Make accounting events normalized and idempotent, scope reused NAS session IDs by generation, and do not mark activation/disconnect complete without authoritative accounting evidence. Verify the platform retention rule before adding event cleanup.
+
 ## History
 - 2026-11-13 (wifi-billing-saas/t1): initial
+- 2026-11-13 (wifi-billing-saas/t10): added private policy API identity separation and accounting/reconciliation policy
