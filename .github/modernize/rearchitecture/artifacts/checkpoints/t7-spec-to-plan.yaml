@@ -1,0 +1,118 @@
+# Spec-to-Plan Traceability Checkpoint — t7
+metadata:
+  generated: "2026-11-13"
+  source_spec: ".github/modernize/rearchitecture/artifacts/t3-pm.md"
+  target_plan: ".github/modernize/rearchitecture/artifacts/t7-teamlead-plan.md"
+
+summary:
+  total_requirements: 12
+  covered_requirements: 12
+  missing_requirements: 0
+  coverage_percentage: 100.0
+
+requirements:
+  - req_id: "REQ-001"
+    req_description: "Existing API compatibility"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage B / Stage C / Stage D"
+      phase_name: "Compatibility, payment, and release validation"
+      items: [{item_id: "2.1", description: "Preserve legacy activation and public contracts"}, {item_id: "3.2", description: "Characterize provider/token/status contracts"}, {item_id: "4.1", description: "Run complete regression evidence"}]
+    notes: "No existing route or response schema is to be repurposed."
+  - req_id: "REQ-002"
+    req_description: "Agent compatibility"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage A / Stage B"
+      phase_name: "Router data and legacy-compatible access"
+      items: [{item_id: "1.2", description: "Default router mode to site_agent"}, {item_id: "2.1", description: "Keep current command/acknowledgment flow"}]
+    notes: ""
+  - req_id: "REQ-003"
+    req_description: "Truthful agent-backed state"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage B"
+      phase_name: "Legacy-compatible access"
+      items: [{item_id: "2.1", description: "Pending until existing agent confirms"}]
+    notes: ""
+  - req_id: "REQ-004"
+    req_description: "Tenant isolation"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage A / Stage B / Stage C"
+      phase_name: "Schema, access, accounting, and fulfillment"
+      items: [{item_id: "1.1", description: "Confirm supported DB and adapter boundary"}, {item_id: "1.2", description: "Router identity"}, {item_id: "1.3", description: "Typed sale link"}, {item_id: "1.4", description: "Accounting constraints"}, {item_id: "2.1", description: "Router dispatch"}, {item_id: "2.2", description: "Accounting reconciliation"}, {item_id: "3.1", description: "Atomic typed fulfillment"}]
+    notes: ""
+  - req_id: "REQ-005"
+    req_description: "Unchanged commercial offer"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage B / Stage C"
+      phase_name: "Legacy-compatible access and payment tests"
+      items: [{item_id: "2.1", description: "Enforce existing package terms"}, {item_id: "3.2", description: "Regression tests for existing offer terms"}]
+    notes: ""
+  - req_id: "REQ-006"
+    req_description: "Payment confirmation before entitlement"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage C"
+      phase_name: "Verified payment fulfillment"
+      items: [{item_id: "3.1", description: "Reuse verified transaction-locked fulfillment"}, {item_id: "3.2", description: "Provider mismatch and success characterization"}]
+    notes: ""
+  - req_id: "REQ-007"
+    req_description: "Safe payment uncertainty"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage C"
+      phase_name: "Verified payment fulfillment"
+      items: [{item_id: "3.2", description: "Assert pending/failed on uncertainty"}]
+    notes: ""
+  - req_id: "REQ-008"
+    req_description: "Single fulfillment"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage A / Stage B / Stage C"
+      phase_name: "Typed linkage, accounting replay, and payment replay"
+      items: [{item_id: "1.3", description: "Unique sale-to-voucher link"}, {item_id: "1.4", description: "Unique accounting event fingerprint"}, {item_id: "2.2", description: "Replay-safe accounting"}, {item_id: "3.1", description: "Atomic idempotent fulfillment"}]
+    notes: ""
+  - req_id: "REQ-009"
+    req_description: "Payment-token confidentiality"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage C / Stage D"
+      phase_name: "Payment contract and browser validation"
+      items: [{item_id: "3.2", description: "Header-only token characterization"}, {item_id: "4.1", description: "Portal browser tests"}]
+    notes: ""
+  - req_id: "REQ-010"
+    req_description: "Truthful customer status and package enforcement"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage A / Stage B / Stage C"
+      phase_name: "Accounting, access, and payment"
+      items: [{item_id: "1.4", description: "Persist normalized accounting evidence"}, {item_id: "2.1", description: "Pending until selected path confirms"}, {item_id: "2.2", description: "Reconcile validated accounting"}, {item_id: "3.1", description: "Distinguish payment from access"}]
+    notes: ""
+  - req_id: "REQ-011"
+    req_description: "No bypass or premature cutover"
+    priority: "P1"
+    plan_mapping:
+      phase: "All stages / Stage D"
+      phase_name: "Scope constraints and stop gate"
+      items: [{item_id: "1.1", description: "Confirm decisions without infrastructure changes"}, {item_id: "1.2", description: "Preserve site_agent default"}, {item_id: "2.1", description: "No fallback or global bypass"}, {item_id: "4.2", description: "Stop after Phase 1 gate"}]
+    notes: ""
+  - req_id: "REQ-012"
+    req_description: "Regression gate"
+    priority: "P1"
+    plan_mapping:
+      phase: "Stage C / Stage D"
+      phase_name: "Test characterization and release gate"
+      items: [{item_id: "3.2", description: "Focused contract tests"}, {item_id: "4.1", description: "Full test/build/migration/browser evidence"}, {item_id: "4.2", description: "Binary gate"}]
+    notes: ""
+
+missing_requirements: []
+orphan_plan_items: []
+
+validation:
+  passed: null
+  errors: []
+  warnings:
+    - "Mechanical traceability is populated; independent quality-gate review is assigned to t8."
