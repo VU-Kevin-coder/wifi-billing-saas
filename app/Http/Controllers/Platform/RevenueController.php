@@ -13,10 +13,13 @@ use App\Notifications\WithdrawalRejected;
 use App\Services\FlutterwaveWithdrawalService;
 use App\Services\Policy\AdjustmentService;
 use App\Services\WalletService;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use JsonException;
 use Throwable;
 
 class RevenueController extends Controller
@@ -49,9 +52,37 @@ class RevenueController extends Controller
         ], 'amount')
             ->orderBy('wallet_balance', 'desc')
             ->get();
+        $pendingWithdrawalsByTenant = Transaction::withoutTenancy()
+            ->where('type', 'withdrawal')
+            ->where('status', 'pending')
+            ->latest()
+            ->get()
+            ->each(function (Transaction $transaction): void {
+                if (($transaction->meta['payout_method'] ?? null) !== 'bank_transfer') {
+                    return;
+                }
+
+                try {
+                    $details = json_decode(
+                        Crypt::decryptString($transaction->meta['bank_details_encrypted'] ?? ''),
+                        true,
+                        512,
+                        JSON_THROW_ON_ERROR,
+                    );
+                    $transaction->setAttribute('bank_details', $details);
+                } catch (DecryptException|JsonException $exception) {
+                    Log::error('Unable to decrypt bank payout details for a pending withdrawal.', [
+                        'transaction_id' => $transaction->id,
+                        'exception' => $exception::class,
+                    ]);
+                    $transaction->setAttribute('bank_details', null);
+                }
+            })
+            ->groupBy('tenant_id');
 
         return view('platform.revenue.index', compact(
-            'totalCommissions', 'subscriptionRevenue', 'platformPayouts', 'operators', 'currency'
+            'totalCommissions', 'subscriptionRevenue', 'platformPayouts', 'operators', 'currency',
+            'pendingWithdrawalsByTenant',
         ));
     }
 
@@ -66,10 +97,15 @@ class RevenueController extends Controller
             ->findOrFail($id);
     }
 
-    public function approveWithdrawal(int|string $transaction, FlutterwaveWithdrawalService $withdrawals)
+    public function approveWithdrawal(Request $request, int|string $transaction, FlutterwaveWithdrawalService $withdrawals)
     {
         $transaction = $this->findWithdrawal($transaction);
-        $result = $withdrawals->approve($transaction);
+        $manualBankTransfer = ($transaction->meta['payout_method'] ?? null) === 'bank_transfer';
+        $validated = $request->validate([
+            'payout_reference' => [$manualBankTransfer ? 'required' : 'nullable', 'string', 'min:3', 'max:100'],
+        ]);
+        $result = $withdrawals->approve($transaction, $validated['payout_reference'] ?? null);
+        $transaction->refresh();
         AuditLog::record(
             $result['ok'] ? 'withdrawal.approved' : 'withdrawal.approval_failed',
             $transaction,

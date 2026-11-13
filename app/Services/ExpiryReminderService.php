@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Session;
 use App\Models\SmsMessage;
 use App\Models\Tenant;
@@ -30,6 +31,9 @@ class ExpiryReminderService
     public function run(): array
     {
         $counts = ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'capped' => 0];
+        if (! PlatformSetting::get('sms.expiry_reminder', false)) {
+            return $counts;
+        }
 
         Tenant::query()->orderBy('id')->each(function (Tenant $tenant) use (&$counts): void {
             $settings = $tenant->settings ?? [];

@@ -32,7 +32,12 @@
                         <tbody class="divide-y divide-gray-100">
                             @forelse ($pending as $refund)
                                 <tr>
-                                    <td class="px-4 py-3">{{ $refund->tenant?->name }}<br><span class="text-xs text-gray-500">by {{ $refund->requester?->name ?? 'unknown' }}</span></td>
+                                    @php $decisionDueAt = $refund->created_at->copy()->addHours($decisionSlaHours); @endphp
+                                    <td class="px-4 py-3">{{ $refund->tenant?->name }}<br><span class="text-xs text-gray-500">by {{ $refund->requester?->name ?? 'unknown' }}</span><br>
+                                        <span class="text-xs {{ $decisionDueAt->isPast() ? 'font-semibold text-red-600' : 'text-gray-500' }}">
+                                            {{ $decisionDueAt->isPast() ? 'Overdue since ' : 'Decision due ' }}{{ $decisionDueAt->format('d M Y H:i') }}
+                                        </span>
+                                    </td>
                                     <td class="px-4 py-3 font-mono text-xs">{{ $refund->transaction?->reference }}<br><span class="text-gray-500">{{ $refund->transaction?->phone }}</span></td>
                                     <td class="px-4 py-3">{{ $currency }} {{ number_format($refund->amount, 0) }}<br><span class="text-xs text-gray-500">of {{ number_format($refund->transaction?->amount ?? 0, 0) }}{{ $refund->revoke_access ? ', remove access' : '' }}</span></td>
                                     <td class="px-4 py-3">{{ $refund->reason }}</td>

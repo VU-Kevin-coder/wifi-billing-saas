@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
@@ -98,8 +99,22 @@ class RouterController extends Controller
         $nextNumber = Router::where('tenant_id', $tenantId)->count() + 1;
         $defaultName = "MikroTik-{$nextNumber}";
         $sites = Site::where('tenant_id', $tenantId)->orderBy('name')->get(['id', 'name']);
+        $wanInterface = (string) PlatformSetting::get('hotspot.wan_interface', 'ether1');
+        $defaultClientPorts = array_values(array_filter(
+            (array) config('services.mikrotik.client_ports', ['ether2', 'ether3', 'ether4', 'ether5']),
+            fn (string $port): bool => $port !== $wanInterface,
+        ));
+        $hotspotDefaults = [
+            'network' => PlatformSetting::get('hotspot.default_network', config('services.mikrotik.hotspot_network')),
+            'gateway' => config('services.mikrotik.gateway'),
+            'dns' => implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
+            'domain' => config('services.mikrotik.hotspot_domain'),
+        ];
+        $apiPort = PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port');
 
-        return view('operator.routers.create', compact('tenant', 'defaultName', 'sites'));
+        return view('operator.routers.create', compact(
+            'tenant', 'defaultName', 'sites', 'wanInterface', 'defaultClientPorts', 'hotspotDefaults', 'apiPort',
+        ));
     }
 
     /**
@@ -108,7 +123,14 @@ class RouterController extends Controller
     public function store(Request $request, TenantContext $context)
     {
         $tenantId = $context->getTenantId();
-        abort_unless($context->getTenant(), 404, 'Tenant not found');
+        $tenant = $context->getTenant();
+        abort_unless($tenant, 404, 'Tenant not found');
+        $wanInterface = (string) PlatformSetting::get('hotspot.wan_interface', 'ether1');
+        $planLimit = $tenant->plan()->value('max_routers');
+        $maxRouters = max(1, (int) ($planLimit ?? PlatformSetting::get('tenant.max_routers', 5)));
+        if (Router::where('tenant_id', $tenantId)->count() >= $maxRouters) {
+            return back()->withErrors(['name' => "This workspace has reached its router limit of {$maxRouters}."]);
+        }
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -152,6 +174,7 @@ class RouterController extends Controller
                 'not_regex:/[\r\n\x00]/',
             ],
             'ethernet_ports' => ['nullable', 'array'],
+            'ethernet_ports.*' => ['string', Rule::in(['ether2', 'ether3', 'ether4', 'ether5']), Rule::notIn([$wanInterface])],
             'enable_hotspot' => ['nullable', 'boolean'],
             'hotspot_network' => [
                 'nullable',
@@ -226,12 +249,16 @@ class RouterController extends Controller
 
         $apiPassword = ! empty($validated['api_password'])
             ? $validated['api_password']
-            : Str::password(16);
+            : Str::password(max(16, (int) PlatformSetting::get('router.password_length', 24)));
 
         $apiUsername = ! empty($validated['api_username'])
             ? $validated['api_username']
             : config('services.mikrotik.api_username');
 
+        $defaultClientPorts = array_values(array_filter(
+            (array) config('services.mikrotik.client_ports', ['ether2', 'ether3', 'ether4', 'ether5']),
+            fn (string $port): bool => $port !== $wanInterface,
+        ));
         $router = Router::create([
             'tenant_id' => $tenantId,
             'site_id' => $site?->id,
@@ -247,17 +274,20 @@ class RouterController extends Controller
             'last_seen_at' => null,
             'api_username' => $apiUsername,
             'api_password' => $apiPassword,
-            'api_port' => $validated['api_port'] ?? config('services.mikrotik.api_port'),
+            'api_port' => $validated['api_port'] ?? (
+                PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port')
+            ),
             'has_wireless' => $hasWireless,
             'enable_hotspot' => $request->boolean('enable_hotspot', true),
             'hotspot_config' => [
-                'network' => $validated['hotspot_network'] ?? config('services.mikrotik.hotspot_network'),
+                'network' => $validated['hotspot_network'] ?? PlatformSetting::get('hotspot.default_network', config('services.mikrotik.hotspot_network')),
                 'gateway' => $validated['gateway_ip'] ?? config('services.mikrotik.gateway'),
-                'dns' => $validated['dns_servers'] ?? config('services.mikrotik.dns_servers'),
+                'dns' => $validated['dns_servers'] ?? implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
                 'domain' => $validated['hotspot_domain'] ?? config('services.mikrotik.hotspot_domain'),
                 'management_subnet' => $validated['management_subnet'] ?? null,
+                'wan_interface' => $wanInterface,
             ],
-            'ethernet_ports' => $request->input('ethernet_ports', config('services.mikrotik.client_ports')),
+            'ethernet_ports' => $request->input('ethernet_ports', $defaultClientPorts),
         ]);
 
         AuditLog::record('router.created', $router, ['name' => $router->name, 'site_id' => $router->site_id]);
@@ -282,6 +312,7 @@ class RouterController extends Controller
         $tenantId = $context->getTenantId();
         abort_unless($tenantId, 404, 'Tenant not found');
         $router = $this->resolveTenantRouter($args, $context);
+        $wanInterface = (string) PlatformSetting::get('hotspot.wan_interface', 'ether1');
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -379,7 +410,7 @@ class RouterController extends Controller
             ],
             'hotspot_domain' => ['nullable', 'string', 'max:100', 'regex:/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/'],
             'ethernet_ports' => ['nullable', 'array'],
-            'ethernet_ports.*' => ['string', Rule::in(['ether2', 'ether3', 'ether4', 'ether5'])],
+            'ethernet_ports.*' => ['string', Rule::in(['ether2', 'ether3', 'ether4', 'ether5']), Rule::notIn([$wanInterface])],
         ]);
 
         $site = isset($validated['site_id'])

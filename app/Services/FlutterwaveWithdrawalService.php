@@ -7,17 +7,20 @@ use App\Models\PlatformSetting;
 use App\Models\Transaction;
 use App\Services\Policy\Policy;
 use Carbon\Carbon;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
+use JsonException;
 use Throwable;
 
 class FlutterwaveWithdrawalService
 {
     public function __construct(private readonly FlutterwaveService $flutterwave) {}
 
-    public function approve(Transaction $transaction): array
+    public function approve(Transaction $transaction, ?string $manualPayoutReference = null): array
     {
-        $claim = DB::transaction(function () use ($transaction): array {
+        $claim = DB::transaction(function () use ($transaction, $manualPayoutReference): array {
             $locked = Transaction::withoutTenancy()
                 ->where('tenant_id', $transaction->tenant_id)
                 ->lockForUpdate()
@@ -26,7 +29,67 @@ class FlutterwaveWithdrawalService
                 return ['transaction' => null, 'message' => 'This withdrawal is no longer pending.'];
             }
 
+            if (PlatformSetting::get('payouts.paused', false)) {
+                return ['transaction' => null, 'message' => 'Payouts are suspended by the platform.'];
+            }
+
             $meta = $locked->meta ?? [];
+            $method = $meta['payout_method'] ?? (
+                FlutterwaveService::networkForUgandanPhone((string) $locked->phone) === 'AIRTEL'
+                    ? 'airtel_money'
+                    : 'mtn_momo'
+            );
+            $allowedMethods = (array) PlatformSetting::get(
+                'wallet.payout_method',
+                ['mtn_momo', 'airtel_money', 'bank_transfer'],
+            );
+            if (! in_array($method, $allowedMethods, true)) {
+                return ['transaction' => null, 'message' => 'This payout method is no longer enabled by the platform.'];
+            }
+
+            if ($method === 'bank_transfer') {
+                if (blank($manualPayoutReference)) {
+                    return ['transaction' => null, 'message' => 'Record the completed bank transfer reference before approving.'];
+                }
+                if (blank($meta['bank_details_encrypted'] ?? null)) {
+                    return ['transaction' => null, 'message' => 'Bank account details are missing; this withdrawal needs manual review.'];
+                }
+                try {
+                    $bankDetails = json_decode(Crypt::decryptString($meta['bank_details_encrypted']), true, 512, JSON_THROW_ON_ERROR);
+                } catch (DecryptException|JsonException $exception) {
+                    Log::error('Unable to verify encrypted bank payout details before approval.', [
+                        'transaction_id' => $locked->id,
+                        'exception' => $exception::class,
+                    ]);
+
+                    return ['transaction' => null, 'message' => 'Bank account details could not be verified; this withdrawal needs manual review.'];
+                }
+                if (! is_array($bankDetails)
+                    || blank($bankDetails['bank_name'] ?? null)
+                    || blank($bankDetails['account_name'] ?? null)
+                    || blank($bankDetails['account_number'] ?? null)) {
+                    return ['transaction' => null, 'message' => 'Bank account details are incomplete; this withdrawal needs manual review.'];
+                }
+
+                $locked->update([
+                    'status' => 'completed',
+                    'meta' => array_merge($meta, [
+                        'manual_payout_reference' => trim($manualPayoutReference),
+                        'manual_payout_completed_at' => now()->toIso8601String(),
+                        'flutterwave_transfer_submission' => 'manual',
+                    ]),
+                ]);
+
+                return [
+                    'transaction' => null,
+                    'message' => 'Manual bank transfer recorded and withdrawal approved.',
+                    'ok' => true,
+                ];
+            }
+
+            if (! in_array($method, ['mtn_momo', 'airtel_money'], true)) {
+                return ['transaction' => null, 'message' => 'This payout method is not supported.'];
+            }
             if (! empty($meta['flutterwave_transfer_id'])) {
                 return ['transaction' => null, 'message' => 'This withdrawal has already been submitted to Flutterwave.'];
             }
@@ -67,12 +130,12 @@ class FlutterwaveWithdrawalService
                 ]),
             ]);
 
-            return ['transaction' => $locked->fresh(), 'message' => null, 'phone' => $phone];
+            return ['transaction' => $locked->fresh(), 'message' => null, 'phone' => $phone, 'method' => $method];
         });
 
         if (! $claim['transaction']) {
             return [
-                'ok' => $claim['message'] === 'Withdrawal approved in payment simulation mode.',
+                'ok' => $claim['ok'] ?? $claim['message'] === 'Withdrawal approved in payment simulation mode.',
                 'message' => $claim['message'],
                 'submitted' => false,
             ];
@@ -82,9 +145,8 @@ class FlutterwaveWithdrawalService
         $transaction = $claim['transaction'];
 
         try {
-            $network = FlutterwaveService::networkForUgandanPhone($claim['phone']);
             $response = $this->flutterwave->createTransfer([
-                'account_bank' => $network === 'AIRTEL' ? 'Airtel' : 'MTN',
+                'account_bank' => $claim['method'] === 'airtel_money' ? 'Airtel' : 'MTN',
                 'account_number' => $claim['phone'],
                 'beneficiary_name' => $transaction->tenant?->contact_name
                     ?: $transaction->tenant?->name

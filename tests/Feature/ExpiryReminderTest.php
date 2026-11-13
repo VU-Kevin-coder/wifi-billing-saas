@@ -35,6 +35,7 @@ class ExpiryReminderTest extends TestCase
         PlatformSetting::set('sms_username', 'sandbox');
         PlatformSetting::set('sms_api_key', 'test-sms-key');
         PlatformSetting::set('sms_environment', 'sandbox');
+        PlatformSetting::set('sms.expiry_reminder', true);
         $this->gatewayAccepts();
 
         $this->tenant = $this->makeTenant('acme');

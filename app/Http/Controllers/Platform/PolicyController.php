@@ -7,31 +7,104 @@ use App\Models\AuditLog;
 use App\Models\PolicySetting;
 use App\Services\Policy\Policy;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class PolicyController extends Controller
 {
     public function index()
     {
-        $lifecyclePolicies = PolicySetting::where('category', 'lifecycle')
-            ->orderBy('key')
-            ->get()
-            ->groupBy(fn ($p) => explode('.', $p->key)[1]);
+        $catalog = config('platform_control_settings');
+        $policies = PolicySetting::query()->orderBy('key')->get();
+        $history = AuditLog::query()
+            ->with('user:id,name')
+            ->where('action', 'like', 'policy.%')
+            ->latest()
+            ->limit(100)
+            ->get();
+        $defaults = [];
+        foreach ($catalog['fields'] as $key => $field) {
+            if (in_array($field['type'], ['policy', 'policy_select'], true)) {
+                $defaults[$key] = $field['default'];
+            }
+        }
+        foreach ($catalog['lifecycle']['states'] as $state => $label) {
+            foreach (array_keys($catalog['lifecycle']['actions']) as $index => $action) {
+                $default = $catalog['lifecycle']['defaults'][$state][$index];
+                if ($default !== null) {
+                    $defaults["lifecycle.{$state}.{$action}"] = $default;
+                }
+            }
+        }
 
-        $categories = [
-            'security' => PolicySetting::where('category', 'security')->orderBy('key')->get(),
-            'wallet' => PolicySetting::where('category', 'wallet')->orderBy('key')->get(),
-            'provisioning' => PolicySetting::where('category', 'provisioning')->orderBy('key')->get(),
-            'voucher' => PolicySetting::where('category', 'voucher')->orderBy('key')->get(),
-            'schedule' => PolicySetting::where('category', 'schedule')->orderBy('key')->get(),
-            'approval' => PolicySetting::where('category', 'approval')->orderBy('key')->get(),
-        ];
+        return view('platform.configuration.policy-center', compact('catalog', 'policies', 'history', 'defaults'));
+    }
 
-        $approval = PolicySetting::where('category', 'approval')
-            ->orderBy('key')
-            ->get()
-            ->keyBy('key');
+    public function updateAll(Request $request)
+    {
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:200'],
+            'policies' => ['required', 'array'],
+        ]);
+        $known = PolicySetting::query()->get()->keyBy('key');
+        $catalog = config('platform_control_settings');
+        $changes = [];
 
-        return view('platform.configuration.policies', compact('lifecyclePolicies', 'categories', 'approval'));
+        foreach ($validated['policies'] as $key => $value) {
+            $setting = $known->get($key);
+            if (! $setting) {
+                throw ValidationException::withMessages(['policies' => 'The submitted form contains an unknown policy.']);
+            }
+            $field = $catalog['fields'][$key] ?? null;
+            $rules = match (true) {
+                is_bool($setting->value) => ['required', 'boolean'],
+                isset($field['options']) => ['required', 'in:'.implode(',', $field['options'])],
+                is_numeric($setting->value) => array_filter([
+                    'required',
+                    'numeric',
+                    isset($field['min']) ? 'min:'.$field['min'] : null,
+                    isset($field['max']) ? 'max:'.$field['max'] : null,
+                ]),
+                default => ['required', 'string', 'max:255'],
+            };
+            $normalized = Validator::make(['value' => $value], ['value' => $rules])->validate()['value'];
+            if (is_bool($setting->value)) {
+                $normalized = filter_var($normalized, FILTER_VALIDATE_BOOLEAN);
+            } elseif (is_numeric($setting->value)) {
+                $normalized = str_contains((string) $normalized, '.') ? (float) $normalized : (int) $normalized;
+            }
+
+            if ($normalized !== $setting->value) {
+                $changes[$setting->category][$key] = [
+                    'old' => $setting->value,
+                    'new' => $normalized,
+                    'description' => $setting->description,
+                ];
+            }
+        }
+
+        DB::transaction(function () use ($changes, $validated): void {
+            foreach ($changes as $category => $items) {
+                foreach ($items as $key => $change) {
+                    Policy::set($key, $change['new'], $change['description']);
+                }
+                AuditLog::record("policy.{$category}.updated", null, [
+                    'reason' => trim($validated['reason']),
+                    'keys' => array_keys($items),
+                    'changes' => $items,
+                ]);
+            }
+        });
+
+        return redirect()->route('platform.policies.index')
+            ->with('status', $changes === [] ? 'No policies changed.' : 'Saved '.array_sum(array_map('count', $changes)).' policy change(s).');
+    }
+
+    public function export()
+    {
+        return response()->json(PolicySetting::query()->orderBy('key')->pluck('value', 'key'))
+            ->header('Content-Disposition', 'attachment; filename="platform-policies.json"');
     }
 
     public function updateLifecycle(Request $request)

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\SsoNonce;
+use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Notifications\RegistrationEmailCode;
@@ -30,11 +31,15 @@ class RegisteredUserController extends Controller
 {
     public function create(): View
     {
+        abort_unless(PlatformSetting::get('tenant.registration_open', true), 403, 'Workspace registration is currently closed.');
+
         return view('auth.register');
     }
 
     public function sendEmailCode(Request $request): RedirectResponse
     {
+        abort_unless(PlatformSetting::get('tenant.registration_open', true), 403, 'Workspace registration is currently closed.');
+
         $request->merge(['email' => Str::lower(trim((string) $request->input('email')))]);
         $validated = $request->validate([
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -65,6 +70,8 @@ class RegisteredUserController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        abort_unless(PlatformSetting::get('tenant.registration_open', true), 403, 'Workspace registration is currently closed.');
+
         $request->merge(['email' => Str::lower(trim((string) $request->input('email')))]);
         $validated = $request->validate([
             'business_name' => ['required', 'string', 'max:255'],
@@ -101,7 +108,7 @@ class RegisteredUserController extends Controller
             $tenant = Tenant::create([
                 'name' => $validated['business_name'],
                 'slug' => Str::slug($validated['subdomain']),
-                'status' => 'active',
+                'status' => PlatformSetting::get('tenant.default_status', 'active'),
             ]);
 
             // 2. Create the User and link to Tenant

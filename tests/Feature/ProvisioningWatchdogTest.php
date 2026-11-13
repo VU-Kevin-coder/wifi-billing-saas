@@ -4,12 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
+use App\Models\Refund;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
 use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
@@ -209,6 +212,50 @@ class ProvisioningWatchdogTest extends TestCase
             'the agent must remove a router user that may already exist');
         $this->assertSame(1, AuditLog::where('action', 'provisioning.expired_unprovisioned')->count());
         Notification::assertSentTo($this->admin, ProvisioningStuck::class, fn ($n) => $n->expired === true);
+    }
+
+    public function test_expired_unprovisioned_sale_creates_a_refund_request_when_enabled(): void
+    {
+        Transaction::withoutTenancy()->create([
+            'tenant_id' => $this->tenant->id,
+            'type' => 'voucher_sale',
+            'amount' => 1000,
+            'platform_fee' => 50,
+            'net_amount' => 950,
+            'status' => 'completed',
+            'reference' => 'WD-AUTO-REFUND',
+            'phone' => '0771234567',
+            'meta' => ['voucher_id' => $this->session->voucher_id],
+        ]);
+        $this->session->update(['expires_at' => now()->subMinute()]);
+
+        $this->assertSame('expired', $this->inspect());
+
+        $refund = Refund::withoutTenancy()->sole();
+        $this->assertSame('pending', $refund->status);
+        $this->assertSame(1000.0, (float) $refund->amount);
+        $this->assertStringContainsString('session #'.$this->session->id, $refund->reason);
+        $this->assertSame(1, AuditLog::where('action', 'refund.auto_requested')->count());
+    }
+
+    public function test_auto_refund_request_can_be_disabled(): void
+    {
+        PlatformSetting::set('refunds.auto_request', false);
+        Transaction::withoutTenancy()->create([
+            'tenant_id' => $this->tenant->id,
+            'type' => 'voucher_sale',
+            'amount' => 1000,
+            'platform_fee' => 50,
+            'net_amount' => 950,
+            'status' => 'completed',
+            'reference' => 'WD-NO-AUTO-REFUND',
+            'phone' => '0771234567',
+            'meta' => ['voucher_id' => $this->session->voucher_id],
+        ]);
+        $this->session->update(['expires_at' => now()->subMinute()]);
+
+        $this->assertSame('expired', $this->inspect());
+        $this->assertSame(0, Refund::withoutTenancy()->count());
     }
 
     public function test_a_late_agent_confirmation_cannot_revive_an_expired_session(): void

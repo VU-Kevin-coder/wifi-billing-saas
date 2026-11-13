@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Refund;
 use App\Models\Session;
+use App\Models\SmsMessage;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -17,6 +19,7 @@ use App\Services\RefundService;
 use App\Services\WalletService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -116,6 +119,47 @@ class RefundFlowTest extends TestCase
         $this->assertSame(1, AuditLog::where('action', 'refund.requested')->count());
         Notification::assertSentTo($this->platformAdmin, RefundRequested::class);
         $this->assertEquals(950, $this->balance(), 'requesting must not move money');
+    }
+
+    public function test_paid_voucher_receipt_uses_the_configured_template_and_gateway(): void
+    {
+        PlatformSetting::set('sms_provider', 'africastalking');
+        PlatformSetting::set('sms_username', 'sandbox');
+        PlatformSetting::setSecret('sms_api_key', 'test-sms-key');
+        PlatformSetting::set('sms_environment', 'sandbox');
+        PlatformSetting::set('sms.template', 'Bought {package}; code {code}; expires {expires}; help {support_phone}');
+        PlatformSetting::set('support_phone', '+256700000000');
+        Http::fake([
+            'https://api.sandbox.africastalking.com/version1/messaging' => Http::response([
+                'SMSMessageData' => [
+                    'Message' => 'Sent to 1/1',
+                    'Recipients' => [['status' => 'Success', 'number' => '+256771234567']],
+                ],
+            ], 201),
+        ]);
+
+        $sale = $this->sale();
+        $message = SmsMessage::withoutTenancy()->sole();
+
+        $this->assertSame('voucher_receipt', $message->type);
+        $this->assertSame('sent', $message->status);
+        Http::assertSent(fn ($request) => str_contains($request['message'], 'Bought One hour; code '.$sale->meta['voucher_code']));
+    }
+
+    public function test_platform_refund_page_uses_the_configured_decision_sla(): void
+    {
+        PlatformSetting::set('refunds.payout_sla', 1);
+        $sale = $this->sale();
+        $this->request($sale, 100)->assertSessionHasNoErrors();
+        $refund = Refund::sole();
+        DB::table('refunds')->where('id', $refund->id)->update([
+            'created_at' => now()->subHours(2),
+        ]);
+
+        $this->actingAs($this->platformAdmin)
+            ->get(route('platform.refunds.index'))
+            ->assertOk()
+            ->assertSee('Overdue since');
     }
 
     public function test_pending_requests_reserve_the_refundable_amount(): void
@@ -240,6 +284,42 @@ class RefundFlowTest extends TestCase
         $this->assertEquals(20, (float) $refund->platform_fee_reversed);
         $this->assertEquals(570, $this->balance());
         $this->assertNotSame('voided', $voucher->fresh()->status, 'a partial refund must not remove access');
+    }
+
+    public function test_refund_can_leave_platform_commission_with_the_platform(): void
+    {
+        $sale = $this->sale();
+        PlatformSetting::set('tenant.commission_on_refund', false);
+        $this->request($sale, 400)->assertSessionHasNoErrors();
+
+        $this->approve(Refund::sole())->assertSessionHasNoErrors();
+
+        $refund = Refund::sole();
+        $this->assertEquals(400, (float) $refund->tenant_debit);
+        $this->assertEquals(0, (float) $refund->platform_fee_reversed);
+        $this->assertEquals(550, $this->balance());
+    }
+
+    public function test_platform_can_disable_operator_refund_requests_and_make_notes_optional(): void
+    {
+        $sale = $this->sale();
+        PlatformSetting::set('refunds.operator_can_request', false);
+
+        $this->actingAs($this->operator)->get(route('operator.refunds.index'))
+            ->assertOk()
+            ->assertSee('Refund requests are currently disabled by the platform.');
+        $this->request($sale, 100)->assertForbidden();
+
+        PlatformSetting::set('refunds.operator_can_request', true);
+        PlatformSetting::set('refunds.require_note', false);
+        $this->actingAs($this->operator)->post(route('operator.refunds.store'), [
+            'transaction_id' => $sale->id,
+            'amount' => 100,
+            'reason' => '',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame('No reason provided', Refund::sole()->reason);
     }
 
     public function test_two_partial_refunds_that_add_up_to_the_sale_remove_access(): void

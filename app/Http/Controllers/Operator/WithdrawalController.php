@@ -9,10 +9,12 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Notifications\WithdrawalRequested;
+use App\Services\FlutterwaveService;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -28,17 +30,49 @@ class WithdrawalController extends Controller
         abort_unless($tenant, 404, 'Tenant not found');
         $user = auth()->user();
 
+        if (PlatformSetting::get('payouts.paused', false)) {
+            return back()->withErrors(['amount' => 'Withdrawals are temporarily paused by the platform.']);
+        }
+
+        $availableMethods = array_values(array_intersect(
+            ['mtn_momo', 'airtel_money', 'bank_transfer'],
+            (array) PlatformSetting::get('wallet.payout_method', ['mtn_momo', 'airtel_money', 'bank_transfer']),
+        ));
+        $method = (string) $request->input('payout_method', '');
+        if ($method === '' && filled($request->input('phone'))) {
+            $method = FlutterwaveService::networkForUgandanPhone((string) $request->input('phone')) === 'AIRTEL'
+                ? 'airtel_money'
+                : 'mtn_momo';
+        }
+        if (! in_array($method, $availableMethods, true)) {
+            return back()->withErrors(['payout_method' => 'This payout method is not currently enabled by the platform.']);
+        }
+
         $min = (int) Policy::get('wallet.min_withdrawal', (int) PlatformSetting::get('min_withdrawal_amount', 10000));
         $currency = PlatformSetting::get('currency', 'UGX');
 
-        $request->validate([
+        $rules = [
             'amount' => ['required', 'numeric', 'min:'.$min, 'max:'.max(0, (float) $tenant->wallet_balance)],
-            'phone' => ['required', 'string'],
             'password' => ['required', 'string'],
-        ], [
+            'payout_method' => ['required', 'in:'.implode(',', $availableMethods)],
+        ];
+        if ($method === 'bank_transfer') {
+            $rules += [
+                'bank_name' => ['required', 'string', 'max:100'],
+                'account_name' => ['required', 'string', 'max:120'],
+                'account_number' => ['required', 'string', 'max:50'],
+            ];
+        } else {
+            $rules['phone'] = ['required', 'string', 'max:30'];
+        }
+        $request->merge(['payout_method' => $method]);
+        $validated = $request->validate($rules, [
             'amount.max' => "The withdrawal amount cannot exceed your available wallet balance of {$currency} ".number_format($tenant->wallet_balance).'.',
             'amount.min' => "The minimum withdrawal amount is {$currency} ".number_format($min).'.',
         ]);
+        if ($method !== 'bank_transfer' && ! FlutterwaveService::normalizeUgandanPhone($validated['phone'])) {
+            return back()->withErrors(['phone' => 'Enter a valid Uganda Mobile Money number.']);
+        }
 
         $limit = (int) Policy::get('wallet.withdrawal_pending_limit', 1);
         $existingCount = Transaction::where('tenant_id', $tenant->id)
@@ -55,7 +89,7 @@ class WithdrawalController extends Controller
             return back()->withErrors(['password' => 'The provided password does not match our records.']);
         }
 
-        $result = DB::transaction(function () use ($tenant, $request, $currency, $limit): Transaction|string {
+        $result = DB::transaction(function () use ($tenant, $request, $currency, $limit, $method, $validated): Transaction|string {
             $lockedTenant = Tenant::query()->lockForUpdate()->findOrFail($tenant->id);
             $existingPending = Transaction::where('tenant_id', $lockedTenant->id)
                 ->where('type', 'withdrawal')
@@ -71,6 +105,15 @@ class WithdrawalController extends Controller
             }
 
             // Create the withdrawal transaction
+            $meta = ['payout_method' => $method];
+            if ($method === 'bank_transfer') {
+                $meta['bank_details_encrypted'] = Crypt::encryptString(json_encode([
+                    'bank_name' => $validated['bank_name'],
+                    'account_name' => $validated['account_name'],
+                    'account_number' => $validated['account_number'],
+                ], JSON_THROW_ON_ERROR));
+            }
+
             $withdrawal = Transaction::create([
                 'tenant_id' => $lockedTenant->id,
                 'type' => 'withdrawal',
@@ -79,8 +122,11 @@ class WithdrawalController extends Controller
                 'net_amount' => -$request->amount,
                 'status' => 'pending',
                 'reference' => 'WTH-'.strtoupper(Str::random(6)),
-                'description' => "Withdrawal to {$request->phone}",
-                'phone' => $request->phone,
+                'description' => $method === 'bank_transfer'
+                    ? 'Manual bank transfer payout'
+                    : "Withdrawal to {$validated['phone']}",
+                'phone' => $method === 'bank_transfer' ? null : $validated['phone'],
+                'meta' => $meta,
             ]);
 
             app(WalletService::class)->apply(
@@ -88,13 +134,14 @@ class WithdrawalController extends Controller
                 -1 * (float) $request->amount,
                 WalletService::WITHDRAWAL_DEBIT,
                 $withdrawal,
-                "Withdrawal to {$request->phone}",
+                $method === 'bank_transfer' ? 'Manual bank transfer payout' : "Withdrawal to {$validated['phone']}",
             );
 
             AuditLog::record('withdrawal.requested', $withdrawal, [
                 'reference' => $withdrawal->reference,
                 'amount' => (float) $request->amount,
-                'destination_phone' => $request->phone,
+                'payout_method' => $method,
+                'destination_phone' => $validated['phone'] ?? null,
             ], auth()->user(), $lockedTenant);
 
             return $withdrawal;

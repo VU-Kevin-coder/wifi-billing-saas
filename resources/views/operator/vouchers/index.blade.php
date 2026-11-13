@@ -11,9 +11,10 @@
         form: { package_id: '', quantity: 50 },
         voucherPrefix: @js($voucherSettings['voucher_prefix']),
         voucherLength: @js($voucherSettings['voucher_length']),
-        voucherFormat: @js($voucherSettings['voucher_format']),
+        voucherFormat: @js($voucherSettings['voucher_format'] ?? 'alphanumeric'),
+        voucherCharset: @js($voucherCharset),
         voucherFormatPreview() {
-            const characters = this.voucherFormat === 'numeric'
+            const characters = this.voucherFormat === 'numeric' || this.voucherCharset === 'numeric'
                 ? '0'.repeat(this.voucherLength)
                 : 'X'.repeat(this.voucherLength);
 
@@ -152,6 +153,11 @@
                             class="px-3 pb-3 text-sm font-medium transition-colors whitespace-nowrap">
                             Voided <span class="ml-1 bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded-full">{{ number_format($voided) }}</span>
                         </button>
+                        <button @click="activeTab = 'expired'"
+                            :class="activeTab === 'expired' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'"
+                            class="px-3 pb-3 text-sm font-medium transition-colors whitespace-nowrap">
+                            Expired <span class="ml-1 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">{{ number_format($expired) }}</span>
+                        </button>
                     </nav>
                 </div>
 
@@ -203,7 +209,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         @forelse($vouchers as $voucher)
-                            <tr class="hover:bg-gray-50 transition-colors group">
+                            <tr class="hover:bg-gray-50 transition-colors group" x-show="activeTab === 'all' || activeTab === '{{ $voucher->status }}'">
                                 <td class="px-5 py-4">
                                     <input type="checkbox" class="rounded border-gray-300 text-blue-600">
                                 </td>
@@ -232,6 +238,10 @@
                                     @elseif($voucher->status === 'redeemed')
                                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">
                                             <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Redeemed
+                                        </span>
+                                    @elseif($voucher->status === 'expired')
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Expired
                                         </span>
                                     @else
                                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">

@@ -47,6 +47,9 @@ class VoucherActivationService
             if ($voucher->status !== 'unused') {
                 throw new LogicException('This voucher has already been activated.');
             }
+            if ($voucher->expires_at?->lte(now())) {
+                throw new LogicException('This voucher has expired.');
+            }
 
             $startedAt = now();
             $package = Package::where('tenant_id', $tenant->id)->find($voucher->package_id);

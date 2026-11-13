@@ -50,7 +50,15 @@ class AuditLog extends Model
         ?User $actor = null,
         ?Tenant $tenant = null,
     ): self {
+        if (! PlatformSetting::get('audit.enabled', true)
+            && ! str_starts_with($action, 'platform.settings.')) {
+            return new self(['action' => $action]);
+        }
+
         $request = request();
+        $meta = PlatformSetting::get('audit.mask_pii', true)
+            ? static::maskPhoneValues($meta)
+            : $meta;
 
         return static::create([
             'tenant_id' => $tenant?->id ?? $subject?->tenant_id,
@@ -61,5 +69,21 @@ class AuditLog extends Model
             'ip_address' => $request?->ip(),
             'meta' => $meta ?: null,
         ]);
+    }
+
+    private static function maskPhoneValues(array $values): array
+    {
+        foreach ($values as $key => $value) {
+            if (is_array($value)) {
+                $values[$key] = static::maskPhoneValues($value);
+            } elseif (is_string($value) && preg_match('/phone|mobile|recipient|destination/i', (string) $key)) {
+                $digits = preg_replace('/\D+/', '', $value) ?? '';
+                if (strlen($digits) >= 7) {
+                    $values[$key] = '***'.substr($digits, -4);
+                }
+            }
+        }
+
+        return $values;
     }
 }

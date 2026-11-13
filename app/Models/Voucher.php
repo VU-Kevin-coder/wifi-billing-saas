@@ -12,11 +12,12 @@ class Voucher extends Model
 
     protected $fillable = [
         'tenant_id', 'site_id', 'voucher_batch_id', 'package_id', 'code', 'status', 'redeemed_price',
-        'assigned_site', 'redeemed_by', 'redeemed_at',
+        'assigned_site', 'redeemed_by', 'redeemed_at', 'expires_at',
     ];
 
     protected $casts = [
         'redeemed_at' => 'datetime',
+        'expires_at' => 'datetime',
     ];
 
     public function batch()

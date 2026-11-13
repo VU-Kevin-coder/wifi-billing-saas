@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
@@ -98,6 +99,7 @@ class VoucherGenerationTest extends TestCase
     public function test_numeric_vouchers_use_digits_only(): void
     {
         [$tenant, $user, $package] = $this->operator('alpha', ['voucher_prefix' => '', 'voucher_format' => 'numeric', 'voucher_length' => 8]);
+        PlatformSetting::set('voucher.charset', 'numeric');
 
         $this->generate($tenant, $user, $package, 100)->assertSessionHasNoErrors();
 
@@ -106,10 +108,39 @@ class VoucherGenerationTest extends TestCase
         }
     }
 
+    public function test_platform_charset_setting_controls_generated_codes(): void
+    {
+        [$tenant, $user, $package] = $this->operator('alpha', ['voucher_prefix' => '', 'voucher_length' => 12]);
+        PlatformSetting::set('voucher.charset', 'alphanumeric');
+
+        $this->generate($tenant, $user, $package, 20)->assertSessionHasNoErrors();
+
+        foreach (Voucher::withoutTenancy()->where('tenant_id', $tenant->id)->pluck('code') as $code) {
+            $this->assertMatchesRegularExpression('/^[A-Z0-9]{12}$/', $code);
+        }
+    }
+
+    public function test_unused_vouchers_expire_according_to_the_platform_setting(): void
+    {
+        [$tenant, $user, $package] = $this->operator('alpha');
+        PlatformSetting::set('voucher.unused_expiry', 2);
+
+        $this->generate($tenant, $user, $package, 2)->assertSessionHasNoErrors();
+        $vouchers = Voucher::withoutTenancy()->where('tenant_id', $tenant->id)->get();
+        $this->assertCount(2, $vouchers);
+        $this->assertTrue($vouchers->every(fn (Voucher $voucher) => $voucher->expires_at?->isSameDay(now()->addDays(2))));
+
+        $this->travel(3)->days();
+        $this->artisan('vouchers:expire-unused')->assertSuccessful();
+
+        $this->assertSame(2, Voucher::withoutTenancy()->where('tenant_id', $tenant->id)->where('status', 'expired')->count());
+    }
+
     public function test_generation_avoids_codes_the_tenant_already_has(): void
     {
         // One-digit numeric codes: only 1..9 exist. Seed 1..8 so 9 is the single free code.
         [$tenant, $user, $package] = $this->operator('alpha', ['voucher_prefix' => '', 'voucher_format' => 'numeric', 'voucher_length' => 1]);
+        PlatformSetting::set('voucher.charset', 'numeric');
         $batch = VoucherBatch::create(['tenant_id' => $tenant->id, 'package_id' => $package->id, 'batch_code' => 'SEED', 'quantity' => 8]);
         foreach (range(1, 8) as $n) {
             Voucher::create(['tenant_id' => $tenant->id, 'voucher_batch_id' => $batch->id, 'package_id' => $package->id, 'code' => (string) $n, 'status' => 'unused']);
@@ -123,6 +154,7 @@ class VoucherGenerationTest extends TestCase
     public function test_running_out_of_unique_codes_fails_cleanly_with_no_partial_batch(): void
     {
         [$tenant, $user, $package] = $this->operator('alpha', ['voucher_prefix' => '', 'voucher_format' => 'numeric', 'voucher_length' => 1]);
+        PlatformSetting::set('voucher.charset', 'numeric');
 
         $this->generate($tenant, $user, $package, 20)->assertSessionHasErrors('quantity');
 

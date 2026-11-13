@@ -162,9 +162,7 @@
                         @foreach($operators as $tenant)
                             <template x-if="activeOperator === {{ $tenant->id }}">
                                 <div class="space-y-6">
-                                    @php 
-                                        $pendingTxs = $tenant->transactions()->withoutTenancy()->where('type', 'withdrawal')->where('status', 'pending')->latest()->get(); 
-                                    @endphp
+                                    @php $pendingTxs = $pendingWithdrawalsByTenant->get($tenant->id, collect()); @endphp
                                     @forelse($pendingTxs as $pendingTx)
                                         <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5 space-y-3">
                                             <div class="flex justify-between items-start">
@@ -180,10 +178,21 @@
                                                 <span class="font-bold text-base text-gray-900 font-mono">{{ $currency ?? 'UGX' }} {{ number_format((float) $pendingTx->amount) }}</span>
                                             </div>
 
-                                            <div class="flex justify-between items-center text-xs">
-                                                <span class="text-gray-500">Destination Phone:</span>
-                                                <span class="font-mono font-bold text-blue-700">{{ $pendingTx->phone ?? ($pendingTx->description ?? '—') }}</span>
-                                            </div>
+                                            @if(($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer')
+                                                <div class="rounded-lg bg-blue-50 p-3 text-xs">
+                                                    <b class="text-blue-900">Bank transfer destination</b>
+                                                    @if(is_array($pendingTx->bank_details))
+                                                        <div class="mt-1 text-blue-800">Bank: {{ $pendingTx->bank_details['bank_name'] ?? '—' }} · Account name: {{ $pendingTx->bank_details['account_name'] ?? '—' }} · Account number: {{ $pendingTx->bank_details['account_number'] ?? '—' }}</div>
+                                                    @else
+                                                        <div class="mt-1 text-red-700">Bank details could not be decrypted. Do not approve until they are reviewed.</div>
+                                                    @endif
+                                                </div>
+                                            @else
+                                                <div class="flex justify-between items-center text-xs">
+                                                    <span class="text-gray-500">{{ str(($pendingTx->meta['payout_method'] ?? 'mobile_money'))->replace('_', ' ')->title() }} destination:</span>
+                                                    <span class="font-mono font-bold text-blue-700">{{ $pendingTx->phone ?? '—' }}</span>
+                                                </div>
+                                            @endif
 
                                             <div class="flex justify-between items-center text-xs">
                                                 <span class="text-gray-500">Reference:</span>
@@ -202,10 +211,13 @@
                                                         Reject &amp; Refund
                                                     </button>
                                                 </form>
-                                                <form method="POST" action="{{ route('platform.revenue.withdrawals.approve', $pendingTx->id) }}" class="flex-1" data-confirm-action="Approve and release funds for this withdrawal?">
+                                                <form method="POST" action="{{ route('platform.revenue.withdrawals.approve', $pendingTx->id) }}" class="flex-1" data-confirm-action="{{ ($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer' ? 'Confirm you have completed this bank transfer and approve the withdrawal?' : 'Approve and release funds for this withdrawal?' }}">
                                                     @csrf
+                                                    @if(($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer')
+                                                        <input type="text" name="payout_reference" required minlength="3" maxlength="100" placeholder="Bank transfer reference" class="mb-2 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs">
+                                                    @endif
                                                     <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm">
-                                                        Approve Payout
+                                                        {{ ($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer' ? 'Confirm Bank Transfer' : 'Approve Payout' }}
                                                     </button>
                                                 </form>
                                             </div>

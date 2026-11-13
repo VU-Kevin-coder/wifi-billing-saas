@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\InsufficientWalletBalance;
 use App\Exceptions\RefundException;
 use App\Models\AuditLog;
+use App\Models\PlatformSetting;
 use App\Models\Refund;
 use App\Models\Tenant;
 use App\Models\Transaction;
@@ -110,10 +111,11 @@ class RefundService
             $net = (float) $sale->net_amount;
             $amount = (float) $locked->amount;
 
-            // The operator only received `net` of the sale; take back their share
-            // of the refunded part and reverse the platform commission on the rest.
-            $tenantDebit = $gross > 0 ? round($amount * ($net / $gross), 2) : 0.0;
-            $feeReversed = round($amount - $tenantDebit, 2);
+            $reverseCommission = (bool) PlatformSetting::get('tenant.commission_on_refund', true);
+            $tenantDebit = $gross > 0
+                ? round($amount * ($reverseCommission ? $net / $gross : 1), 2)
+                : 0.0;
+            $feeReversed = $reverseCommission ? round($amount - $tenantDebit, 2) : 0.0;
 
             $refundTransaction = Transaction::withoutTenancy()->create([
                 'tenant_id' => $locked->tenant_id,
@@ -241,6 +243,10 @@ class RefundService
 
     private function notifyPlatform(Refund $refund): void
     {
+        if (! PlatformSetting::get('alerts.notify_refund', true)) {
+            return;
+        }
+
         try {
             $admins = User::withoutTenancy()->role('platform_admin')->get();
             if ($admins->isEmpty()) {

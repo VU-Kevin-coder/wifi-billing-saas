@@ -3,9 +3,14 @@
         showWithdraw: false, 
         step: 1,
         amount: '',
-        phone: '{{ $defaultPhone }}',
+        phone: @js($defaultPhone),
+        method: @js($payoutMethods[0] ?? ''),
+        bankName: '',
+        accountName: '',
+        accountNumber: '',
         password: '',
         minWithdrawal: {{ $minWithdrawal }},
+        validDestination() { return this.method === 'bank_transfer' ? this.bankName.trim().length > 0 && this.accountName.trim().length > 0 && this.accountNumber.trim().length > 0 : this.phone.length >= 9; },
         resetForm() { this.step = 1; this.amount = ''; this.password = ''; this.showWithdraw = false; }
     }">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
@@ -13,7 +18,7 @@
             <!-- Header -->
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Wallet & Mobile Money</h1>
+                    <h1 class="text-2xl font-bold text-gray-900">Wallet & Payouts</h1>
                     <p class="text-gray-500 text-sm mt-1">Manage your earnings, platform fees, and withdrawals.</p>
                 </div>
                 <div class="flex gap-3">
@@ -53,10 +58,11 @@
                     </div>
                     
                     <div class="mt-8">
-                        <button type="button" @click="showWithdraw = true; amount = {{ (float) ($tenant->wallet_balance ?? 0) }}" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.99]">
+                        <button type="button" @click="showWithdraw = true; amount = {{ (float) ($tenant->wallet_balance ?? 0) }}" @disabled(empty($payoutMethods)) class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                            Withdraw to Mobile Money
+                            Request payout
                         </button>
+                        @if(empty($payoutMethods))<p class="text-center text-xs text-red-600 mt-2">Payouts are currently disabled by the platform.</p>@endif
                         <p class="text-center text-xs text-gray-500 mt-3">Minimum withdrawal: {{ $currency }} {{ number_format($minWithdrawal) }}</p>
                     </div>
                 </div>
@@ -207,8 +213,8 @@
                                 <!-- Header -->
                                 <div class="px-6 py-6 bg-gray-50 border-b border-gray-200 sticky top-0 z-10 flex justify-between items-center">
                                     <div>
-                                        <h2 class="text-lg font-bold text-gray-900">Withdraw Funds</h2>
-                                        <p class="text-xs text-gray-500 mt-0.5">Transfer balance to Mobile Money</p>
+                                        <h2 class="text-lg font-bold text-gray-900">Request Payout</h2>
+                                        <p class="text-xs text-gray-500 mt-0.5">Choose a payout method and destination</p>
                                     </div>
                                     <button type="button" @click="resetForm()" class="text-gray-400 hover:text-gray-600 rounded-lg p-1">✕</button>
                                 </div>
@@ -216,7 +222,7 @@
                                 <!-- Step 1: Amount & Phone -->
                                 <div x-show="step === 1" class="flex-1 px-6 py-6 flex flex-col justify-between">
                                     <div>
-                                        <p class="text-sm text-gray-600 mb-6">Enter the amount you wish to withdraw to your registered Mobile Money line.</p>
+                                        <p class="text-sm text-gray-600 mb-6">Enter the amount and destination for your payout.</p>
                                         
                                         <div class="space-y-4">
                                             <div>
@@ -233,12 +239,35 @@
                                                 </div>
                                             </div>
                                             <div>
+                                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Payout method</label>
+                                                <select x-model="method" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                    @foreach($payoutMethods as $payoutMethod)
+                                                        <option value="{{ $payoutMethod }}">{{ str($payoutMethod)->replace('_', ' ')->title() }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div x-show="method !== 'bank_transfer'">
                                                 <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Mobile Money Number</label>
                                                 <input type="text" 
                                                        x-model="phone" 
                                                        placeholder="+256700000000"
                                                        class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
-                                                <p class="text-xs text-gray-500 mt-1">Enter a whole {{ $currency }} amount. Payouts are sent through Flutterwave to the detected mobile money network.</p>
+                                                <p class="text-xs text-gray-500 mt-1">Enter a whole {{ $currency }} amount. Mobile Money payouts are sent through Flutterwave.</p>
+                                            </div>
+                                            <div x-show="method === 'bank_transfer'" class="space-y-4">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Bank name</label>
+                                                    <input type="text" x-model="bankName" maxlength="100" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Account name</label>
+                                                    <input type="text" x-model="accountName" maxlength="120" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Account number</label>
+                                                    <input type="text" x-model="accountNumber" maxlength="50" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                </div>
+                                                <p class="text-xs text-gray-500">A platform admin will make this transfer manually before approving your request.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -246,7 +275,7 @@
                                     <div class="pt-8 flex gap-3">
                                         <button type="button" @click="resetForm()" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors">Cancel</button>
                                         <button type="button" 
-                                                @click="if (amount >= minWithdrawal && phone.length >= 9) { step = 2; } else { window.toast.error('Please enter at least {{ $currency }} ' + minWithdrawal.toLocaleString() + ' and a valid phone number.'); }"
+                                                @click="if (amount >= minWithdrawal && validDestination()) { step = 2; } else { window.toast.error('Enter at least {{ $currency }} ' + minWithdrawal.toLocaleString() + ' and complete the payout details.'); }"
                                                 class="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
                                             Next Step &rarr;
                                         </button>
@@ -257,14 +286,14 @@
                                 <div x-show="step === 2" class="flex-1 px-6 py-6 flex flex-col justify-between" x-cloak>
                                     <div>
                                         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-                                            <p class="text-xs font-bold text-blue-900 uppercase tracking-wider">Withdrawal Summary</p>
+                                            <p class="text-xs font-bold text-blue-900 uppercase tracking-wider">Payout Summary</p>
                                             <div class="flex justify-between mt-3 text-sm text-blue-950">
                                                 <span class="text-blue-700">Amount:</span>
                                                 <span class="font-bold font-mono">{{ $currency }} <span x-text="Number(amount).toLocaleString()"></span></span>
                                             </div>
                                             <div class="flex justify-between mt-1 text-sm text-blue-950">
-                                                <span class="text-blue-700">Recipient Phone:</span>
-                                                <span class="font-bold font-mono" x-text="phone"></span>
+                                                <span class="text-blue-700">Destination:</span>
+                                                <span class="font-bold font-mono" x-text="method === 'bank_transfer' ? bankName + ' · ' + accountName + ' · ' + accountNumber : phone"></span>
                                             </div>
                                         </div>
 
@@ -272,6 +301,10 @@
                                             @csrf
                                             <input type="hidden" name="amount" :value="amount">
                                             <input type="hidden" name="phone" :value="phone">
+                                            <input type="hidden" name="payout_method" :value="method">
+                                            <input type="hidden" name="bank_name" :value="bankName">
+                                            <input type="hidden" name="account_name" :value="accountName">
+                                            <input type="hidden" name="account_number" :value="accountNumber">
                                             
                                             <div class="space-y-4">
                                                 <div>
@@ -283,7 +316,7 @@
                                                 <div class="flex items-start gap-2.5 mt-5 bg-amber-50 border border-amber-200 rounded-xl p-3">
                                                     <input type="checkbox" required id="consentCheck" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                                                     <label for="consentCheck" class="text-xs text-amber-900 leading-relaxed cursor-pointer">
-                                                        I confirm this withdrawal is authorized. Once submitted, funds will be transferred to the specified Mobile Money line.
+                                                        I confirm this payout destination is correct and authorize this withdrawal.
                                                     </label>
                                                 </div>
                                             </div>
@@ -291,7 +324,7 @@
                                             <div class="pt-8 flex gap-3">
                                                 <button type="button" @click="step = 1" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors">&larr; Back</button>
                                                 <button type="submit" class="flex-1 bg-green-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-700 transition-colors shadow-sm flex items-center justify-center gap-2">
-                                                    Authorize & Payout
+                                                    Submit Payout Request
                                                 </button>
                                             </div>
                                         </form>

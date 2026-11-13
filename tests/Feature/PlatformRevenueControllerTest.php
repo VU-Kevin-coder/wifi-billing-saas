@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\WithdrawalApproved;
 use App\Notifications\WithdrawalRejected;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\Models\Role;
@@ -128,6 +129,72 @@ class PlatformRevenueControllerTest extends TestCase
 
         $this->assertSame('completed', Transaction::withoutTenancy()->find($tx->id)->status);
         Notification::assertSentTo($operatorAdmin, WithdrawalApproved::class);
+    }
+
+    public function test_platform_admin_can_review_encrypted_bank_details_and_record_manual_transfer_reference(): void
+    {
+        $tx = $this->withdrawal([
+            'phone' => null,
+            'description' => 'Manual bank transfer payout',
+            'meta' => [
+                'payout_method' => 'bank_transfer',
+                'bank_details_encrypted' => Crypt::encryptString(json_encode([
+                    'bank_name' => 'Example Bank',
+                    'account_name' => 'Operator User',
+                    'account_number' => '0123456789',
+                ], JSON_THROW_ON_ERROR)),
+            ],
+        ]);
+        $operatorAdmin = $this->operatorAdmin();
+
+        $this->actingAs($this->admin)
+            ->get(route('platform.revenue.index'))
+            ->assertOk()
+            ->assertSee('Example Bank')
+            ->assertSee('0123456789')
+            ->assertSee('Confirm Bank Transfer');
+
+        $this->actingAs($this->admin)
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), [
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
+            ->assertSessionHasErrors('payout_reference');
+        $this->assertSame('pending', Transaction::withoutTenancy()->find($tx->id)->status);
+
+        $this->actingAs($this->admin)
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), [
+                'payout_reference' => 'BANK-REF-2026-001',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $completed = Transaction::withoutTenancy()->findOrFail($tx->id);
+        $this->assertSame('completed', $completed->status);
+        $this->assertSame('BANK-REF-2026-001', $completed->meta['manual_payout_reference']);
+        $this->assertSame('manual', $completed->meta['flutterwave_transfer_submission']);
+        Http::assertNothingSent();
+        Notification::assertSentTo($operatorAdmin, WithdrawalApproved::class);
+    }
+
+    public function test_manual_bank_approval_stays_pending_if_encrypted_details_are_invalid(): void
+    {
+        $tx = $this->withdrawal([
+            'phone' => null,
+            'meta' => [
+                'payout_method' => 'bank_transfer',
+                'bank_details_encrypted' => 'invalid-ciphertext',
+            ],
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), [
+                'payout_reference' => 'BANK-REF-2026-002',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
+            ->assertSessionHasErrors('error');
+
+        $this->assertSame('pending', Transaction::withoutTenancy()->find($tx->id)->status);
+        Http::assertNothingSent();
     }
 
     public function test_only_withdrawals_can_be_targeted_by_the_withdrawal_routes(): void

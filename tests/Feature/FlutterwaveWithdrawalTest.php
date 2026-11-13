@@ -131,6 +131,19 @@ class FlutterwaveWithdrawalTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_platform_payout_pause_blocks_transfer_approval(): void
+    {
+        $transaction = $this->createPendingWithdrawal();
+        PlatformSetting::set('payouts.paused', true);
+
+        $result = app(FlutterwaveWithdrawalService::class)->approve($transaction);
+
+        $this->assertFalse($result['ok']);
+        $this->assertFalse($result['submitted']);
+        $this->assertSame('pending', $transaction->fresh()->status);
+        Http::assertNothingSent();
+    }
+
     private function createPendingWithdrawal(array $overrides = []): Transaction
     {
         $tenant = Tenant::create([

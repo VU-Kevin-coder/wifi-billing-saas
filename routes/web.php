@@ -20,6 +20,7 @@ use App\Http\Controllers\Operator\WithdrawalController;
 use App\Http\Controllers\Platform\AdjustmentController;
 use App\Http\Controllers\Platform\BillingController;
 use App\Http\Controllers\Platform\ConfigurationController;
+use App\Http\Controllers\Platform\ControlSettingsController;
 use App\Http\Controllers\Platform\DashboardController as PlatformDashboard;
 use App\Http\Controllers\Platform\PolicyController;
 use App\Http\Controllers\Platform\RefundController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\PortalController;
 use App\Http\Controllers\PortalPlanController;
 use App\Http\Controllers\Profile\SecurityController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Middleware\EnsurePlatformAdminIpAllowed;
 use App\Models\Package;
 use App\Models\Tenant;
 use App\Models\Transaction;
@@ -79,7 +81,7 @@ Route::prefix('portal')
     });
 
 // ─── Platform Administration (Main Domain) ─────────────────
-Route::middleware(['auth', 'role:platform_admin'])
+Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::class])
     ->prefix('platform')
     ->name('platform.')
     ->group(function () {
@@ -113,6 +115,13 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::put('/plans/{plan}', [BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [BillingController::class, 'destroyPlan'])->name('plans.destroy');
         Route::get('/configuration', [ConfigurationController::class, 'index'])->name('configuration.index');
+        Route::get('/configuration/control', [ControlSettingsController::class, 'index'])->name('configuration.control');
+        Route::put('/configuration/control', [ControlSettingsController::class, 'update'])->middleware('mfa.recent')->name('configuration.control.update');
+        Route::get('/configuration/export', [ControlSettingsController::class, 'export'])->name('configuration.export');
+        Route::post('/configuration/actions/{action}', [ControlSettingsController::class, 'action'])
+            ->whereIn('action', ['rotate', 'purge', 'freeze', 'resume', 'reset'])
+            ->middleware('mfa.recent')
+            ->name('configuration.control.action');
         Route::put('/configuration/general', [ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
         Route::put('/configuration/pesapal', [ConfigurationController::class, 'updatePesapal'])->middleware('mfa.recent')->name('configuration.pesapal.update');
@@ -124,6 +133,8 @@ Route::middleware(['auth', 'role:platform_admin'])
         Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
         Route::post('/configuration/sms/test', [ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
         Route::get('/configuration/policies', [PolicyController::class, 'index'])->name('policies.index');
+        Route::put('/configuration/policies', [PolicyController::class, 'updateAll'])->middleware('mfa.recent')->name('policies.update');
+        Route::get('/configuration/policies/export', [PolicyController::class, 'export'])->name('policies.export');
         Route::put('/configuration/policies/lifecycle', [PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
         Route::put('/configuration/policies/approval', [PolicyController::class, 'updateApproval'])->name('policies.approval.update');
         Route::put('/configuration/policies/{category}', [PolicyController::class, 'updateCategory'])->name('policies.category.update');

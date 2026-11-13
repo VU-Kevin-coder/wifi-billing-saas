@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\PlatformSetting;
 use App\Support\DataLimit;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -90,6 +91,10 @@ class Package extends Model
      */
     public function routerLimitBytes(): ?int
     {
+        if (! PlatformSetting::get('package.data_caps', true)) {
+            return null;
+        }
+
         try {
             return DataLimit::bytes($this->data_limit);
         } catch (\InvalidArgumentException) {

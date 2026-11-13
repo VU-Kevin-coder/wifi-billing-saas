@@ -109,6 +109,10 @@ class SiteController extends Controller
     {
         $tenant = $context->getTenant();
         abort_unless($tenant, 404, 'Tenant not found');
+        $maxSites = max(1, (int) PlatformSetting::get('tenant.max_sites', 3));
+        if ($tenant->sites()->count() >= $maxSites) {
+            return back()->withErrors(['name' => "This workspace has reached the platform limit of {$maxSites} sites."]);
+        }
 
         $validated = $request->validate([
             'name' => [

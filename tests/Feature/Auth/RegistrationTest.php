@@ -9,6 +9,7 @@ use App\Notifications\WelcomeToHamnet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -20,6 +21,7 @@ class RegistrationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Http::fake(['api.pwnedpasswords.com/range/*' => Http::response('', 200)]);
         Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
     }
 

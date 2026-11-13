@@ -19,7 +19,9 @@ class SmsTemplate
         $replacements = [];
         foreach ($values as $name => $value) {
             // A value must never break the message layout: no newlines, no runs of spaces.
-            $replacements['@'.$name] = trim((string) preg_replace('/\s+/', ' ', (string) $value));
+            $safeValue = trim((string) preg_replace('/\s+/', ' ', (string) $value));
+            $replacements['@'.$name] = $safeValue;
+            $replacements['{'.$name.'}'] = $safeValue;
         }
 
         return strtr($template, $replacements);

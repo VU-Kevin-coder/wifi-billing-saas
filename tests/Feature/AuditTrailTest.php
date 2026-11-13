@@ -144,7 +144,21 @@ class AuditTrailTest extends TestCase
         $log = AuditLog::where('action', 'withdrawal.requested')->firstOrFail();
         $this->assertSame($this->finance->id, $log->user_id);
         $this->assertSame($this->tenant->id, $log->tenant_id);
-        $this->assertSame('0771234567', $log->meta['destination_phone']);
+        $this->assertSame('***4567', $log->meta['destination_phone']);
+    }
+
+    public function test_audit_controls_mask_phone_values_and_allow_settings_changes_to_be_audited(): void
+    {
+        AuditLog::record('test.phone', null, ['destination_phone' => '+256 771 234 567']);
+        $this->assertSame('***4567', AuditLog::query()->sole()->meta['destination_phone']);
+
+        PlatformSetting::set('audit.enabled', false);
+        $ignored = AuditLog::record('test.disabled');
+        $this->assertNull($ignored->getKey());
+        $this->assertSame(1, AuditLog::count());
+
+        AuditLog::record('platform.settings.updated');
+        $this->assertSame(2, AuditLog::count());
     }
 
     public function test_withdrawal_rejection_is_audited(): void
