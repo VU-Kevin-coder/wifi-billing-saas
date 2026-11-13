@@ -83,8 +83,11 @@ class SiteAgentControlPlaneTest extends TestCase
 
         $agentSession = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
             ->activate($tenant, $radiusVoucher, Request::create('/'), '0771234567'));
+        $retriedSession = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $radiusVoucher, Request::create('/'), '0771234567'));
 
         $this->assertSame($radiusSession->id, $agentSession->id);
+        $this->assertSame($radiusSession->id, $retriedSession->id);
         $this->assertSame('provisioning', $agentSession->status);
         $command = SiteAgentCommand::query()->sole();
         $this->assertSame('provision_user', $command->operation);
@@ -92,6 +95,7 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertSame($agentSession->id, $command->session_id);
         $this->assertSame('redeemed', $radiusVoucher->fresh()->status);
         $this->assertDatabaseCount('sessions_log', 1);
+        $this->assertDatabaseCount('site_agent_commands', 1);
         $this->assertSame('site_agent', $router->fresh()->access_backend);
     }
 

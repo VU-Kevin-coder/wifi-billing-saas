@@ -20,3 +20,11 @@
 - Docker CLI was present but daemon did not respond during this task; local Playwright CLI was absent. Neither was required for the scoped Laravel HTTP-kernel tests; no installs or external calls were made.
 - No production code, default DB, deployment, router, or Phase 2 changes.
 - Learnings consumed: [tester/pesapal-order-binding-regressions]
+
+## [t14] Added isolated migration and domain regressions
+- `RefreshDatabase` runs the fresh migrations against the `phpunit.xml`-forced SQLite `:memory:` connection; directly calling the additive migration objects again verifies idempotent re-entry without opening another database or running a standalone migration command.
+- Migration regressions now cover the legacy `site_agent` default, nullable typed sale links, tenant-scoped uniqueness, and refusal to roll back configured routers or populated sale/accounting evidence.
+- Repeating activation after an explicit per-router rollback confirms the same session and one site-agent command are retained.
+- Focused tests passed (23 tests, 186 assertions); full suite passed (555 tests, 3,016 assertions). Syntax, Pint, and diff checks passed.
+- No production source, external/default database, deployment, router, infrastructure, or Phase 2 changes.
+- Learnings consumed: []

@@ -41,11 +41,11 @@
 ### Phase: Phase 1 Domain Schema 📌 b04c6d4
 - ✅ t12 [dba] Add the additive router, sale-link, and accounting schemas (20:09:07Z→20:13:17Z, 4m 10s) — migrations authored, not run; tests used SQLite :memory: [deps: t10.1, t11]
 
-### Phase: Phase 1 Application Implementation
+### Phase: Phase 1 Application Implementation 📌 33bff7b
 - ✅ t13 [backend] Implement the opt-in access path and payment-safe domain behavior (20:42:48Z→20:53:55Z, 11m 7s) — radius-only activation and tested per-router fallback; existing agent/payment contracts preserved [deps: t10, t11, t12]
 
 ### Phase: Phase 1 Regression Tests
-- ⏳ t14 [tester] Add isolated migration and focused domain regression tests [deps: t12, t13]
+- ✅ t14 [tester] Add isolated migration and focused domain regression tests (20:55:47Z→21:01:15Z, 5m 28s) — 555 full-suite passes; SQLite in-memory only [deps: t12, t13]
 
 ### Phase: Phase 1 Browser Validation Setup
 - ⏳ t15 [tester] Add the pinned Playwright portal journey [deps: t14]
@@ -65,6 +65,8 @@
 
 ### Phase: Phase 1 Release Gate
 - ⏳ t21 [teamlead] Apply the binary Phase 1 release gate and stop [deps: t20]
+
+
 
 
 
