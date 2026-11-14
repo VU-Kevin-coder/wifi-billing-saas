@@ -25,3 +25,17 @@
 - Debugging dead-ends and what actually worked: No implementation was present to audit in this decision task; reviewed t10/t10.1 plus clarification and prior security evidence directly, with no tests or database operations.
 - Techniques/patterns worth reusing: Approve boundary decisions conditionally on explicit testable controls; distinguish architecture approval from implementation/release approval and keep production, router, and Phase 2 permissions separate.
 - Learnings consumed: []
+
+## [t18] Audit payment, tenant, credential, and replay protections
+- Codebase/domain discoveries: Policy request authentication binds method/path/body/timestamp/nonce; the router credential is encrypted/hidden and separate from the service credential. Operator one-time secret delivery is absent, production private ingress/TLS/shared-cache remain unverified, and locked dependencies requiring PHP ^8.3 conflict with the required PHP ^8.2 target.
+- Wrong assumptions and corrections: A code-level HTTPS/cache guard does not prove private production exposure or shared-cache readiness; the one-time-returning credential service is not an authorized operator delivery workflow.
+- Debugging dead-ends and what actually worked: `context.md` and `decisions.md` were unavailable; the clarification, board, task dependencies, and security learning provided the controlling evidence. The review remained read-only; no tests, DB operations, or `.env` processing were performed.
+- Techniques/patterns worth reusing: Separate confirmed vulnerabilities from incomplete design controls and deployment evidence gaps; keep PHP target compatibility risks distinct from CVE findings.
+- Learnings consumed: [security/secret-isolation-radius-boundary]
+
+## [t18.1] Re-audit post-remediation payment, tenant, credential, and replay protections
+- Codebase/domain discoveries: The specialized read-only review confirmed the t22.2 one-time secret delivery and t22.3 direct-peer allowlist/HMAC/timestamp/nonce controls are present in code; no exploitable issue confirmed. Airtel provider omission semantics and production private-ingress/TLS/shared-cache behavior remain unverified. User task says `access_mode=radius`, while project artifacts name the selector `access_backend`; do not assume these are equivalent.
+- Wrong assumptions and corrections: Focused SQLite tests validate code paths but cannot prove production network/cache configuration or provider guarantees. A clean dependency scan is evidence from t22.4, not a new scan run in this audit.
+- Debugging dead-ends and what actually worked: `context.md` and `decisions.md` were absent at their expected paths; use clarification, board, security history/inbox, and dependency artifacts. Security review was delegated to the specialized read-only reviewer; no source inspection was repeated locally.
+- Techniques/patterns worth reusing: Track code vulnerabilities separately from deployment prerequisites and external provider-contract uncertainty; treat field-name drift as a release clarification until a canonical contract is confirmed.
+- Learnings consumed: [security/secret-isolation-radius-boundary]

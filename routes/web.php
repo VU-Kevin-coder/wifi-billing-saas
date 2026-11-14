@@ -8,6 +8,7 @@ use App\Http\Controllers\Operator\DashboardController as OperatorDashboard;
 use App\Http\Controllers\Operator\LiveSessionController;
 use App\Http\Controllers\Operator\PackageController;
 use App\Http\Controllers\Operator\PortalSettingsController;
+use App\Http\Controllers\Operator\RadiusRouterCredentialController;
 use App\Http\Controllers\Operator\RouterController;
 use App\Http\Controllers\Operator\RouterSettingsController;
 use App\Http\Controllers\Operator\SettingsController;
@@ -206,6 +207,11 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
 
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
+
+                    Route::post('routers/{router}/radius-credential', [RadiusRouterCredentialController::class, 'store'])
+                        ->whereNumber('router')
+                        ->middleware(['mfa.recent', 'throttle:5,1'])
+                        ->name('routers.radius-credential.store');
 
                     // Vouchers: index + store are gated by the tenant lifecycle policy
                     Route::get('/vouchers', [VoucherController::class, 'index'])->name('vouchers.index');

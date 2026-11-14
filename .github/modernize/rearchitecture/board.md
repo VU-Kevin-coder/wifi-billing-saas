@@ -44,36 +44,32 @@
 ### Phase: Phase 1 Application Implementation 📌 33bff7b
 - ✅ t13 [backend] Implement the opt-in access path and payment-safe domain behavior (20:42:48Z→20:53:55Z, 11m 7s) — radius-only activation and tested per-router fallback; existing agent/payment contracts preserved [deps: t10, t11, t12]
 
-### Phase: Phase 1 Regression Tests
+### Phase: Phase 1 Regression Tests 📌 e77f250
 - ✅ t14 [tester] Add isolated migration and focused domain regression tests (20:55:47Z→21:01:15Z, 5m 28s) — 555 full-suite passes; SQLite in-memory only [deps: t12, t13]
 
 ### Phase: Phase 1 Browser Validation Setup
-- ⏳ t15 [tester] Add the pinned Playwright portal journey [deps: t14]
+- ✅ t15 [tester] Add the pinned Playwright portal journey (2026-11-13T22:15:07Z→2026-11-13T22:32:10Z, 17m 3s) — 1 Playwright journey passed; isolated SQLite only; no .env access [deps: t14]
 
 ### Phase: Phase 1 Dependency Security
-- ⏳ t16 [backend] Scan all dependency manifests for advisories via skill(cve-remediation) [deps: t15]
+- ✅ t16 [backend] Scan all dependency manifests for advisories via skill(cve-remediation) (2026-11-13T22:34:31Z→2026-11-13T22:42:59Z, 8m 28s) — 0 HIGH/CRITICAL; LOW advisory fixed in composer.lock; PHP 8.3 locked-package mismatch flagged for gates [deps: t15]
+
+### Phase: Phase 1 Remediation
+- ✅ t22.1 [backend] Align locked Composer dependencies with PHP 8.2 without changing the target (2026-11-13T22:52:24Z→2026-11-13T22:56:48Z, 4m 24s) — PHP 8.2.12 lock check and install dry-run passed; application runtime behavior remains for t20 [deps: t16]
+- ✅ t22.2 [backend] Add authorized one-time router-secret delivery and regression coverage (2026-11-13T23:22:51Z→2026-11-13T23:29:41Z, 6m 50s) — 4 isolated SQLite tests passed; one-time tenant-scoped delivery verified [deps: t22.1]
+- ✅ t22.3 [backend] Add a fail-closed private-channel policy guard and tests (2026-11-13T23:31:26Z→2026-11-13T23:47:09Z, 15m 43s) — fail-closed CIDR guard; 13 isolated tests pass; production reachability remains unverified [deps: t22.2]
+- ✅ t22.4 [backend] Re-scan dependency manifests after PHP 8.2 compatibility changes (2026-11-13T22:58:14Z→2026-11-13T23:01:28Z, 3m 14s) — Composer/npm audits clear; PHP 8.2 platform checks passed [deps: t22.1]
 
 ### Phase: Phase 1 Independent Review
-- ⏳ t17 [architect] Review implementation against the approved architecture [deps: t12, t13, t14, t15, t16]
-- ⏳ t18 [security] Audit payment, tenant, credential, and replay protections [deps: t12, t13, t14, t15, t16]
+- ✅ t17 [architect] Review implementation against the approved architecture (2026-11-14T04:00:34Z→2026-11-14T04:03:37Z, 3m 3s) — 0 HIGH/CRITICAL; MEDIUM F-04 concurrent admission vs capacity accounting remains open; F-03 deployment reachability unverified [deps: t12, t13, t14, t15, t16, t22.1, t22.2, t22.3, t22.4]
+- ✅ t18 [security] Audit payment, tenant, credential, and replay protections (2026-11-13T22:48:32Z→2026-11-13T22:49:38Z, 1m 6s) — 0 HIGH/CRITICAL; MEDIUM control gaps and Airtel contract uncertainty retained [deps: t12, t13, t14, t15, t16]`r`n- ✅ t18.1 [security] Re-audit post-remediation payment, tenant, credential, and replay protections (2026-11-14T04:00:34Z→2026-11-14T04:07:10Z, 6m 36s) — 0 HIGH/CRITICAL; production ingress/TLS/cache and Airtel provider-field guarantees unverified [deps: t12, t13, t14, t15, t16, t22.1, t22.2, t22.3, t22.4]
 
 ### Phase: Phase 1 Smoke Test
-- ⏳ t19 [architect] Run the independent full build and startup smoke test [deps: t12, t13, t14, t15, t16]
+- ✅ t19 [architect] Run the independent full build and startup smoke test (2026-11-14T04:00:34Z→2026-11-14T04:15:31Z, 14m 57s) — PHP 8.2/Laravel 12 dependency and Vite builds, syntax checks, isolated startup passed; 344 checks passed [deps: t12, t13, t14, t15, t16, t22.1, t22.2, t22.3, t22.4]
 
 ### Phase: Phase 1 Runtime Validation
-- ⏳ t20 [tester] Execute the Phase 1 runtime and compatibility validation matrix [deps: t17, t18, t19]
+- ✅ t20 [tester] Execute the Phase 1 runtime and compatibility validation matrix (2026-11-14T04:18:06Z→2026-11-14T04:27:27Z, 9m 21s) — 564 PHPUnit tests, 1 Playwright flow, PHP 8.2 Composer check passed; 1 MEDIUM F-04 and environment/selector blockers remain [deps: t17, t18.1, t19]
 
 ### Phase: Phase 1 Release Gate
-- ⏳ t21 [teamlead] Apply the binary Phase 1 release gate and stop [deps: t20]
+- ❌ t21 [teamlead] Apply the binary Phase 1 release gate and stop — FAIL at 2026-11-14T04:33:45Z; 2 MEDIUM issues and target DB/runtime prerequisites unresolved [deps: t20]
 
-
-
-
-
-
-
-
-
-
-
-
+**Phase 1 release gate**: FAIL. Phase 2 not started. Blockers: supported DB engine unknown and Docker unavailable; ccess_mode vs ccess_backend selector mismatch; device-capacity concurrency race; active site-agent sessions may not revoke on switch to RADIUS. Also confirm provider-field guarantees, private-channel deployment settings, and credential-loss rotation. No production DB, infrastructure, deployment, or live-router operations authorized.

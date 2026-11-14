@@ -5,12 +5,17 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Symfony\Component\HttpFoundation\IpUtils;
 use Symfony\Component\HttpFoundation\Response;
 
 class AuthenticateRadiusPolicyService
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if (! $this->sourceIsAllowed($request)) {
+            return $this->unauthorized();
+        }
+
         $serviceSecret = config('radius_policy.service_secret');
         $appKey = config('app.key');
         $timestamp = (string) $request->header('X-Radius-Service-Timestamp', '');
@@ -78,6 +83,56 @@ class AuthenticateRadiusPolicyService
             'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    private function sourceIsAllowed(Request $request): bool
+    {
+        $allowlist = config('radius_policy.allowed_source_cidrs');
+        $production = app()->environment('production');
+
+        if ($allowlist === null || $allowlist === []) {
+            return ! $production;
+        }
+
+        if (! is_array($allowlist)) {
+            return false;
+        }
+
+        // Use the TCP peer, not X-Forwarded-For. Symfony/Laravel may derive
+        // client IPs from forwarding headers when trusted proxies are enabled.
+        $peerAddress = $request->server->get('REMOTE_ADDR');
+        if (! is_string($peerAddress) || filter_var($peerAddress, FILTER_VALIDATE_IP) === false) {
+            return false;
+        }
+
+        foreach ($allowlist as $cidr) {
+            if (! is_string($cidr) || ! $this->isValidSourceCidr($cidr)) {
+                return false;
+            }
+        }
+
+        return $allowlist !== [] && IpUtils::checkIp($peerAddress, $allowlist);
+    }
+
+    private function isValidSourceCidr(string $cidr): bool
+    {
+        if (substr_count($cidr, '/') !== 1) {
+            return false;
+        }
+
+        [$network, $prefix] = explode('/', $cidr, 2);
+        $isIpv4 = filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+        $isIpv6 = filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+
+        if ((! $isIpv4 && ! $isIpv6) || $prefix === '' || ! ctype_digit($prefix)) {
+            return false;
+        }
+
+        $prefixLength = (int) $prefix;
+        $maximumPrefixLength = $isIpv4 ? 32 : 128;
+
+        // /0 would make the allowlist equivalent to trusting every address.
+        return $prefixLength > 0 && $prefixLength <= $maximumPrefixLength;
     }
 
     private function unauthorized(): Response

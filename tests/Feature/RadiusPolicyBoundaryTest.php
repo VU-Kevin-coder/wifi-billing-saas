@@ -53,6 +53,7 @@ class RadiusPolicyBoundaryTest extends TestCase
         config([
             'radius_policy.service_secret' => self::SERVICE_SECRET,
             'radius_policy.nonce_cache_store' => null,
+            'radius_policy.allowed_source_cidrs' => ['10.40.0.0/24'],
         ]);
 
         $path = '/internal/radius/v1/authorize';
@@ -66,7 +67,10 @@ class RadiusPolicyBoundaryTest extends TestCase
         $nonce = Str::random(32);
         $headers = $this->signatureHeaders('POST', $path, $body, $timestamp, $nonce);
 
-        $server = array_merge(['CONTENT_TYPE' => 'application/json'], $this->transformHeadersToServerVars($headers));
+        $server = array_merge(
+            ['CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => '10.40.0.12'],
+            $this->transformHeadersToServerVars($headers),
+        );
         $first = $this->call(
             'POST',
             $path,
@@ -99,6 +103,122 @@ class RadiusPolicyBoundaryTest extends TestCase
             json_encode(['nas_identifier' => 'other-nas', 'voucher_code' => 'NOT-A-VOUCHER'], JSON_THROW_ON_ERROR),
         );
         $tampered->assertUnauthorized();
+    }
+
+    public function test_private_policy_route_allows_a_signed_request_from_an_allowlisted_private_peer(): void
+    {
+        config([
+            'radius_policy.service_secret' => self::SERVICE_SECRET,
+            'radius_policy.nonce_cache_store' => null,
+            'radius_policy.allowed_source_cidrs' => ['10.41.2.0/24'],
+        ]);
+
+        $this->signedCall(
+            'POST',
+            '/internal/radius/v1/authorize',
+            [
+                'nas_identifier' => 'unknown-nas',
+                'nas_session_id' => 'source-allow-test',
+                'voucher_code' => 'NOT-A-VOUCHER',
+            ],
+            '10.41.2.9',
+        )->assertOk()->assertExactJson(['decision' => 'reject']);
+    }
+
+    public function test_private_policy_route_rejects_a_non_allowlisted_peer_even_with_forwarded_ip_header(): void
+    {
+        config([
+            'radius_policy.service_secret' => self::SERVICE_SECRET,
+            'radius_policy.nonce_cache_store' => null,
+            'radius_policy.allowed_source_cidrs' => ['10.41.2.0/24'],
+        ]);
+
+        $this->signedCall(
+            'POST',
+            '/internal/radius/v1/authorize',
+            [
+                'nas_identifier' => 'unknown-nas',
+                'nas_session_id' => 'source-deny-test',
+                'voucher_code' => 'NOT-A-VOUCHER',
+            ],
+            '192.168.40.7',
+            '10.41.2.9',
+        )->assertUnauthorized();
+    }
+
+    public function test_production_private_policy_route_keeps_https_hmac_and_replay_checks_for_allowed_peer(): void
+    {
+        $this->withProductionEnvironment(function (): void {
+            config([
+                'app.url' => 'https://localhost',
+                'radius_policy.service_secret' => self::SERVICE_SECRET,
+                'radius_policy.nonce_cache_store' => 'database',
+                'radius_policy.allowed_source_cidrs' => ['10.41.3.0/24'],
+            ]);
+            $this->assertTrue(app()->environment('production'));
+            $this->assertSame('database', config('cache.stores.database.driver'));
+
+            $payload = [
+                'nas_identifier' => 'unknown-nas',
+                'nas_session_id' => 'production-auth-test',
+                'voucher_code' => 'NOT-A-VOUCHER',
+            ];
+            $nonce = Str::random(32);
+
+            $response = $this->signedCall(
+                'POST',
+                '/internal/radius/v1/authorize',
+                $payload,
+                '10.41.3.9',
+                null,
+                $nonce,
+            );
+            $this->assertSame(200, $response->status(), $response->getContent());
+            $response->assertExactJson(['decision' => 'reject']);
+
+            $this->signedCall(
+                'POST',
+                '/internal/radius/v1/authorize',
+                $payload,
+                '10.41.3.9',
+                null,
+                $nonce,
+            )->assertUnauthorized();
+        });
+    }
+
+    public function test_production_private_policy_route_fails_closed_when_source_allowlist_is_missing(): void
+    {
+        $this->withProductionEnvironment(function (): void {
+            config([
+                'radius_policy.service_secret' => self::SERVICE_SECRET,
+                'radius_policy.nonce_cache_store' => null,
+                'radius_policy.allowed_source_cidrs' => [],
+            ]);
+
+            $this->signedCall('POST', '/internal/radius/v1/authorize', [
+                'nas_identifier' => 'unknown-nas',
+                'nas_session_id' => 'missing-allowlist-test',
+                'voucher_code' => 'NOT-A-VOUCHER',
+            ], '10.42.0.4')->assertUnauthorized();
+        });
+    }
+
+    public function test_production_private_policy_route_fails_closed_when_source_allowlist_is_invalid(): void
+    {
+        $this->withProductionEnvironment(function (): void {
+            config([
+                'radius_policy.service_secret' => self::SERVICE_SECRET,
+                'radius_policy.nonce_cache_store' => null,
+                'radius_policy.allowed_source_cidrs' => ['10.42.0.0/33'],
+            ]);
+
+            $this->signedCall('POST', '/internal/radius/v1/authorize', [
+                'nas_identifier' => 'unknown-nas',
+                'nas_session_id' => 'invalid-allowlist-test',
+                'voucher_code' => 'NOT-A-VOUCHER',
+            ], '10.42.0.4')->assertUnauthorized();
+        });
     }
 
     public function test_all_private_policy_endpoints_return_expected_runtime_responses(): void
@@ -423,16 +543,43 @@ class RadiusPolicyBoundaryTest extends TestCase
         ];
     }
 
-    private function signedCall(string $method, string $path, ?array $payload = null)
-    {
+    private function signedCall(
+        string $method,
+        string $path,
+        ?array $payload = null,
+        ?string $remoteAddress = null,
+        ?string $forwardedFor = null,
+        ?string $nonce = null,
+    ) {
         $body = $payload === null ? '' : json_encode($payload, JSON_THROW_ON_ERROR);
         $timestamp = (string) time();
-        $headers = $this->signatureHeaders($method, $path, $body, $timestamp, Str::random(32));
-        $server = array_merge(
-            ['CONTENT_TYPE' => 'application/json'],
-            $this->transformHeadersToServerVars($headers),
-        );
+        $headers = $this->signatureHeaders($method, $path, $body, $timestamp, $nonce ?? Str::random(32));
+        $server = [
+            'CONTENT_TYPE' => 'application/json',
+            'REMOTE_ADDR' => $remoteAddress ?? '127.0.0.1',
+            'HTTPS' => 'on',
+            'SERVER_PORT' => '443',
+        ];
+        if ($forwardedFor !== null) {
+            $server['HTTP_X_FORWARDED_FOR'] = $forwardedFor;
+        }
+        $server = array_merge($server, $this->transformHeadersToServerVars($headers));
 
-        return $this->call($method, $path, [], [], [], $server, $body);
+        $uri = app()->environment('production') ? 'https://localhost'.$path : $path;
+
+        return $this->call($method, $uri, [], [], [], $server, $body);
+    }
+
+    private function withProductionEnvironment(callable $callback): void
+    {
+        $app = app();
+        $environment = $app->environment();
+        $app->instance('env', 'production');
+
+        try {
+            $callback();
+        } finally {
+            $app->instance('env', $environment);
+        }
     }
 }

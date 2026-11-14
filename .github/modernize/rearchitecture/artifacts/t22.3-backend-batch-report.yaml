@@ -1,0 +1,76 @@
+batch_id: "t22.3"
+completed_tasks:
+  - "t22.3"
+blocked_tasks: []
+files_changed:
+  t22.3:
+    - file: "app/Http/Middleware/AuthenticateRadiusPolicyService.php"
+      change_type: "modified"
+      description: "Fail closed on a non-allowlisted or invalid direct TCP peer before existing HMAC/replay authentication."
+    - file: "config/radius_policy.php"
+      change_type: "modified"
+      description: "Parse the comma-separated RADIUS_POLICY_ALLOWED_SOURCE_CIDRS setting."
+    - file: "tests/Feature/RadiusPolicyBoundaryTest.php"
+      change_type: "modified"
+      description: "Cover allowed private peer, rejected/forwarded-header peer, missing/invalid production config, and preserved HTTPS/HMAC/replay behavior."
+    - file: "docs/RADIUS-POLICY-CHANNEL.md"
+      change_type: "added"
+      description: "Document the required production setting as a prerequisite and state reachability remains unverified."
+upstream_artifacts_consumed:
+  t22.3:
+    - artifact: ".github/modernize/rearchitecture/artifacts/t22.2-backend.md"
+      used_for: "Approved boundary and isolated no-env test harness."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t17-architect.md#F-03"
+      used_for: "Source allowlist remediation scope and no production reachability claim."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t10-architect.md#Network boundary"
+      used_for: "Private authenticated channel and forwarding-header trust boundary."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t10-architect.md#Internal API contract"
+      used_for: "Preserved HTTPS/HMAC/replay protection and private endpoint contract."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t15-tester.md"
+      used_for: "Isolated no-environment-file Laravel test procedure."
+    - artifact: ".github/modernize/rearchitecture/clarification.md"
+      used_for: "Laravel/PHP target and Phase 1 operational exclusions."
+evidence_mapping:
+  t22.3:
+    - upstream: "t17-architect.md#F-03"
+      output: "AuthenticateRadiusPolicyService::sourceIsAllowed and RadiusPolicyBoundaryTest"
+      evidence: "Allowlisted peer passes; non-allowlisted direct peer is denied despite an allowlisted X-Forwarded-For value; missing and invalid production allowlists are denied."
+    - upstream: "t10-architect.md#Network boundary"
+      output: "AuthenticateRadiusPolicyService::sourceIsAllowed"
+      evidence: "Peer matching reads REMOTE_ADDR directly, without using forwarded client IP headers."
+    - upstream: "t10-architect.md#Internal API contract"
+      output: "RadiusPolicyBoundaryTest"
+      evidence: "Production-mode HTTPS/HMAC request from an allowlisted peer succeeds once; nonce replay is rejected; existing tampered-signature and replay regressions pass."
+    - upstream: "clarification.md#Backend and #Generic"
+      output: "Changed source files and isolated test results"
+      evidence: "No API, tenant/payment/access behavior, agent path, migration, production DB, deployment, or infrastructure changes; SQLite :memory: tests pass."
+traceability:
+  - requirement: "Phase 1 HIGH F-03"
+    plan_item: "Fail-closed private/trusted source allowlist on internal RADIUS policy endpoints"
+    task: "t22.3"
+    files:
+      - "app/Http/Middleware/AuthenticateRadiusPolicyService.php"
+      - "config/radius_policy.php"
+      - "tests/Feature/RadiusPolicyBoundaryTest.php"
+      - "docs/RADIUS-POLICY-CHANNEL.md"
+    status: "completed"
+protocol_violation: false
+errors: []
+warnings:
+  - "Production configuration and network reachability were intentionally not configured or verified; the allowlist is a prerequisite before enablement."
+test_results:
+  t22.3:
+    command: "php C:\\Users\\Jdoe\\AppData\\Local\\Temp\\wifi-billing-isolated-f03-run-fabd24e0ac8d4f38850bb8dbd7dfc0e4\\vendor\\bin\\phpunit --configuration C:\\Users\\Jdoe\\AppData\\Local\\Temp\\wifi-billing-isolated-f03-run-fabd24e0ac8d4f38850bb8dbd7dfc0e4\\phpunit.xml --do-not-cache-result --testdox tests/Feature/RadiusPolicyBoundaryTest.php"
+    passed: 13
+    failed: 0
+    skipped: 0
+    assertions: 73
+    database: "SQLite :memory:"
+    environment_file_access: "none; isolated base path had no .env or .env.testing"
+    failures: []
+    additional_checks:
+      - "PHP lint passed for middleware, configuration, and test."
+      - "Pint --test passed."
+      - "git diff --check passed."
+      - "Editor diagnostics reported no errors."
+    endpoint_verification: "Internal policy endpoints exercised through the Laravel HTTP kernel; no live production probe."

@@ -5,3 +5,7 @@ Architecture direction: Keep existing routers on the site-agent path by default;
 
 ## 2026-11-13T19:59:30Z — architect [t10]
 Phase 1 adapter decision recorded: private authenticated Laravel policy API; FreeRADIUS has no database access; keep per-router opt-in and site-agent behavior unchanged. Accounting and disconnect status require idempotent, authoritative evidence.
+
+## 2026-11-13T22:50:09Z — coordinator routing
+[t17 architect] HIGH: Repository evidence does not establish protected reachability, HTTPS, or shared replay-cache operation for the private policy API. Require proof before enabling the RADIUS boundary.
+

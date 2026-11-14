@@ -1,0 +1,93 @@
+metadata:
+  generated: "2026-11-13T23:28:32Z"
+  source_tasks: "Task assignment t22.2"
+  last_updated: "2026-11-13T23:28:32Z"
+
+summary:
+  total_tasks: 1
+  completed_tasks: 1
+  in_progress_tasks: 0
+  pending_tasks: 0
+  completion_percentage: 100.0
+
+tasks:
+  - task_id: "t22.2"
+    description: "Add authorized one-time router-secret delivery and focused regression coverage."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Services/RadiusRouterCredentialService.php"
+          change_type: "modified"
+          description: "Prevent repeat disclosure and fail closed on cancelled persistence."
+        - file: "app/Http/Controllers/Operator/RadiusRouterCredentialController.php"
+          change_type: "modified"
+          description: "Accept and verify tenant-domain slug before router path ID; preserve tenant-scoped lookup and one-time no-store response."
+        - file: "routes/web.php"
+          change_type: "modified"
+          description: "Add authenticated admin/MFA/throttled route."
+        - file: "resources/views/operator/routers/show.blade.php"
+          change_type: "modified"
+          description: "Add explicit RADIUS mode confirmation."
+        - file: "resources/views/operator/routers/radius-credential.blade.php"
+          change_type: "added"
+          description: "Display generated secret once."
+        - file: "tests/Feature/RouterRadiusCredentialDeliveryTest.php"
+          change_type: "added"
+          description: "Four focused cases pass: authorized one-time delivery, role authorization, tenant scope, and persistence rollback."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php <repo>/vendor/bin/phpunit --configuration=<isolated-temp-root>/phpunit.xml --do-not-cache-result tests/Feature/RouterRadiusCredentialDeliveryTest.php"
+        passed: 4
+        failed: 0
+        skipped: 0
+        assertions: 35
+        failures: []
+      notes: "Tests ran from a temporary Laravel base path with explicit SQLite :memory:, empty DB_URL, and isolated bootstrap/config/storage. The temporary root had no .env or .env.testing; repository environment files were not accessed. PHP syntax, editor diagnostics, and direct whitespace checks passed. No full build or live-server probe was run."
+    upstream_trace:
+      plan_item: "t17 F-02"
+      requirements: ["F-02"]
+      full_trace: "t17-architect.md#F-02 → t22.2 → operator credential workflow and focused tests"
+
+upstream_artifacts_consumed:
+  - ".github/modernize/rearchitecture/artifacts/t22.1-backend.md — PHP target and runtime-test safety."
+  - ".github/modernize/rearchitecture/artifacts/t15-tester.md — isolated no-environment-file harness pattern."
+  - ".github/modernize/rearchitecture/clarification.md#Backend — stack and compatibility boundaries."
+  - ".github/modernize/rearchitecture/artifacts/t17-architect.md#F-02 — approved one-time delivery remediation."
+  - ".github/modernize/rearchitecture/artifacts/t10-architect.md#Router secret lifecycle — per-router secret lifecycle."
+  - ".github/modernize/rearchitecture/artifacts/t11-security.md#Approved credential boundaries — protected delivery and credential separation."
+  - ".github/modernize/rearchitecture/artifacts/t13-backend.md — activation and site-agent behavior."
+
+evidence_mapping:
+  - upstream: "t17-architect.md#F-02"
+    output: "RadiusRouterCredentialController::store"
+    evidence: "All four focused regressions pass after explicitly binding tenant-domain slug before router ID; authorized delivery and repeat-denial paths complete."
+  - upstream: "t11-security.md#Approved credential boundaries"
+    output: "RadiusRouterCredentialService::optIn and one-time credential view"
+    evidence: "Passing assertions cover encrypted storage, hidden serialization, no-store response, non-secret audit metadata, and repeat denial."
+  - upstream: "clarification.md#Backend"
+    output: "Per-router form and route"
+    evidence: "No payment/public API/site-agent contract, package term, migration, or target was changed."
+
+pending_tasks: []
+untracked_changes: []
+traceability_chain:
+  - chain_id: "TRACE-t22.2-F02"
+    requirement: "F-02"
+    plan_phase: "Phase 1 Remediation"
+    plan_item: "Authorized one-time per-router secret delivery"
+    tasks: ["t22.2"]
+    files:
+      - "app/Services/RadiusRouterCredentialService.php"
+      - "app/Http/Controllers/Operator/RadiusRouterCredentialController.php"
+      - "routes/web.php"
+      - "resources/views/operator/routers/show.blade.php"
+      - "resources/views/operator/routers/radius-credential.blade.php"
+      - "tests/Feature/RouterRadiusCredentialDeliveryTest.php"
+    status: "completed"
+
+validation:
+  passed: true
+  errors: []
+  warnings: []
+  blocking_issues: []

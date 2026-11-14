@@ -28,3 +28,21 @@
 - Focused tests passed (23 tests, 186 assertions); full suite passed (555 tests, 3,016 assertions). Syntax, Pint, and diff checks passed.
 - No production source, external/default database, deployment, router, infrastructure, or Phase 2 changes.
 - Learnings consumed: []
+
+## [t15] Added pinned Playwright portal status journey
+- Added exact `@playwright/test` 1.65.1 and Chromium 159; single browser journey confirms a pending sale stays pending and the payment token travels in the header, not URL.
+- Laravel browser setup uses an explicitly guarded disposable SQLite file, a generated encrypted test session cookie, and an isolated empty environment path; Vite assets are built via Node API with that isolated `envDir`.
+- PHP built-in server and app run without loading repository environment files; cleanup removes the database, fixture, sessions, and temporary environment directory.
+- Browser test passed (1/1); PHP syntax and Composer metadata validation passed. Full PHPUnit/integration suite was not run in t15.
+- Docker availability was checked (`docker info` succeeded) but no container/infrastructure command was used.
+- Learnings consumed: [tester/pesapal-order-binding-regressions, tester/airtel-optional-status-fields, tester/sqlite-migration-safety]
+
+
+## [t20] Executed Phase 1 runtime and compatibility matrix
+- Current Laravel 12.72.0 / PHP 8.2.12 lock compatibility passed; focused regressions (93 tests), full PHPUnit suite (564 tests), and the Playwright pending-payment journey (1 test) passed on isolated SQLite.
+- Repository `context.md` and `decisions.md` were absent; clarification, board, and assigned dependency artifacts supplied the controlling requirements.
+- Standard Artisan test startup could load a repository environment file before tests, so `Tests\TestCase::createApplication()` now directs Dotenv to a random nonexistent temp path, supplies synthetic test-only key/config, clears DB_URL, and forces SQLite memory. Use direct PHPUnit to keep this boundary; do not run `composer test` where its Artisan pre-bootstrap would violate the no-environment-file constraint.
+- Docker CLI presence did not imply daemon availability; exact `docker info` failed because the Docker Desktop Linux engine named pipe was missing. Docker and browser axes are independent; Playwright passed despite the DB-infrastructure fallback.
+- F-04 device-capacity race, production DB engine/locking, selector naming (`access_mode` vs `access_backend`), Airtel provider-field guarantee, deployment reachability, and credential rotation remain open; escalated to their owners. No app source or infrastructure was changed.
+- Pint initially found only line-ending normalization after the test bootstrap edit; applying Pint and rerunning Pint, diff check, PHP syntax, and the isolated regression subset passed.
+- Learnings consumed: [tester/airtel-optional-status-fields, tester/pesapal-order-binding-regressions, tester/playwright-laravel-isolated-env, tester/sqlite-migration-safety]

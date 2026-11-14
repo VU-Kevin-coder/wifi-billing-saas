@@ -495,6 +495,8 @@ class RouterController extends Controller
         $hasApiCredentials = (filled($router->management_ip) || $router->vpnPeer?->enabled)
             && filled($router->api_username)
             && filled($router->api_password);
+        $canProvisionRadius = $request->user()?->hasRole('operator_admin')
+            && $router->getRawOriginal('radius_shared_secret') === null;
         $latestConnectionTest = SiteAgentCommand::query()
             ->where('router_id', $router->id)
             ->whereNull('session_id')
@@ -510,6 +512,7 @@ class RouterController extends Controller
             'agentLastReportedAt',
             'healthStatus',
             'hasApiCredentials',
+            'canProvisionRadius',
             'latestConnectionTest',
         ));
     }

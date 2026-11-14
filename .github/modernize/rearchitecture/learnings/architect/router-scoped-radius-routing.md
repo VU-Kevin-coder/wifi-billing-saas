@@ -13,3 +13,8 @@ For the service boundary, separately authenticate the FreeRADIUS service and res
 ## History
 - 2026-11-13 (wifi-billing-saas/t1): initial
 - 2026-11-13 (wifi-billing-saas/t10): added private policy API identity separation and accounting/reconciliation policy
+
+## History
+- 2026-11-13 (wifi-billing-saas/t1): initial
+- 2026-11-13 (wifi-billing-saas/t10): added private policy API identity separation and accounting/reconciliation policy
+- 2026-11-14 (wifi-billing-saas/t17): remediation round 1 validated the fix set: the PHP 8.2 lock is compatible, RADIUS secret issuance is single-use and tenant-scoped, and the policy guard fails closed on direct `REMOTE_ADDR` CIDR checks. Keep code-level conformance distinct from live production reachability: runtime network proof stays an operational prerequisite rather than a repository-level proof.
