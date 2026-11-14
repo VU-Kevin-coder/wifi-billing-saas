@@ -189,18 +189,24 @@ class VoucherActivationService
 
         $siteId = $context['site_id'] ?? $voucher->site_id;
         if ($siteId) {
-            $router = Router::where('tenant_id', $tenant->id)->where('site_id', $siteId)->first();
-            if ($router) {
-                return $router;
+            $routers = Router::where('tenant_id', $tenant->id)->where('site_id', $siteId)->limit(2)->get();
+            if (config('site_agent.required') && $routers->count() > 1) {
+                throw new LogicException('This site has multiple routers. Specify the router before activating access.');
+            }
+            if ($routers->isNotEmpty()) {
+                return $routers->first();
             }
         }
 
         if ($voucher->assigned_site) {
-            $router = Router::where('tenant_id', $tenant->id)
+            $routers = Router::where('tenant_id', $tenant->id)
                 ->where('site', $voucher->assigned_site)
-                ->first();
-            if ($router) {
-                return $router;
+                ->limit(2)->get();
+            if (config('site_agent.required') && $routers->count() > 1) {
+                throw new LogicException('This site has multiple routers. Specify the router before activating access.');
+            }
+            if ($routers->isNotEmpty()) {
+                return $routers->first();
             }
         }
 
