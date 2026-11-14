@@ -11,15 +11,17 @@ abstract class TestCase extends BaseTestCase
 {
     public function createApplication(): Application
     {
-        $app = require dirname(__DIR__).'/bootstrap/app.php';
+        require __DIR__.'/sanitize-libpq-environment.php';
+
         $environmentPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'wifi-billing-phpunit-'.bin2hex(random_bytes(16));
-        // Server databases are opt-in and deliberately restricted to dedicated,
-        // disposable loopback services. Never inherit application DB_* settings.
-        $driver = $_ENV['TEST_DB_DRIVER'] ?? getenv('TEST_DB_DRIVER') ?: 'sqlite';
+        // Fixed loopback endpoints and opt-in reduce mistakes; they do not prove
+        // that the service is disposable. Never inherit application DB_* settings.
+        $selectedDriver = $_ENV['TEST_DB_DRIVER'] ?? getenv('TEST_DB_DRIVER') ?: null;
+        $driver = $selectedDriver ?? 'sqlite';
         $expected = $_ENV['TEST_EXPECTED_DB_DRIVER'] ?? getenv('TEST_EXPECTED_DB_DRIVER') ?: null;
         $required = $_ENV['TEST_DB_REQUIRE_EXPLICIT'] ?? getenv('TEST_DB_REQUIRE_EXPLICIT') ?: null;
         if (! in_array($driver, ['sqlite', 'mysql', 'pgsql'], true)
-            || ($required === '1' && $expected === null)
+            || ($required === '1' && ($selectedDriver === null || $expected === null))
             || ($expected !== null && $expected !== $driver)
             || ($driver !== 'sqlite' && ($_ENV['TEST_DB_DISPOSABLE'] ?? getenv('TEST_DB_DISPOSABLE')) !== 'yes')) {
             throw new \RuntimeException('Unsafe or inconsistent test database selection; refusing to run.');
@@ -51,6 +53,7 @@ abstract class TestCase extends BaseTestCase
             $_SERVER[$name] = $value;
         }
 
+        $app = require dirname(__DIR__).'/bootstrap/app.php';
         $app->useEnvironmentPath($environmentPath);
         $app->loadEnvironmentFrom('phpunit-environment-disabled');
         $this->traitsUsedByTest = array_flip(class_uses_recursive(static::class));
