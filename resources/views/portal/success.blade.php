@@ -122,6 +122,12 @@
                     return;
                 }
 
+                if (payment.status === 'fulfillment_pending') {
+                    document.getElementById('page-title').textContent = 'Payment confirmed';
+                    document.getElementById('payment-message').textContent =
+                        'Access is being prepared. Please do not pay again.';
+                }
+
                 if (payment.status === 'provisioning' || payment.status === 'activation_pending') {
                     document.getElementById('page-title').textContent = 'Activating your Wi-Fi access…';
                     document.getElementById('payment-message').textContent =
