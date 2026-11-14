@@ -17,9 +17,9 @@
             <directory>app</directory>
         </include>
     </source>
-    <!-- Same as phpunit.xml, but DB_* come from the environment so CI can run the
-         suite against real MySQL / PostgreSQL, where row locks actually work. -->
+    <!-- Requires explicit matching TEST_DB_DRIVER and TEST_EXPECTED_DB_DRIVER. -->
     <php>
+        <env name="TEST_DB_REQUIRE_EXPLICIT" value="1" force="true"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_URL" value="http://localhost:8000"/>
         <env name="APP_TIMEZONE" value="Africa/Kampala"/>
