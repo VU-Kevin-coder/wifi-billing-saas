@@ -41,8 +41,8 @@ jobs:
       - run: cp .env.example .env && php artisan key:generate
       - run: php artisan test
 
-  # The suite that matters for money: row locks (lockForUpdate), JSON-path
-  # queries and migrations only behave like production on a real server.
+  # Server engines exercise engine-specific queries and migrations. Passing a
+  # sequential suite does not establish concurrency or row-lock correctness.
   tests-mysql:
     name: Tests (MySQL 8)
     runs-on: ubuntu-latest
