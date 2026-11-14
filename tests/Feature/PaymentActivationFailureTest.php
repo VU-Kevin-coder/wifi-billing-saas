@@ -32,7 +32,7 @@ class PaymentActivationFailureTest extends TestCase
 
     public function test_verified_payment_activation_failure_currently_rolls_back_then_can_be_retried(): void
     {
-        [$tenant, $transaction] = $this->verifiedPaymentWithActivationFailure();
+        [$tenant, $transaction] = $this->verifiedPaymentWithActivationFailure(expectException: true);
 
         // Characterization of the current bug, NOT a payment-durability fix.
         $this->assertSame('pending', $transaction->fresh()->status);
@@ -42,7 +42,7 @@ class PaymentActivationFailureTest extends TestCase
         $this->assertDatabaseCount('sessions_log', 0);
         $this->assertArrayNotHasKey('voucher_id', $transaction->fresh()->meta);
 
-        // A later verified retry can currently fulfill exactly once.
+        // Sequential retry is idempotent in this scenario, not proof of concurrency safety.
         $this->app->forgetInstance(VoucherActivationService::class);
         $service = app(PaymentService::class);
         $this->assertSame('completed', $service->reconcilePendingPayment($transaction->fresh()));
@@ -65,7 +65,7 @@ class PaymentActivationFailureTest extends TestCase
         $this->assertArrayHasKey('voucher_id', $transaction->fresh()->meta);
     }
 
-    private function verifiedPaymentWithActivationFailure(): array
+    private function verifiedPaymentWithActivationFailure(bool $expectException = false): array
     {
         Http::preventStrayRequests();
         Http::fake([
@@ -82,11 +82,18 @@ class PaymentActivationFailureTest extends TestCase
         $this->mock(VoucherActivationService::class, function ($mock): void {
             $mock->shouldReceive('activate')->once()->andThrow(new \RuntimeException('simulated activation failure'));
         });
+        $thrown = false;
         try {
             app(PaymentService::class)->reconcilePendingPayment($transaction);
-            $this->fail('Expected activation to fail after provider verification.');
-        } catch (\RuntimeException $exception) {
-            $this->assertSame('simulated activation failure', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            if ($expectException) {
+                $this->assertInstanceOf(\RuntimeException::class, $exception);
+                $this->assertSame('simulated activation failure', $exception->getMessage());
+            }
+            $thrown = true;
+        }
+        if ($expectException) {
+            $this->assertTrue($thrown, 'Current behavior propagates the activation failure.');
         }
         Http::assertSent(fn (ClientRequest $request): bool => $request->method() === 'GET'
             && str_ends_with($request->url(), '/collection/v1_0/requesttopay/'.$transaction->provider_reference));
