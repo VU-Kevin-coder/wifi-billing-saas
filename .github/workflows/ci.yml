@@ -39,7 +39,7 @@ jobs:
           restore-keys: composer-
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: cp .env.example .env && php artisan key:generate
-      - run: php artisan test
+      - run: vendor/bin/phpunit
 
   # Server engines exercise engine-specific queries and migrations. Passing a
   # sequential suite does not establish concurrency or row-lock correctness.
