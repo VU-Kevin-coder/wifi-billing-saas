@@ -42,7 +42,7 @@ class NotifyOfflineSiteAgents extends Command
             })
             ->with(['site:id,name', 'tenant:id,name'])
             ->orderBy('id')
-            ->chunkById(100, function ($agents) use (&$notified, $thresholdMinutes, $platformEmails): void {
+            ->chunkById(100, function ($agents) use (&$notified, $platformEmails): void {
                 foreach ($agents as $agent) {
                     $admins = User::withoutTenancy()
                         ->where('tenant_id', $agent->tenant_id)

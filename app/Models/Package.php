@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
-use App\Models\PlatformSetting;
 use App\Support\DataLimit;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;

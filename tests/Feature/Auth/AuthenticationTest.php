@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\Tenant;
 use App\Models\PlatformSetting;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Policy\Policy;
 use Illuminate\Foundation\Testing\RefreshDatabase;

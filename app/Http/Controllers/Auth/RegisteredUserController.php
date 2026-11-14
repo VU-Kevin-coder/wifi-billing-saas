@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\SsoNonce;
 use App\Models\PlatformSetting;
+use App\Models\SsoNonce;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Notifications\RegistrationEmailCode;

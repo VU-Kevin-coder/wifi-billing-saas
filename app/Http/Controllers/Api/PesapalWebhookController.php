@@ -19,8 +19,7 @@ class PesapalWebhookController extends Controller
         Request $request,
         PaymentService $paymentService,
         PesapalOrderVerifier $orderVerifier
-    ): JsonResponse
-    {
+    ): JsonResponse {
         $orderTrackingId = $request->input('OrderTrackingId', $request->query('OrderTrackingId'));
         $merchantReference = $request->input('OrderMerchantReference', $request->query('OrderMerchantReference'));
         $notificationType = $request->input('OrderNotificationType', $request->query('OrderNotificationType', 'IPNCHANGE'));

@@ -8,9 +8,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     private const IDENTITY_TENANT_ROUTER_KEY = 'radius_nas_identities_tenant_router_id_unique';
+
     private const SESSION_IDENTITY_ID_KEY = 'radius_accounting_sessions_identity_id_unique';
+
     private const SESSION_IDENTITY_GENERATION_KEY = 'radius_accounting_sessions_identity_generation_unique';
+
     private const SESSION_TENANT_ROUTER_ID_KEY = 'radius_accounting_sessions_tenant_router_id_unique';
+
     private const IDENTITY_CURRENT_GENERATION_FK = 'radius_nas_identities_current_generation_fk';
 
     public function up(): void

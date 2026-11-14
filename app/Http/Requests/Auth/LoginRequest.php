@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Auth;
 
-use App\Services\Policy\Policy;
 use App\Models\PlatformSetting;
+use App\Services\Policy\Policy;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;

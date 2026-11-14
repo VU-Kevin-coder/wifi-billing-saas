@@ -8,9 +8,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     private const ROUTER_TENANT_KEY = 'routers_tenant_id_id_unique';
+
     private const TRANSACTION_TENANT_KEY = 'transactions_tenant_id_id_unique';
+
     private const SESSION_TENANT_ROUTER_KEY = 'sessions_log_tenant_router_id_unique';
+
     private const VOUCHER_SALE_UNIQUE = 'vouchers_sale_transaction_id_unique';
+
     private const VOUCHER_SALE_TENANT_FK = 'vouchers_tenant_sale_transaction_fk';
 
     public function up(): void
