@@ -24,6 +24,13 @@ class SmsService
             ];
         }
 
+        if ($provider === 'disabled') {
+            return ['success' => false, 'message' => 'SMS delivery is disabled in platform settings.'];
+        }
+        if (! in_array($provider, ['twilio', 'africastalking'], true)) {
+            return ['success' => false, 'message' => "The configured SMS provider '{$provider}' is not supported by this application."];
+        }
+
         try {
             if ($provider === 'twilio') {
                 return self::sendViaTwilio($normalizedPhone, $message);
@@ -49,7 +56,7 @@ class SmsService
     public static function sendViaAfricasTalking(string $to, string $message): array
     {
         $username = PlatformSetting::get('sms_username', 'sandbox');
-        $apiKey = PlatformSetting::get('sms_api_key');
+        $apiKey = PlatformSetting::getSecret('sms_api_key') ?: PlatformSetting::get('sms_api_key');
         $environment = PlatformSetting::get('sms_environment', 'sandbox');
         $senderId = PlatformSetting::get('sms_sender_id');
 
@@ -126,7 +133,7 @@ class SmsService
     public static function sendViaTwilio(string $to, string $message): array
     {
         $accountSid = PlatformSetting::get('sms_username'); // Account SID
-        $authToken = PlatformSetting::get('sms_api_key');   // Auth Token
+        $authToken = PlatformSetting::getSecret('sms_api_key') ?: PlatformSetting::get('sms_api_key'); // Auth Token
         $fromNumber = PlatformSetting::get('sms_sender_id');
 
         if (empty($accountSid) || empty($authToken)) {

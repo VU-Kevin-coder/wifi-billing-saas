@@ -28,6 +28,7 @@ class RefundController extends Controller
             'pending' => Refund::withoutTenancy()->with($with)->where('status', 'pending')->oldest()->get(),
             'recent' => Refund::withoutTenancy()->with($with)->where('status', '!=', 'pending')->latest('decided_at')->limit(25)->get(),
             'currency' => PlatformSetting::get('currency', 'UGX'),
+            'decisionSlaHours' => max(1, (int) PlatformSetting::get('refunds.payout_sla', 48)),
         ]);
     }
 

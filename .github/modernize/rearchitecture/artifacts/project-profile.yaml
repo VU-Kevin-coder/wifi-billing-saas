@@ -1,0 +1,85 @@
+﻿project:
+  scope_path: "."
+  loc: 72416
+  languages: [php, javascript]
+  git: true
+  structure:
+    app: "Laravel application, services, models, and controllers"
+    routes: "Web, API, and console routes"
+    database: "Migrations, factories, and seeders"
+    resources: "Blade views and frontend assets"
+    tests: "PHPUnit feature and unit tests"
+    config: "Laravel application and integration configuration"
+    docs: "Hardware and production-readiness documentation"
+    docker: "Local container and runtime configuration"
+  notes: "Single Laravel modular monolith; PHP is primary. Phase 1 is limited to repository/domain and payment-safety changes for optional per-router access. No infrastructure, deployment, router operations, or UI redesign."
+
+assessment:
+  change_type: upgrade
+  rationale: |
+    Same application and language remain in place. The approved scope adds an optional access backend and payment/domain safeguards without replacing Laravel, changing existing contracts, or altering the existing site-agent flow.
+  transformations:
+    - fromStack: "Laravel 12 / PHP"
+      fromStackVersion: "Laravel 12; PHP ^8.2"
+      toStack: "Laravel 12 / PHP 8.2 with optional WireGuard + FreeRADIUS"
+      toStackVersion: "Laravel 12 / PHP 8.2; FreeRADIUS 3.2"
+  grouping_needed: false
+  deep_planning: true
+
+progress_sync:
+  run_id: 16f9231a-0698-46b8-8698-c1ab54c4e75e
+  grouping_mode: none
+  execution_mode: phase-by-phase
+  plan_start_time: "2026-11-13T18:10:44Z"
+  plan_completed_time: "2026-11-13T19:41:27Z"
+  execution_start_time: "2026-11-13T19:53:33Z"
+  execution_completed_time: null
+  validation_start_time: "2026-11-13T21:02:18Z"
+  validation_completed_time: null
+  total_phases: 14
+  completed_phases: 13
+  total_modules: 1
+  completed_modules: 0
+  total_tasks: 33
+  completed_tasks: 32
+  total_commits: 93
+  build_verified: true
+  test_verified: true
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

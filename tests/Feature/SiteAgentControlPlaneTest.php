@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\AccessRevoker;
+use App\Services\RadiusRouterCredentialService;
 use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
@@ -30,6 +31,8 @@ class SiteAgentControlPlaneTest extends TestCase
     {
         config(['site_agent.required' => true]);
         [$tenant, $site, $router, $agent, $voucher] = $this->createSiteSetup();
+
+        $this->assertSame('site_agent', $router->fresh()->access_backend);
 
         $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
             ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
@@ -50,6 +53,73 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertArrayNotHasKey('shared_users', $command->payload);
         $this->assertMatchesRegularExpression('/^00:59:[0-5][0-9]$/', $command->payload['limit_uptime']);
         $this->assertArrayNotHasKey('api_password', $command->payload);
+    }
+
+    public function test_radius_activation_is_pending_and_explicit_router_rollback_uses_site_agent(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, $site, $router, $agent, $radiusVoucher] = $this->createSiteSetup();
+        app(RadiusRouterCredentialService::class)->optIn($router, 'radius-rollback-test');
+        $agent->delete();
+
+        $this->post("http://{$tenant->slug}.localhost/portal/redeem", [
+            'voucher_code' => $radiusVoucher->code,
+            'router_id' => $router->id,
+        ])->assertRedirect("http://{$tenant->slug}.localhost/portal/success");
+        $radiusSession = Session::query()->where('voucher_id', $radiusVoucher->id)->sole();
+
+        $this->assertSame('provisioning', $radiusSession->status);
+        $this->assertSame('redeemed', $radiusVoucher->fresh()->status);
+        $this->assertDatabaseCount('site_agent_commands', 0);
+
+        // Rollback is an explicit per-router backend change, not automatic fallback.
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $agent = SiteAgent::create([
+            'tenant_id' => $tenant->id,
+            'site_id' => $site->id,
+            'name' => 'Replacement Site Agent',
+            'token_hash' => hash('sha256', 'replacement-agent-token'),
+        ]);
+
+        $agentSession = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $radiusVoucher, Request::create('/'), '0771234567'));
+        $retriedSession = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $radiusVoucher, Request::create('/'), '0771234567'));
+
+        $this->assertSame($radiusSession->id, $agentSession->id);
+        $this->assertSame($radiusSession->id, $retriedSession->id);
+        $this->assertSame('provisioning', $agentSession->status);
+        $command = SiteAgentCommand::query()->sole();
+        $this->assertSame('provision_user', $command->operation);
+        $this->assertSame($agent->id, $command->site_agent_id);
+        $this->assertSame($agentSession->id, $command->session_id);
+        $this->assertSame('redeemed', $radiusVoucher->fresh()->status);
+        $this->assertDatabaseCount('sessions_log', 1);
+        $this->assertDatabaseCount('site_agent_commands', 1);
+        $this->assertSame('site_agent', $router->fresh()->access_backend);
+    }
+
+    public function test_incomplete_radius_router_fails_closed_without_agent_fallback_or_entitlement_mutation(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, , $router, , $voucher] = $this->createSiteSetup();
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'radius-incomplete-test',
+            'radius_shared_secret' => null,
+        ])->saveOrFail();
+
+        try {
+            app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+                ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+            $this->fail('Activation unexpectedly fell back from an incomplete RADIUS router.');
+        } catch (\LogicException $exception) {
+            $this->assertStringContainsString('RADIUS router is not fully configured', $exception->getMessage());
+        }
+
+        $this->assertSame('unused', $voucher->fresh()->status);
+        $this->assertDatabaseCount('sessions_log', 0);
+        $this->assertDatabaseCount('site_agent_commands', 0);
     }
 
     public function test_paired_agent_can_poll_and_acknowledge_provision_and_expiry(): void

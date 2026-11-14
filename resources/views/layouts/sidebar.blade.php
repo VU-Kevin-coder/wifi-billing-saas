@@ -134,6 +134,10 @@
                         </svg>
                         <span x-show="!sidebarCollapsed">Configuration</span>
                     </a>
+                    <a href="{{ route('platform.configuration.control') }}"
+                       class="{{ request()->routeIs('platform.configuration.control*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} ml-7 flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <span x-show="!sidebarCollapsed">Control settings</span>
+                    </a>
 
                     @if($currentTenant)
                     <!-- Return to Platform -->

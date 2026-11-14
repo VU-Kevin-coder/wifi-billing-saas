@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Policy\Policy;
@@ -123,14 +124,16 @@ class AuthenticationTest extends TestCase
         $this->assertEquals(2, RateLimiter::attempts('login:ip:127.0.0.1'));
     }
 
-    public function test_password_defaults_require_at_least_twelve_characters(): void
+    public function test_password_defaults_follow_the_platform_minimum_and_breach_setting(): void
     {
+        PlatformSetting::set('security.password_min', 10);
+        PlatformSetting::set('security.password_breach', false);
         $underMinimum = Validator::make(
-            ['password' => 'Pass1234567'],
+            ['password' => 'Pass12345'],
             ['password' => Password::defaults()],
         );
         $atMinimum = Validator::make(
-            ['password' => 'Pass12345678'],
+            ['password' => 'Pass123456'],
             ['password' => Password::defaults()],
         );
 

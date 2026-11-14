@@ -13,6 +13,14 @@ Schedule::command('sessions:expire')
     ->everyMinute()
     ->withoutOverlapping();
 
+Schedule::command('vouchers:expire-unused')
+    ->daily()
+    ->withoutOverlapping();
+
+Schedule::command('platform:prune-retained-data')
+    ->daily()
+    ->withoutOverlapping();
+
 Schedule::command('sessions:retry-revocations')
     ->everyFiveMinutes()
     ->withoutOverlapping();
@@ -22,6 +30,10 @@ Schedule::command('routers:retry-device-actions')
     ->withoutOverlapping();
 
 Schedule::command('routers:mark-stale')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+Schedule::command('site-agents:notify-offline')
     ->everyMinute()
     ->withoutOverlapping();
 

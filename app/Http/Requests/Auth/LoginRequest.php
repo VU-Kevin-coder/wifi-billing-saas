@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\PlatformSetting;
 use App\Services\Policy\Policy;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -57,6 +58,15 @@ class LoginRequest extends FormRequest
 
             throw ValidationException::withMessages([
                 'email' => 'This account has been deactivated. Contact your administrator.',
+            ]);
+        }
+
+        if (PlatformSetting::get('app.maintenance', false)
+            && ! Auth::user()?->hasRole('platform_admin')) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => PlatformSetting::get('app.maintenance_msg', 'The platform is temporarily unavailable for maintenance.'),
             ]);
         }
 

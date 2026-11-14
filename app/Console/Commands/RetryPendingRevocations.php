@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Session;
 use App\Models\Tenant;
+use App\Services\RadiusAccountingService;
 use App\Services\RouterConnectionService;
 use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
@@ -22,6 +23,7 @@ class RetryPendingRevocations extends Command
         SiteAgentCommandService $commands,
         RouterConnectionService $routerService,
         TenantContext $context,
+        RadiusAccountingService $radiusAccounting,
     ): int {
         $queued = 0;
         $failed = 0;
@@ -34,7 +36,7 @@ class RetryPendingRevocations extends Command
             ])
             ->where('pending_revocation', true)
             ->orderBy('id')
-            ->chunkById(100, function ($sessions) use ($commands, $context, &$queued, &$failed): void {
+            ->chunkById(100, function ($sessions) use ($commands, $context, $radiusAccounting, &$queued, &$failed): void {
                 foreach ($sessions as $session) {
                     $router = $session->router;
                     $voucher = $session->voucher;
@@ -53,6 +55,20 @@ class RetryPendingRevocations extends Command
                         $finalStatus = $session->pending_revocation_status === 'disconnected'
                             ? 'disconnected'
                             : 'expired';
+
+                        if ($router->access_backend === 'radius') {
+                            if ($radiusAccounting->requestDisconnect(
+                                $session,
+                                "revocation:{$session->id}:{$finalStatus}",
+                            )) {
+                                $queued++;
+                            } else {
+                                $failed++;
+                            }
+
+                            continue;
+                        }
+
                         $agent = $router->assignedSite?->agent;
                         $agentOnline = $agent
                             && ! $agent->revoked_at

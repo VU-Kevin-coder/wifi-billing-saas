@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
@@ -137,6 +138,36 @@ class RouterProvisioningTest extends TestCase
         $script = (new RouterProvisioningService)->generateScript($this->router);
 
         $this->assertStringContainsString('name="router_api_default"', $script);
+    }
+
+    public function test_platform_router_defaults_are_used_without_bridging_the_wan_interface(): void
+    {
+        config(['services.mikrotik.gateway' => '192.168.20.1']);
+        PlatformSetting::set('hotspot.default_network', '192.168.20.0/24');
+        PlatformSetting::set('hotspot.default_dns', ['9.9.9.9']);
+        PlatformSetting::set('hotspot.wan_interface', 'ether2');
+        PlatformSetting::set('hotspot.walled_garden', ['example.org']);
+        PlatformSetting::set('hotspot.idle_timeout', 7);
+        PlatformSetting::set('router.password_length', 32);
+        PlatformSetting::set('router.disable_insecure', true);
+
+        $router = Router::create([
+            'tenant_id' => $this->tenant->id,
+            'name' => 'Defaulted-Router',
+            'api_password' => null,
+            'ethernet_ports' => ['ether2', 'ether3'],
+        ]);
+        $script = (new RouterProvisioningService)->generateScript($router);
+        $password = $router->fresh()->api_password;
+
+        $this->assertSame(32, strlen($password));
+        $this->assertStringContainsString('address="192.168.20.0/24"', $script);
+        $this->assertStringContainsString('dns-server="9.9.9.9"', $script);
+        $this->assertStringContainsString('dst-host="*example.org*"', $script);
+        $this->assertStringContainsString('keepalive-timeout=7m', $script);
+        $this->assertStringContainsString('/ip service set [find name=telnet] disabled=yes', $script);
+        $this->assertStringNotContainsString('interface="ether2"', $script);
+        $this->assertStringContainsString('interface="ether3"', $script);
     }
 
     public function test_generated_routeros_values_are_escaped_and_generated_password_is_persisted(): void

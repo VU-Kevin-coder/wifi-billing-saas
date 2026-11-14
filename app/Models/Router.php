@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -39,6 +40,7 @@ class Router extends Model
 
     protected $casts = [
         'api_password' => 'encrypted',
+        'radius_shared_secret' => 'encrypted',
         'last_seen_at' => 'datetime',
         'telemetry_at' => 'datetime',
         'has_wireless' => 'boolean',
@@ -49,6 +51,10 @@ class Router extends Model
         'cpu_usage' => 'integer',
         'memory_usage' => 'integer',
         'active_users' => 'integer',
+    ];
+
+    protected $hidden = [
+        'radius_shared_secret',
     ];
 
     public function tenant(): BelongsTo
@@ -69,5 +75,27 @@ class Router extends Model
     public function vpnPeer(): HasOne
     {
         return $this->hasOne(VpnPeer::class);
+    }
+
+    /**
+     * The secret is intentionally not mass assignable or serializable. Callers
+     * that opt a router in must use RadiusRouterCredentialService and deliver
+     * its returned value once through an independently authorized workflow.
+     */
+    public function hasUsableRadiusConfiguration(): bool
+    {
+        if ($this->access_backend !== 'radius'
+            || ! is_string($this->radius_nas_identifier)
+            || trim($this->radius_nas_identifier) === '') {
+            return false;
+        }
+
+        try {
+            $secret = $this->radius_shared_secret;
+        } catch (DecryptException) {
+            return false;
+        }
+
+        return is_string($secret) && strlen($secret) >= 64;
     }
 }

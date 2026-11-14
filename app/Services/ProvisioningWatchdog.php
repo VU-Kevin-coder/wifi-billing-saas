@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Notifications\ProvisioningStuck;
@@ -37,6 +39,7 @@ class ProvisioningWatchdog
     public function __construct(
         private readonly SiteAgentCommandService $commands,
         private readonly TenantContext $context,
+        private readonly RefundService $refunds,
     ) {}
 
     /**
@@ -180,6 +183,7 @@ class ProvisioningWatchdog
         AuditLog::record('provisioning.expired_unprovisioned', $session, [
             'package_id' => $session->package_id,
         ]);
+        $this->requestAutomaticRefund($session, 'package expired before access was provisioned');
         Log::error('Paid session expired without ever being provisioned.', ['session_id' => $session->id]);
         $this->notifyOperators($session, 'expired', $this->minutesSince($session->started_at ?? $session->created_at), true);
 
@@ -206,13 +210,67 @@ class ProvisioningWatchdog
             'minutes' => $minutes,
         ]);
         AuditLog::record('provisioning.stuck', $session, ['reason' => $reason, 'minutes' => $minutes]);
+        if (in_array($reason, ['no_command', 'retries_exhausted'], true)) {
+            $this->requestAutomaticRefund($session, $reason);
+        }
         $this->notifyOperators($session, $reason, $minutes, false);
 
         return 'alerted';
     }
 
+    private function requestAutomaticRefund(Session $session, string $failure): void
+    {
+        if (! PlatformSetting::get('refunds.auto_request', true) || ! $session->voucher_id) {
+            return;
+        }
+
+        $sale = Transaction::withoutTenancy()
+            ->where('tenant_id', $session->tenant_id)
+            ->where('type', 'voucher_sale')
+            ->where('status', 'completed')
+            ->where('meta->voucher_id', $session->voucher_id)
+            ->first();
+
+        if (! $sale) {
+            Log::warning('Automatic refund request skipped because the provisioning session has no completed sale.', [
+                'session_id' => $session->id,
+            ]);
+
+            return;
+        }
+
+        $amount = $this->refunds->refundable($sale);
+        if ($amount <= 0) {
+            return;
+        }
+
+        try {
+            $refund = $this->refunds->request(
+                $sale,
+                $amount,
+                "Automatic request: paid access failed for session #{$session->id} ({$failure}).",
+                null,
+            );
+            AuditLog::record('refund.auto_requested', $refund, [
+                'session_id' => $session->id,
+                'amount' => $amount,
+                'failure' => $failure,
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('Unable to create an automatic refund request after provisioning failure.', [
+                'session_id' => $session->id,
+                'transaction_id' => $sale->id,
+                'exception' => $exception::class,
+            ]);
+        }
+    }
+
     private function notifyOperators(Session $session, string $reason, int $minutes, bool $expired): void
     {
+        if (! PlatformSetting::get('alerts.notify_stuck', true)) {
+            return;
+        }
+
         try {
             $admins = User::withoutTenancy()
                 ->where('tenant_id', $session->tenant_id)

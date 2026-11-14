@@ -4,11 +4,14 @@ namespace App\Services;
 
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Session;
+use App\Models\SmsMessage;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\Tenancy\TenantContext;
+use App\Support\SmsTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -76,7 +79,7 @@ class PaymentService
 
         $pesapalKey = PlatformSetting::get('pesapal_consumer_key');
         $pesapalSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
-        if (filled($pesapalKey) && filled($pesapalSecret)) {
+        if (PlatformSetting::get('pesapal_enabled', true) && filled($pesapalKey) && filled($pesapalSecret)) {
             return $this->initiatePesapalPayment($tenant, $package, $phone, $transaction, $email);
         }
 
@@ -88,6 +91,13 @@ class PaymentService
                 'status' => 'failed',
                 'error' => "Mobile money currently supports UGX packages only. Configure Pesapal for {$currency} packages.",
             ];
+        }
+
+        $providerKey = $network === 'MTN' ? 'mtn_enabled' : 'airtel_enabled';
+        if (! PlatformSetting::get($providerKey, true)) {
+            $transaction->update(['status' => 'failed']);
+
+            return ['status' => 'failed', 'error' => "{$network} payments are disabled by platform settings."];
         }
 
         $configured = $network === 'MTN' ? $this->mtn->isConfigured() : $this->airtel->isConfigured();
@@ -274,9 +284,34 @@ class PaymentService
         $reportedAmount = $providerTransaction['amount'] ?? null;
         $reportedCurrency = $providerTransaction['currency'] ?? null;
 
-        return ($reportedId === null || (string) $reportedId === $transaction->provider_reference)
-            && ($reportedAmount === null || (is_numeric($reportedAmount)
-                && (float) $reportedAmount === (float) $transaction->amount))
+        // Airtel's v1 status response identifies the queried payment by ID and
+        // reports its status; amount and currency may not be returned. Always
+        // bind the result to the stored provider ID and local purchase terms,
+        // while validating amount/currency whenever Airtel includes them.
+        $providerReference = (string) ($transaction->provider_reference ?? '');
+        if ($providerReference === ''
+            || ! is_string($reportedId)
+            || $reportedId === ''
+            || ! hash_equals($providerReference, $reportedId)) {
+            return false;
+        }
+
+        $packageId = $transaction->meta['package_id'] ?? null;
+        $package = $packageId
+            ? Package::withoutTenancy()
+                ->where('tenant_id', $transaction->tenant_id)
+                ->find($packageId)
+            : null;
+        if (! $package
+            || strtoupper((string) $package->currency) !== 'UGX'
+            || (float) $package->price <= 0
+            || (float) $package->price !== (float) round((float) $package->price)
+            || (float) $package->price !== (float) $transaction->amount) {
+            return false;
+        }
+
+        return ($reportedAmount === null || (is_numeric($reportedAmount)
+                && (float) $reportedAmount === (float) $package->price))
             && ($reportedCurrency === null || strtoupper((string) $reportedCurrency) === 'UGX');
     }
 
@@ -322,14 +357,34 @@ class PaymentService
      */
     public function handleSuccessfulPackagePayment(Tenant $tenant, Package $package, string $phone, Transaction $transaction): Voucher
     {
-        return app(TenantContext::class)->runAs($tenant, fn () => DB::transaction(function () use ($tenant, $package, $phone, $transaction) {
+        $result = app(TenantContext::class)->runAs($tenant, fn () => DB::transaction(function () use ($tenant, $package, $phone, $transaction): array {
             $transaction = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+
+            if ((int) $transaction->tenant_id !== (int) $tenant->id
+                || (int) $package->tenant_id !== (int) $tenant->id
+                || round((float) $transaction->amount, 2) !== round((float) $package->price, 2)) {
+                throw new \LogicException('The verified sale does not match its tenant and package.');
+            }
 
             if ($transaction->status !== 'pending') {
                 $voucherId = $transaction->meta['voucher_id'] ?? null;
+                $saleVoucher = Voucher::withoutTenancy()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('sale_transaction_id', $transaction->id)
+                    ->first();
 
-                if ($voucherId) {
-                    return Voucher::withoutTenancy()->findOrFail($voucherId);
+                if ($saleVoucher && $voucherId && (int) $voucherId !== (int) $saleVoucher->id) {
+                    throw new \LogicException("Transaction {$transaction->id} has inconsistent voucher linkage.");
+                }
+
+                if ($saleVoucher || $voucherId) {
+                    return [
+                        'voucher' => $saleVoucher ?? Voucher::withoutTenancy()
+                            ->where('tenant_id', $tenant->id)
+                            ->findOrFail($voucherId),
+                        'session' => null,
+                        'send_receipt' => false,
+                    ];
                 }
 
                 throw new \LogicException("Transaction {$transaction->id} has already been processed.");
@@ -370,13 +425,18 @@ class PaymentService
                     'status' => 'active',
                 ]);
 
+            $voucherExpiryDays = max(0, (int) PlatformSetting::get('voucher.unused_expiry', 365));
             $voucher = Voucher::create([
                 'tenant_id' => $tenant->id,
                 'voucher_batch_id' => $batch->id,
                 'package_id' => $package->id,
+                'sale_transaction_id' => $transaction->id,
                 'code' => 'ONL-'.strtoupper(Str::random(6)),
                 'status' => 'unused',
                 'redeemed_by' => $phone,
+                'expires_at' => $voucherExpiryDays > 0
+                    ? now()->addDays($voucherExpiryDays)
+                    : null,
             ]);
 
             $transaction->update([
@@ -386,7 +446,7 @@ class PaymentService
                 ]),
             ]);
 
-            $this->tenantContext->runAs($tenant, fn () => $this->voucherActivation->activate(
+            $session = $this->tenantContext->runAs($tenant, fn () => $this->voucherActivation->activate(
                 $tenant,
                 $voucher,
                 Request::create('/'),
@@ -394,8 +454,48 @@ class PaymentService
                 $transaction->fresh()->meta ?? [],
             ));
 
-            return $voucher;
+            return ['voucher' => $voucher, 'session' => $session, 'send_receipt' => true];
         }));
+
+        if ($result['send_receipt'] && PlatformSetting::get('sms.voucher_receipt', true)) {
+            $this->sendVoucherReceipt($tenant, $package, $phone, $result['voucher'], $result['session']);
+        }
+
+        return $result['voucher'];
+    }
+
+    private function sendVoucherReceipt(Tenant $tenant, Package $package, string $phone, Voucher $voucher, Session $session): void
+    {
+        $cap = (int) config('sms.monthly_cap_per_tenant', 300);
+        $sentThisMonth = SmsMessage::withoutTenancy()
+            ->where('tenant_id', $tenant->id)
+            ->where('status', 'sent')
+            ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
+            ->count();
+        $capped = $cap > 0 && $sentThisMonth >= $cap;
+        $template = (string) PlatformSetting::get(
+            'sms.template',
+            'Your {package} pass is active until {expires}. Code: {code}. Help: {support_phone}',
+        );
+        $message = SmsTemplate::render($template, [
+            'package' => $package->name,
+            'expires' => $session->expires_at?->format('d M Y H:i') ?? 'no expiry',
+            'code' => $voucher->code,
+            'support_phone' => (string) PlatformSetting::get('support_phone', ''),
+        ]);
+        $result = $capped
+            ? ['success' => false, 'message' => 'Monthly SMS cap reached.']
+            : SmsService::send($phone, $message);
+
+        SmsMessage::withoutTenancy()->create([
+            'tenant_id' => $tenant->id,
+            'session_id' => $session->id,
+            'type' => 'voucher_receipt',
+            'recipient' => SmsService::normalizePhoneNumber($phone) ?? $phone,
+            'status' => ($result['success'] ?? false) ? 'sent' : 'failed',
+            'segments' => SmsTemplate::segments($message),
+            'detail' => Str::limit((string) ($result['message'] ?? ''), 250, ''),
+        ]);
     }
 
     public function initiatePesapalPayment(
@@ -405,6 +505,12 @@ class PaymentService
         Transaction $transaction,
         ?string $email = null,
     ): array {
+        if (! PlatformSetting::get('pesapal_enabled', true)) {
+            $transaction->update(['status' => 'failed']);
+
+            return ['status' => 'failed', 'error' => 'Pesapal payments are disabled by platform settings.'];
+        }
+
         $amount = (float) $package->price;
         $consumerKey = PlatformSetting::get('pesapal_consumer_key');
         $consumerSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');

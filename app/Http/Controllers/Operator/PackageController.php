@@ -42,9 +42,12 @@ class PackageController extends Controller
             'price' => ['required', 'numeric', 'min:0'],
             'duration_value' => ['required', 'integer', 'min:1'],
             'duration_unit' => ['required', 'in:minutes,hours,days,weeks,months,years'],
-            'speed_limit_mbps' => ['required', 'integer', 'min:1'],
-            'device_limit' => ['required', 'integer', 'min:1'],
+            'speed_limit_mbps' => ['required', 'integer', 'min:1', 'max:'.(int) PlatformSetting::get('package.max_speed', 100)],
+            'device_limit' => ['required', 'integer', 'min:1', 'max:'.(int) PlatformSetting::get('package.max_devices', 5)],
             'data_limit' => ['nullable', 'string', 'max:50', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! PlatformSetting::get('package.data_caps', true) && ! DataLimit::isUnlimited($value)) {
+                    $fail('Data caps are disabled by the platform.');
+                }
                 if (! DataLimit::isValid($value)) {
                     $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
                 }
@@ -77,9 +80,12 @@ class PackageController extends Controller
             'price' => ['required', 'numeric', 'min:0'],
             'duration_value' => ['required', 'integer', 'min:1'],
             'duration_unit' => ['required', 'in:minutes,hours,days,weeks,months,years'],
-            'speed_limit_mbps' => ['required', 'integer', 'min:1'],
-            'device_limit' => ['required', 'integer', 'min:1'],
+            'speed_limit_mbps' => ['required', 'integer', 'min:1', 'max:'.(int) PlatformSetting::get('package.max_speed', 100)],
+            'device_limit' => ['required', 'integer', 'min:1', 'max:'.(int) PlatformSetting::get('package.max_devices', 5)],
             'data_limit' => ['nullable', 'string', 'max:50', function (string $attribute, mixed $value, \Closure $fail) {
+                if (! PlatformSetting::get('package.data_caps', true) && ! DataLimit::isUnlimited($value)) {
+                    $fail('Data caps are disabled by the platform.');
+                }
                 if (! DataLimit::isValid($value)) {
                     $fail('Enter a data limit like 5GB or 500 MB, or leave it as Unlimited.');
                 }

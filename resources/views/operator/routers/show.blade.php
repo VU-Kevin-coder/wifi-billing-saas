@@ -87,6 +87,40 @@
                 </div>
             @endif
 
+            @if($canProvisionRadius)
+                <section class="rounded-xl border border-indigo-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-base font-bold text-gray-900">RADIUS access for this router</h2>
+                    <p class="mt-2 text-sm text-gray-600">
+                        RADIUS is an explicit per-router choice. Continuing switches only this router from its current access backend and generates a new router-specific secret. Existing site-agent routers and their behavior are unchanged.
+                    </p>
+                    @if($errors->has('nas_identifier') || $errors->has('confirm_radius_mode'))
+                        <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+                            @foreach($errors->all() as $error)
+                                <p>{{ $error }}</p>
+                            @endforeach
+                        </div>
+                    @endif
+                    <form method="POST" action="{{ route('operator.routers.radius-credential.store', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="mt-4 space-y-4">
+                        @csrf
+                        <div>
+                            <label for="nas_identifier" class="mb-1 block text-sm font-medium text-gray-700">Unique NAS identifier</label>
+                            <input id="nas_identifier" name="nas_identifier" required maxlength="255" autocomplete="off"
+                                   value="{{ old('nas_identifier') }}"
+                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            @error('nas_identifier') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                        <label class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                            <input type="checkbox" name="confirm_radius_mode" value="1" required
+                                   class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-sm text-amber-900">I understand this selects RADIUS mode for this router and the generated secret will be disclosed only once.</span>
+                        </label>
+                        <button type="submit" class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                            Enable RADIUS and show secret once
+                        </button>
+                    </form>
+                </section>
+            @endif
+
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                     <h2 class="mb-4 text-base font-bold text-gray-900">Router Details</h2>

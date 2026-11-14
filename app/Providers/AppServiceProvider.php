@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Auth\TenantAwareEloquentUserProvider;
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Site;
 use App\Models\Tenant;
@@ -41,7 +42,13 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Password::defaults(fn () => Password::min(12));
+        Password::defaults(function () {
+            $rule = Password::min(max(8, (int) PlatformSetting::get('security.password_min', 10)));
+
+            return PlatformSetting::get('security.password_breach', true)
+                ? $rule->uncompromised()
+                : $rule;
+        });
 
         Gate::define('viewPulse', fn (User $user): bool => $user->isPlatformAdmin());
 
@@ -87,6 +94,9 @@ class AppServiceProvider extends ServiceProvider
      */
     private function registerRateLimiters(): void
     {
+        RateLimiter::for('public-api', fn (Request $request) => Limit::perMinute(
+            max(10, (int) PlatformSetting::get('security.api_rate', 60))
+        )->by('api:'.$request->ip()));
         RateLimiter::for('auth-register', fn (Request $request) => Limit::perMinute(5)->by('register:'.$request->ip()));
         RateLimiter::for('auth-email-code-send', fn (Request $request) => [
             Limit::perMinute(3)->by('email-code:'.$request->ip()),

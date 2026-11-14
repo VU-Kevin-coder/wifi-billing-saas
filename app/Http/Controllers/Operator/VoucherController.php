@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
@@ -33,6 +34,7 @@ class VoucherController extends Controller
             ->get();
         $redeemed = Voucher::where('status', 'redeemed')->count();
         $voided = Voucher::where('status', 'voided')->count();
+        $expired = Voucher::where('status', 'expired')->count();
 
         // Paginated voucher list with eager-loaded relations
         $vouchers = Voucher::with(['package', 'batch'])
@@ -48,10 +50,11 @@ class VoucherController extends Controller
             ->first();
 
         $voucherSettings = $context->getTenant()->settings;
+        $voucherCharset = PlatformSetting::get('voucher.charset', 'unambiguous');
 
         return view('operator.vouchers.index', compact(
-            'generatedThisMonth', 'unusedStock', 'unusedFaceValueByCurrency', 'redeemed', 'voided',
-            'vouchers', 'packages', 'latestBatch', 'voucherSettings'
+            'generatedThisMonth', 'unusedStock', 'unusedFaceValueByCurrency', 'redeemed', 'voided', 'expired',
+            'vouchers', 'packages', 'latestBatch', 'voucherSettings', 'voucherCharset'
         ));
     }
 
@@ -74,9 +77,12 @@ class VoucherController extends Controller
             return back()->withErrors(['quantity' => "Voucher length in settings ({$length}) is below the platform minimum ({$minLength}). Update Settings → Hotspot."]);
         }
 
+        $charset = (string) PlatformSetting::get('voucher.charset', 'unambiguous');
+        $expiryDays = max(0, (int) PlatformSetting::get('voucher.unused_expiry', 365));
+
         try {
             // One transaction: a batch either exists with all of its vouchers or not at all.
-            [$batch, $batchCode] = DB::transaction(function () use ($tenant, $validated, $settings) {
+            [$batch, $batchCode] = DB::transaction(function () use ($tenant, $validated, $settings, $charset, $expiryDays) {
                 // Serialise batch creation per tenant so numbering cannot race.
                 Tenant::query()->lockForUpdate()->findOrFail($tenant->id);
 
@@ -95,15 +101,18 @@ class VoucherController extends Controller
                     (string) ($settings['voucher_prefix'] ?? ''),
                     (int) ($settings['voucher_length'] ?? 8),
                     (string) ($settings['voucher_format'] ?? 'alphanumeric'),
+                    $charset,
                 );
 
                 $now = now();
+                $expiresAt = $expiryDays > 0 ? $now->copy()->addDays($expiryDays) : null;
                 $rows = array_map(fn (string $code) => [
                     'tenant_id' => $tenant->id,
                     'voucher_batch_id' => $batch->id,
                     'package_id' => $validated['package_id'],
                     'code' => $code,
                     'status' => 'unused',
+                    'expires_at' => $expiresAt,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ], $codes);
@@ -169,14 +178,14 @@ class VoucherController extends Controller
     /**
      * @return list<string> codes that are unique within the batch and among the tenant's existing vouchers
      */
-    private function generateUniqueCodes(int $quantity, string $prefix, int $length, string $format): array
+    private function generateUniqueCodes(int $quantity, string $prefix, int $length, string $format, string $charset): array
     {
         $codes = [];
 
         for ($round = 0; count($codes) < $quantity && $round < 100; $round++) {
             $candidates = [];
             for ($attempt = 0, $need = $quantity - count($codes); count($candidates) < $need && $attempt < $need * 10; $attempt++) {
-                $code = $this->makeCode($prefix, $length, $format);
+                $code = $this->makeCode($prefix, $length, $format, $charset);
                 if (! isset($codes[$code])) {
                     $candidates[$code] = true;
                 }
@@ -201,19 +210,25 @@ class VoucherController extends Controller
         return array_map('strval', array_slice(array_keys($codes), 0, $quantity));
     }
 
-    private function makeCode(string $prefix, int $length, string $format): string
+    private function makeCode(string $prefix, int $length, string $format, string $charset): string
     {
         $length = max(1, $length);
-
-        if ($format === 'numeric') {
-            $raw = (string) random_int((int) str_pad('1', $length, '0'), (int) str_pad('9', $length, '9'));
-        } else {
-            // No look-alike characters (O, 0, I, 1).
-            $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            $raw = '';
-            for ($i = 0; $i < $length; $i++) {
-                $raw .= $chars[random_int(0, strlen($chars) - 1)];
-            }
+        $effectiveFormat = match (true) {
+            $charset === 'numeric', $format === 'numeric' => 'numeric',
+            $charset === 'unambiguous' => 'unambiguous',
+            default => 'alphanumeric',
+        };
+        $chars = match ($effectiveFormat) {
+            'numeric' => $charset === 'unambiguous' ? '23456789' : '0123456789',
+            'alphanumeric' => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            default => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+        };
+        $raw = '';
+        for ($i = 0; $i < $length; $i++) {
+            $firstChar = $i === 0 && $effectiveFormat === 'numeric'
+                ? str_replace('0', '', $chars)
+                : $chars;
+            $raw .= $firstChar[random_int(0, strlen($firstChar) - 1)];
         }
 
         return $prefix !== '' ? "{$prefix}-{$raw}" : $raw;

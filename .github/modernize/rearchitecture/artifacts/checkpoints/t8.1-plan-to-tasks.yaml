@@ -1,0 +1,52 @@
+# Plan-to-Tasks Traceability Revalidation — t8.1
+metadata:
+  generated: "2026-11-13T19:38:56Z"
+  source_plan: ".github/modernize/rearchitecture/artifacts/t7-teamlead-plan.md"
+  source_checkpoint: ".github/modernize/rearchitecture/artifacts/checkpoints/t7-plan-to-tasks.yaml"
+  prior_review: ".github/modernize/rearchitecture/artifacts/checkpoints/t8-plan-to-tasks.yaml"
+
+summary:
+  total_plan_items: 10
+  covered_plan_items: 10
+  coverage_percentage: 100.0
+  total_tasks: 13
+  tasks_with_plan_references: 13
+  requirement_count: 12
+  requirements_mapped: 12
+  orphan_tasks: 0
+
+plan_items:
+  - item_id: "1.1"
+    tasks: ["T001"]
+  - item_id: "1.2"
+    tasks: ["T002", "T005"]
+  - item_id: "1.3"
+    tasks: ["T003", "T005"]
+  - item_id: "1.4"
+    tasks: ["T004", "T005"]
+  - item_id: "2.1"
+    tasks: ["T006", "T007"]
+  - item_id: "2.2"
+    tasks: ["T008", "T009"]
+  - item_id: "3.1"
+    tasks: ["T010"]
+  - item_id: "3.2"
+    tasks: ["T011"]
+  - item_id: "4.1"
+    tasks: ["T012", "T013"]
+  - item_id: "4.2"
+    tasks: ["T013"]
+
+validation:
+  passed: true
+  errors: []
+  warnings: []
+  findings:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 0
+  resolution:
+    finding: "The t7 checkpoint previously omitted T005 under plan items 1.2 and 1.3."
+    correction: "Aligned t7 checkpoint task and upstream-trace mappings with T005's inline [Plan:1.2,1.3,1.4] references."
+    validated: "All 13 unique tasks have matching inline plan references; all 10 plan items and 12 requirements are covered."

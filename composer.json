@@ -7,11 +7,11 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
-        "coding-libs/laravel-mfa": "^2.0",
+        "coding-libs/laravel-mfa": "^1.1",
         "laravel/framework": "^12.0",
         "laravel/pulse": "^1.8",
         "laravel/tinker": "^2.9",
-        "spatie/laravel-permission": "^8.3",
+        "spatie/laravel-permission": "^6.25",
         "zilleali/mikrotik-laravel": "^1.8"
     },
     "require-dev": {
@@ -37,6 +37,10 @@
         }
     },
     "scripts": {
+        "test": [
+            "@php artisan test --do-not-cache-result",
+            "npm run e2e"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

@@ -1,0 +1,238 @@
+# Tasks-to-Implementation Traceability Checkpoint
+metadata:
+  generated: "2026-11-13T20:53:55Z"
+  source_tasks: ".github/modernize/rearchitecture/artifacts/t7-teamlead-plan.md"
+  last_updated: "2026-11-13T20:53:55Z"
+
+summary:
+  total_tasks: 6
+  completed_tasks: 6
+  in_progress_tasks: 0
+  pending_tasks: 0
+  completion_percentage: 100
+
+tasks:
+  - task_id: "T002"
+    description: "Add per-router access identity and secret protection."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Models/Router.php"
+          changes:
+            - change_type: "modified"
+              description: "Encrypt and hide the router secret and fail closed on unusable RADIUS configuration."
+        - file: "app/Services/RadiusRouterCredentialService.php"
+          changes:
+            - change_type: "added"
+              description: "Generate a high-entropy per-router credential and return it only from the generation call."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php artisan test tests/Feature/RadiusPolicyBoundaryTest.php --do-not-cache-result"
+        passed: 8
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "Credential encryption and serialization are tested. Authorized operator delivery is not implemented."
+    upstream_trace:
+      plan_item: "1.2"
+      requirements: ["REQ-002", "REQ-004", "REQ-011"]
+      full_trace: "REQ-002/004/011 -> plan 1.2 -> T002 -> Router and credential service -> focused credential tests"
+
+  - task_id: "T003"
+    description: "Persist typed sale-to-voucher linkage in the existing fulfillment transaction."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Models/Voucher.php"
+          changes:
+            - change_type: "modified"
+              description: "Add typed transaction linkage and relation."
+        - file: "app/Services/PaymentService.php"
+          changes:
+            - change_type: "modified"
+              description: "Validate tenant/package/amount and write/read the typed link atomically while retaining legacy metadata fallback."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php artisan test tests/Feature/RadiusPolicyBoundaryTest.php --do-not-cache-result"
+        passed: 8
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "Sale replay returns the same voucher; no separate build was run."
+    upstream_trace:
+      plan_item: "1.3, 3.1"
+      requirements: ["REQ-004", "REQ-006", "REQ-007", "REQ-008", "REQ-010"]
+      full_trace: "REQ-004/006/007/008/010 -> plan 1.3/3.1 -> T003 -> typed voucher link -> payment replay test"
+
+  - task_id: "T004"
+    description: "Add generation-aware normalized RADIUS accounting and disconnect evidence models."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Models/RadiusNasSessionIdentity.php"
+          changes:
+            - change_type: "added"
+              description: "Represent per-router NAS session identity and generation cursor."
+        - file: "app/Models/RadiusAccountingSession.php"
+          changes:
+            - change_type: "added"
+              description: "Represent a tenant/router-bound accounting generation."
+        - file: "app/Models/RadiusAccountingEvent.php"
+          changes:
+            - change_type: "added"
+              description: "Represent normalized, fingerprinted accounting evidence."
+        - file: "app/Models/RadiusDisconnectCommand.php"
+          changes:
+            - change_type: "added"
+              description: "Represent durable, retryable disconnect commands."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php artisan test tests/Feature/RadiusPolicyBoundaryTest.php --do-not-cache-result"
+        passed: 8
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "Existing additive migrations from t12 were not run outside the isolated PHPUnit SQLite :memory: environment."
+    upstream_trace:
+      plan_item: "1.4"
+      requirements: ["REQ-004", "REQ-008", "REQ-010"]
+      full_trace: "REQ-004/008/010 -> plan 1.4 -> T004 -> accounting/outbox models -> accounting and disconnect tests"
+
+  - task_id: "T006"
+    description: "Dispatch voucher activation through the explicitly selected per-router backend."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Services/RadiusAccountingService.php"
+          changes:
+            - change_type: "added"
+              description: "Implement router-scoped authorization policy consumed by the private RADIUS adapter."
+        - file: "app/Services/VoucherActivationService.php"
+          changes:
+            - change_type: "modified"
+              description: "Keep default site-agent fulfillment; require valid per-router RADIUS identity/secret and retain provisioning status; explicit site-agent rollback resumes an existing pending session without duplicating a command."
+        - file: "tests/Feature/SiteAgentControlPlaneTest.php"
+          changes:
+            - change_type: "modified"
+              description: "Prove the default site-agent path, portal RADIUS opt-in with no agent command, fail-closed incomplete configuration, and same-session per-router rollback."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php artisan test tests/Feature/SiteAgentControlPlaneTest.php --do-not-cache-result"
+        passed: 18
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "The portal redeem route reached the opt-in RADIUS branch and created one pending session with no site-agent command. After explicit access_backend=site_agent rollback, retry reused the same session and queued one site-agent command. Full suite: php artisan test --do-not-cache-result; 550 passed, 0 failed, 0 skipped (2,991 assertions). PHP lint, Pint --test, and scoped git diff --check passed."
+    upstream_trace:
+      plan_item: "2.1"
+      requirements: ["REQ-001", "REQ-002", "REQ-003", "REQ-004", "REQ-005", "REQ-010", "REQ-011"]
+      full_trace: "REQ-001/002/003/004/005/010/011 -> plan 2.1 -> T006 -> VoucherActivationService per-router dispatch and rollback -> SiteAgentControlPlaneTest + full-suite evidence"
+
+  - task_id: "T008"
+    description: "Implement normalized, idempotent accounting reconciliation."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Services/RadiusAccountingService.php"
+          changes:
+            - change_type: "added"
+              description: "Resolve tenant from authenticated router identity, reconcile generations/counters, quarantine stale events, and retry unconfirmed disconnects."
+        - file: "app/Http/Controllers/Api/RadiusPolicyController.php"
+          changes:
+            - change_type: "added"
+              description: "Expose normalized private adapter operations."
+        - file: "app/Http/Middleware/AuthenticateRadiusPolicyService.php"
+          changes:
+            - change_type: "added"
+              description: "Authenticate signed requests and reject replayed nonces."
+        - file: "routes/radius.php"
+          changes:
+            - change_type: "added"
+              description: "Register the four internal adapter routes separately from public API routes."
+        - file: "tests/Feature/RadiusPolicyBoundaryTest.php"
+          changes:
+            - change_type: "added"
+              description: "Verify policy, accounting, endpoint response, and disconnect behavior."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php artisan test --do-not-cache-result"
+        passed: 548
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "Full suite: 2,973 assertions. Production TLS/private-network/cache and target-engine locking remain unverified."
+    upstream_trace:
+      plan_item: "2.2"
+      requirements: ["REQ-004", "REQ-008", "REQ-010", "REQ-011"]
+      full_trace: "REQ-004/008/010/011 -> plan 2.2 -> T008 -> policy/accounting service -> focused and full suite"
+
+  - task_id: "T010"
+    description: "Persist typed linkage inside existing idempotent payment fulfillment."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Services/PaymentService.php"
+          changes:
+            - change_type: "modified"
+              description: "Preserve the transaction lock and return the original voucher on replay."
+        - file: "tests/Feature/RadiusPolicyBoundaryTest.php"
+          changes:
+            - change_type: "added"
+              description: "Verify typed voucher link and payment fulfillment replay."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php artisan test --do-not-cache-result"
+        passed: 548
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "No payment provider or public API contracts were modified."
+    upstream_trace:
+      plan_item: "3.1"
+      requirements: ["REQ-004", "REQ-006", "REQ-007", "REQ-008", "REQ-010"]
+      full_trace: "REQ-004/006/007/008/010 -> plan 3.1 -> T010 -> PaymentService/Voucher -> payment replay assertion"
+
+pending_tasks: []
+
+untracked_changes: []
+
+traceability_chain:
+  - chain_id: "TRACE-PAYMENT-01"
+    requirement: "Verified fulfillment remains tenant/package/amount scoped and idempotent."
+    plan_phase: "Phase 1"
+    plan_item: "3.1"
+    tasks: ["T003", "T010"]
+    files: ["app/Services/PaymentService.php", "app/Models/Voucher.php", "tests/Feature/RadiusPolicyBoundaryTest.php"]
+    status: "complete"
+  - chain_id: "TRACE-RADIUS-01"
+    requirement: "Router-scoped policy and accounting are normalized, replay-safe, and truthful."
+    plan_phase: "Phase 1"
+    plan_item: "2.2"
+    tasks: ["T004", "T008"]
+    files: ["app/Services/RadiusAccountingService.php", "app/Http/Controllers/Api/RadiusPolicyController.php", "tests/Feature/RadiusPolicyBoundaryTest.php"]
+    status: "complete"
+  - chain_id: "TRACE-ACTIVATION-01"
+    requirement: "Explicit per-router activation dispatch without changing site-agent behavior."
+    plan_phase: "Phase 1"
+    plan_item: "2.1"
+    tasks: ["T006"]
+    files: ["app/Services/VoucherActivationService.php", "tests/Feature/SiteAgentControlPlaneTest.php"]
+    status: "complete"
+
+validation:
+  passed: false
+  errors: []
+  warnings:
+    - "The operator-facing one-time router-secret delivery workflow is not implemented."
+    - "Production TLS/private-network/shared-cache constraints are not verified."
+    - "git diff --check reports trailing blank lines in external project-profile.yaml and board.md changes."
+  blocking_issues:
+    - "Authorized one-time per-router secret delivery is not implemented."
+    - "Production TLS/private-network/shared-cache constraints and the production database engine remain unverified; no migration execution is authorized."
+    - "Phase 1 end-to-end lab and release-gate evidence remains incomplete; stop before Phase 2."

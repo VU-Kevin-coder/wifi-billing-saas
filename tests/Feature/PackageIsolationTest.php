@@ -122,6 +122,40 @@ class PackageIsolationTest extends TestCase
         ]);
     }
 
+    public function test_package_controls_reject_values_above_the_platform_limits(): void
+    {
+        $admin = User::factory()->create(['tenant_id' => $this->acme->id]);
+        $admin->assignRole('operator_admin');
+        PlatformSetting::set('package.max_speed', 10);
+        PlatformSetting::set('package.max_devices', 2);
+
+        $this->actingAs($admin)
+            ->post('http://acme.localhost:8000/operator/packages', [
+                'name' => 'Too fast',
+                'price' => 100,
+                'duration_value' => 1,
+                'duration_unit' => 'days',
+                'speed_limit_mbps' => 11,
+                'device_limit' => 2,
+            ])
+            ->assertSessionHasErrors('speed_limit_mbps');
+
+        PlatformSetting::set('package.data_caps', false);
+        $this->actingAs($admin)
+            ->post('http://acme.localhost:8000/operator/packages', [
+                'name' => 'Capped',
+                'price' => 100,
+                'duration_value' => 1,
+                'duration_unit' => 'days',
+                'speed_limit_mbps' => 5,
+                'device_limit' => 2,
+                'data_limit' => '2GB',
+            ])
+            ->assertSessionHasErrors('data_limit');
+
+        $this->assertSame(0, Package::withoutTenancy()->where('tenant_id', $this->acme->id)->count());
+    }
+
     public function test_operator_can_view_packages_page_and_dashboard(): void
     {
         URL::defaults(['tenant' => $this->acme->slug]);

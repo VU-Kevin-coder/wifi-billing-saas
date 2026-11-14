@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -189,6 +190,8 @@ class PesapalPaymentTest extends TestCase
             'https://cybqa.pesapal.com/pesapalv3/api/Transactions/GetTransactionStatus?orderTrackingId=trk-callback-1' => Http::response([
                 'payment_status_description' => 'COMPLETED',
                 'amount' => 2000,
+                'currency' => 'UGX',
+                'merchant_reference' => 'ONL-CALLBACK-1',
             ]),
         ]);
 
@@ -232,6 +235,8 @@ class PesapalPaymentTest extends TestCase
             'https://cybqa.pesapal.com/pesapalv3/api/Transactions/GetTransactionStatus?orderTrackingId=trk-ipn-1' => Http::response([
                 'payment_status_description' => 'COMPLETED',
                 'amount' => 2000,
+                'currency' => 'UGX',
+                'merchant_reference' => 'ONL-IPN-1',
             ]),
         ]);
 
@@ -257,5 +262,251 @@ class PesapalPaymentTest extends TestCase
         $this->assertSame('completed', $transaction->status);
         $this->assertDatabaseCount('vouchers', 1);
         $this->assertSame(1800.0, (float) $this->tenant->fresh()->wallet_balance);
+    }
+
+    #[DataProvider('invalidCompletedOrderResponsesForCallback')]
+    public function test_pesapal_callback_does_not_fulfill_an_unbound_or_unverified_order(
+        ?string $requestReference,
+        array $providerDetails,
+        int $transactionAmount,
+        bool $splitOrder
+    ): void {
+        $transaction = $this->createPendingPesapalTransaction(
+            'ONL-PESAPAL-REGRESSION-1',
+            'trk-pesapal-regression-1',
+            $transactionAmount
+        );
+        $transactions = [$transaction];
+
+        if ($splitOrder) {
+            $transactions[] = $this->createPendingPesapalTransaction(
+                'ONL-PESAPAL-REGRESSION-OTHER',
+                'trk-pesapal-regression-other'
+            );
+        }
+
+        $this->fakePesapalCompletedStatus($providerDetails, 'trk-pesapal-regression-1');
+
+        $response = $this->get(route('portal.direct.pesapal.callback', [
+            'tenant' => $this->tenant->slug,
+            'OrderTrackingId' => 'trk-pesapal-regression-1',
+            'OrderMerchantReference' => $requestReference,
+        ]));
+
+        $response->assertRedirect()
+            ->assertSessionHasErrors('error');
+        $this->assertPesapalOrdersRemainPending($transactions);
+    }
+
+    #[DataProvider('invalidCompletedOrderResponses')]
+    public function test_pesapal_ipn_does_not_fulfill_an_unbound_or_unverified_order(
+        ?string $requestReference,
+        array $providerDetails,
+        int $transactionAmount,
+        bool $splitOrder,
+        int $expectedStatus
+    ): void {
+        $transaction = $this->createPendingPesapalTransaction(
+            'ONL-PESAPAL-REGRESSION-1',
+            'trk-pesapal-regression-1',
+            $transactionAmount
+        );
+        $transactions = [$transaction];
+
+        if ($splitOrder) {
+            $transactions[] = $this->createPendingPesapalTransaction(
+                'ONL-PESAPAL-REGRESSION-OTHER',
+                'trk-pesapal-regression-other'
+            );
+        }
+
+        $this->fakePesapalCompletedStatus($providerDetails, 'trk-pesapal-regression-1');
+
+        $response = $this->postJson(route('api.webhooks.pesapal'), [
+            'OrderTrackingId' => 'trk-pesapal-regression-1',
+            'OrderMerchantReference' => $requestReference,
+            'OrderNotificationType' => 'IPNCHANGE',
+        ]);
+
+        $response->assertStatus($expectedStatus);
+        if ($expectedStatus === 404) {
+            $response->assertJson(['status' => 'transaction_not_found']);
+        } else {
+            $response->assertJson([
+                'orderNotificationType' => 'IPNCHANGE',
+                'orderTrackingId' => 'trk-pesapal-regression-1',
+                'orderMerchantReference' => $requestReference,
+                'status' => 200,
+            ]);
+        }
+
+        $this->assertPesapalOrdersRemainPending($transactions);
+    }
+
+    public static function invalidCompletedOrderResponses(): array
+    {
+        return [
+            'tracking id and callback merchant reference belong to different orders' => [
+                'ONL-PESAPAL-REGRESSION-OTHER',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-1',
+                    'amount' => 2000,
+                    'currency' => 'UGX',
+                ],
+                2000,
+                true,
+                404,
+            ],
+            'callback merchant reference is missing' => [
+                null,
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-1',
+                    'amount' => 2000,
+                    'currency' => 'UGX',
+                ],
+                2000,
+                false,
+                404,
+            ],
+            'provider merchant reference is missing' => [
+                'ONL-PESAPAL-REGRESSION-1',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'amount' => 2000,
+                    'currency' => 'UGX',
+                ],
+                2000,
+                false,
+                200,
+            ],
+            'provider merchant reference does not match local order' => [
+                'ONL-PESAPAL-REGRESSION-1',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-OTHER',
+                    'amount' => 2000,
+                    'currency' => 'UGX',
+                ],
+                2000,
+                false,
+                200,
+            ],
+            'provider amount is missing' => [
+                'ONL-PESAPAL-REGRESSION-1',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-1',
+                    'currency' => 'UGX',
+                ],
+                2000,
+                false,
+                200,
+            ],
+            'provider amount does not match local transaction' => [
+                'ONL-PESAPAL-REGRESSION-1',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-1',
+                    'amount' => 1999,
+                    'currency' => 'UGX',
+                ],
+                2000,
+                false,
+                200,
+            ],
+            'provider currency is missing' => [
+                'ONL-PESAPAL-REGRESSION-1',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-1',
+                    'amount' => 2000,
+                ],
+                2000,
+                false,
+                200,
+            ],
+            'provider currency does not match package' => [
+                'ONL-PESAPAL-REGRESSION-1',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-1',
+                    'amount' => 2000,
+                    'currency' => 'KES',
+                ],
+                2000,
+                false,
+                200,
+            ],
+            'local transaction amount does not match package price' => [
+                'ONL-PESAPAL-REGRESSION-1',
+                [
+                    'payment_status_description' => 'COMPLETED',
+                    'merchant_reference' => 'ONL-PESAPAL-REGRESSION-1',
+                    'amount' => 2500,
+                    'currency' => 'UGX',
+                ],
+                2500,
+                false,
+                200,
+            ],
+        ];
+    }
+
+    public static function invalidCompletedOrderResponsesForCallback(): array
+    {
+        return array_map(
+            static fn (array $case): array => array_slice($case, 0, 4),
+            self::invalidCompletedOrderResponses()
+        );
+    }
+
+    private function createPendingPesapalTransaction(
+        string $reference,
+        string $trackingId,
+        int $amount = 2000
+    ): Transaction {
+        return Transaction::withoutTenancy()->create([
+            'tenant_id' => $this->tenant->id,
+            'type' => 'voucher_sale',
+            'amount' => $amount,
+            'status' => 'pending',
+            'reference' => $reference,
+            'provider_reference' => $trackingId,
+            'phone' => '0771234567',
+            'meta' => [
+                'package_id' => $this->package->id,
+                'phone' => '0771234567',
+            ],
+        ]);
+    }
+
+    private function fakePesapalCompletedStatus(array $providerDetails, string $trackingId): void
+    {
+        PlatformSetting::set('pesapal_consumer_key', 'test-key');
+        PlatformSetting::setSecret('pesapal_consumer_secret', 'test-secret');
+
+        Http::fake([
+            'https://cybqa.pesapal.com/pesapalv3/api/Auth/RequestToken' => Http::response([
+                'token' => 'mock-token-abc',
+            ]),
+            "https://cybqa.pesapal.com/pesapalv3/api/Transactions/GetTransactionStatus?orderTrackingId={$trackingId}" => Http::response(
+                $providerDetails
+            ),
+        ]);
+    }
+
+    /**
+     * @param  list<Transaction>  $transactions
+     */
+    private function assertPesapalOrdersRemainPending(array $transactions): void
+    {
+        foreach ($transactions as $transaction) {
+            $this->assertSame('pending', $transaction->fresh()->status);
+        }
+
+        $this->assertDatabaseCount('vouchers', 0);
+        $this->assertSame(0.0, (float) $this->tenant->fresh()->wallet_balance);
     }
 }

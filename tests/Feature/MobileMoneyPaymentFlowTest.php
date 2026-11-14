@@ -12,6 +12,7 @@ use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class MobileMoneyPaymentFlowTest extends TestCase
@@ -419,8 +420,6 @@ class MobileMoneyPaymentFlowTest extends TestCase
                 'data' => [
                     'transaction' => [
                         'id' => 'airtel-payment-id',
-                        'amount' => 1000,
-                        'currency' => 'UGX',
                         'status' => 'TS',
                     ],
                 ],
@@ -458,6 +457,132 @@ class MobileMoneyPaymentFlowTest extends TestCase
             ->assertJson(['status' => 'ignored']);
         $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
         $this->assertDatabaseCount('vouchers', 1);
+    }
+
+    public function test_airtel_success_status_without_a_transaction_id_is_not_fulfilled(): void
+    {
+        Http::fake([
+            self::AIRTEL_URL.'/auth/oauth2/token' => Http::response(['access_token' => 'airtel-access-token']),
+            self::AIRTEL_URL.'/standard/v1/payments/airtel-payment-id' => Http::response([
+                'data' => [
+                    'transaction' => [
+                        'status' => 'TS',
+                    ],
+                ],
+            ]),
+        ]);
+        [$tenant, , $transaction] = $this->createPendingPayment();
+        $transaction->update([
+            'provider_reference' => 'airtel-payment-id',
+            'meta' => array_merge($transaction->meta ?? [], ['payment_provider' => 'AIRTEL']),
+        ]);
+
+        $this->postJson('/api/webhooks/airtel', ['transaction' => ['id' => 'airtel-payment-id']])
+            ->assertStatus(422)
+            ->assertJson(['status' => 'mismatch']);
+
+        $this->assertSame('pending', $transaction->fresh()->status);
+        $this->assertSame('0.00', $tenant->fresh()->wallet_balance);
+        $this->assertDatabaseCount('vouchers', 0);
+    }
+
+    public function test_airtel_success_status_accepts_matching_amount_and_currency_when_echoed(): void
+    {
+        Http::fake([
+            self::AIRTEL_URL.'/auth/oauth2/token' => Http::response(['access_token' => 'airtel-access-token']),
+            self::AIRTEL_URL.'/standard/v1/payments/airtel-payment-id' => Http::response([
+                'data' => [
+                    'transaction' => [
+                        'id' => 'airtel-payment-id',
+                        'amount' => '1000',
+                        'currency' => 'UGX',
+                        'status' => 'TS',
+                    ],
+                ],
+            ]),
+        ]);
+        [$tenant, , $transaction] = $this->createPendingPayment();
+        $transaction->update([
+            'provider_reference' => 'airtel-payment-id',
+            'meta' => array_merge($transaction->meta ?? [], ['payment_provider' => 'AIRTEL']),
+        ]);
+
+        $this->postJson('/api/webhooks/airtel', ['transaction' => ['id' => 'airtel-payment-id']])
+            ->assertOk()
+            ->assertJson(['status' => 'completed']);
+
+        $this->assertSame('completed', $transaction->fresh()->status);
+        $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
+        $this->assertDatabaseCount('vouchers', 1);
+    }
+
+    #[DataProvider('airtelStatusMismatches')]
+    public function test_airtel_success_status_with_a_mismatching_provider_detail_is_not_fulfilled(
+        array $providerDetails
+    ): void {
+        Http::fake([
+            self::AIRTEL_URL.'/auth/oauth2/token' => Http::response(['access_token' => 'airtel-access-token']),
+            self::AIRTEL_URL.'/standard/v1/payments/airtel-payment-id' => Http::response([
+                'data' => [
+                    'transaction' => array_merge([
+                        'id' => 'airtel-payment-id',
+                        'status' => 'TS',
+                    ], $providerDetails),
+                ],
+            ]),
+        ]);
+        [$tenant, , $transaction] = $this->createPendingPayment();
+        $transaction->update([
+            'provider_reference' => 'airtel-payment-id',
+            'meta' => array_merge($transaction->meta ?? [], ['payment_provider' => 'AIRTEL']),
+        ]);
+
+        $this->postJson('/api/webhooks/airtel', ['transaction' => ['id' => 'airtel-payment-id']])
+            ->assertStatus(422)
+            ->assertJson(['status' => 'mismatch']);
+
+        $this->assertSame('pending', $transaction->fresh()->status);
+        $this->assertSame('0.00', $tenant->fresh()->wallet_balance);
+        $this->assertDatabaseCount('vouchers', 0);
+    }
+
+    public static function airtelStatusMismatches(): array
+    {
+        return [
+            'provider transaction ID differs from the queried payment' => [['id' => 'another-payment-id']],
+            'provider amount differs from the local purchase' => [['amount' => '999']],
+            'provider amount is not numeric' => [['amount' => 'one thousand']],
+            'provider currency differs from UGX' => [['currency' => 'KES']],
+        ];
+    }
+
+    public function test_airtel_success_status_is_rejected_if_local_package_price_changed(): void
+    {
+        Http::fake([
+            self::AIRTEL_URL.'/auth/oauth2/token' => Http::response(['access_token' => 'airtel-access-token']),
+            self::AIRTEL_URL.'/standard/v1/payments/airtel-payment-id' => Http::response([
+                'data' => [
+                    'transaction' => [
+                        'id' => 'airtel-payment-id',
+                        'status' => 'TS',
+                    ],
+                ],
+            ]),
+        ]);
+        [$tenant, $package, $transaction] = $this->createPendingPayment();
+        $transaction->update([
+            'provider_reference' => 'airtel-payment-id',
+            'meta' => array_merge($transaction->meta ?? [], ['payment_provider' => 'AIRTEL']),
+        ]);
+        $package->update(['price' => 1200]);
+
+        $this->postJson('/api/webhooks/airtel', ['transaction' => ['id' => 'airtel-payment-id']])
+            ->assertStatus(422)
+            ->assertJson(['status' => 'mismatch']);
+
+        $this->assertSame('pending', $transaction->fresh()->status);
+        $this->assertSame('0.00', $tenant->fresh()->wallet_balance);
+        $this->assertDatabaseCount('vouchers', 0);
     }
 
     public function test_unconfigured_provider_fails_closed_instead_of_issuing_a_voucher(): void

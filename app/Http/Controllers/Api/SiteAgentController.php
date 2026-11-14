@@ -21,7 +21,10 @@ class SiteAgentController extends Controller
         /** @var SiteAgent $agent */
         $agent = $request->attributes->get('site_agent');
         $commands = DB::transaction(function () use ($agent): array {
-            $agent->forceFill(['last_seen_at' => now()])->save();
+            $agent->forceFill([
+                'last_seen_at' => now(),
+                'offline_notified_at' => null,
+            ])->save();
             $rows = SiteAgentCommand::query()
                 ->where('site_agent_id', $agent->id)
                 ->where(function ($query): void {

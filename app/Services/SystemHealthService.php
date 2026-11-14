@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\PlatformSetting;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -263,6 +264,11 @@ class SystemHealthService
                 ->unique()
                 ->values()
                 ->all();
+            $configuredRecipients = array_filter(
+                (array) PlatformSetting::get('alerts.platform_emails', []),
+                fn ($email): bool => is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL),
+            );
+            $recipients = array_values(array_unique(array_merge($recipients, $configuredRecipients)));
 
             if ($recipients !== []) {
                 $stateCache->put('system-health:platform-admin-emails', $recipients, 2592000);

@@ -22,6 +22,10 @@ class WalletController extends Controller
         $timezone = PlatformSetting::get('timezone', 'Africa/Kampala');
         $minWithdrawal = (float) PlatformSetting::get('min_withdrawal_amount', 10000);
         $commissionRate = (float) ($tenant->commission_rate ?? PlatformSetting::get('default_commission_rate', 5.00));
+        $payoutMethods = array_values(array_intersect(
+            ['mtn_momo', 'airtel_money', 'bank_transfer'],
+            (array) PlatformSetting::get('wallet.payout_method', ['mtn_momo', 'airtel_money', 'bank_transfer']),
+        ));
 
         $transactionsQuery = Transaction::where('tenant_id', $tenant->id);
 
@@ -67,7 +71,8 @@ class WalletController extends Controller
             'timezone',
             'minWithdrawal',
             'commissionRate',
-            'defaultPhone'
+            'defaultPhone',
+            'payoutMethods',
         ));
     }
 }

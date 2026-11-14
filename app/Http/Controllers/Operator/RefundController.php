@@ -17,32 +17,42 @@ class RefundController extends Controller
     {
         $tenant = $context->getTenant();
         abort_unless($tenant, 404, 'Tenant not found');
+        $canRequestRefund = (bool) PlatformSetting::get('refunds.operator_can_request', true);
 
         $requests = Refund::with('requester')->latest()->paginate(15);
 
-        $sales = Transaction::where('type', 'voucher_sale')
+        $sales = $canRequestRefund ? Transaction::where('type', 'voucher_sale')
             ->where('status', 'completed')
             ->latest()
             ->limit(25)
             ->get()
             ->each(fn (Transaction $sale) => $sale->setAttribute('refundable', $refunds->refundable($sale)))
             ->filter(fn (Transaction $sale) => $sale->refundable > 0)
-            ->values();
+            ->values() : collect();
 
         return view('operator.refunds.index', [
             'tenant' => $tenant,
             'requests' => $requests,
             'sales' => $sales,
             'currency' => PlatformSetting::get('currency', 'UGX'),
+            'canRequestRefund' => $canRequestRefund,
+            'requireRefundNote' => (bool) PlatformSetting::get('refunds.require_note', true),
         ]);
     }
 
     public function store(Request $request, RefundService $refunds)
     {
+        abort_unless(PlatformSetting::get('refunds.operator_can_request', true), 403, 'Refund requests are disabled by the platform.');
+        $requireNote = (bool) PlatformSetting::get('refunds.require_note', true);
         $validated = $request->validate([
             'transaction_id' => ['required', 'integer'],
             'amount' => ['required', 'numeric', 'gt:0'],
-            'reason' => ['required', 'string', 'min:10', 'max:500'],
+            'reason' => array_values(array_filter([
+                $requireNote ? 'required' : 'nullable',
+                'string',
+                $requireNote ? 'min:10' : null,
+                'max:500',
+            ])),
             'revoke_access' => ['sometimes', 'boolean'],
         ]);
 
@@ -54,7 +64,7 @@ class RefundController extends Controller
             $refunds->request(
                 $sale,
                 (float) $validated['amount'],
-                $validated['reason'],
+                trim((string) ($validated['reason'] ?? '')) ?: 'No reason provided',
                 $request->user(),
                 $request->boolean('revoke_access', true),
             );

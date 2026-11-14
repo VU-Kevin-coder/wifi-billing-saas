@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\PlatformSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -48,7 +49,7 @@ class SystemHealthTest extends TestCase
             ->assertJsonPath('checks.scheduler', 'unhealthy');
     }
 
-    public function test_health_transition_emails_active_platform_admins(): void
+    public function test_health_transition_emails_active_platform_admins_and_configured_recipients(): void
     {
         config(['queue.default' => 'database']);
         Cache::put('system-health:scheduler-heartbeat', now()->timestamp, 300);
@@ -64,9 +65,10 @@ class SystemHealthTest extends TestCase
             'deactivated_at' => now(),
         ]);
         $inactiveAdmin->assignRole('platform_admin');
+        PlatformSetting::set('alerts.platform_emails', ['platform-ops@example.test', 'invalid-email']);
 
         Mail::shouldReceive('raw')
-            ->once()
+            ->twice()
             ->withArgs(fn (string $body, callable $callback): bool => str_contains($body, 'queue'))
             ->andReturnNull();
 

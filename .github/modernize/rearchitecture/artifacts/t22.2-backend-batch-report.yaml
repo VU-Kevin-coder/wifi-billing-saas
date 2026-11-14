@@ -1,0 +1,96 @@
+batch_id: "t22.2"
+completed_tasks:
+  - "t22.2"
+blocked_tasks: []
+files_changed:
+  t22.2:
+    - file: "app/Services/RadiusRouterCredentialService.php"
+      change_type: "modified"
+      description: "Tenant-bound locking, one-time issuance guard, and fail-closed persistence check."
+    - file: "app/Http/Controllers/Operator/RadiusRouterCredentialController.php"
+      change_type: "modified"
+      description: "Accept and verify the tenant-domain slug before the router path ID; retain tenant-scoped lookup and no-store one-time delivery."
+    - file: "app/Http/Controllers/Operator/RouterController.php"
+      change_type: "modified"
+      description: "Expose provisioning form only to tenant operator admins before a secret exists."
+    - file: "routes/web.php"
+      change_type: "modified"
+      description: "Register admin-only, recent-MFA, throttled provisioning POST."
+    - file: "resources/views/operator/routers/show.blade.php"
+      change_type: "modified"
+      description: "Add explicit per-router RADIUS selection and confirmation."
+    - file: "resources/views/operator/routers/radius-credential.blade.php"
+      change_type: "created"
+      description: "Render the generated credential once in the existing Blade/Tailwind conventions."
+    - file: "tests/Feature/RouterRadiusCredentialDeliveryTest.php"
+      change_type: "created"
+      description: "Cover authorization, tenant/router scope, one-time delivery, and persistence rollback."
+upstream_artifacts_consumed:
+  t22.2:
+    - artifact: ".github/modernize/rearchitecture/artifacts/t22.1-backend.md"
+      used_for: "PHP 8.2 target and test/environment safety boundary."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t15-tester.md"
+      used_for: "Isolated no-environment-file harness pattern."
+    - artifact: ".github/modernize/rearchitecture/clarification.md#Backend"
+      used_for: "Compatibility and Phase 1 constraints."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t17-architect.md#F-02"
+      used_for: "Authorized one-time delivery and no-retrieval acceptance criteria."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t10-architect.md#Router secret lifecycle"
+      used_for: "Per-router secret lifecycle."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t11-security.md#Approved credential boundaries"
+      used_for: "Protected delivery, authorization, and credential separation."
+    - artifact: ".github/modernize/rearchitecture/artifacts/t13-backend.md"
+      used_for: "Existing RADIUS/site-agent behavior and activation boundaries."
+evidence_mapping:
+  t22.2:
+    - upstream: "t17-architect.md#F-02"
+      output: "RadiusRouterCredentialController::store and RouterRadiusCredentialDeliveryTest"
+      evidence: "All four focused tests pass; authorized delivery returns 200, repeat issuance is denied, cross-tenant access returns 404, non-admin access returns 403, and cancelled persistence rolls back."
+    - upstream: "t11-security.md#Approved credential boundaries"
+      output: "RadiusRouterCredentialService::optIn and one-time response"
+      evidence: "Passing assertions verify encrypted storage, hidden serialization, no-store response, non-secret audit metadata, and no secret in the repeat response."
+    - upstream: "clarification.md#Backend"
+      output: "Tenant-domain route binding and router-scoped provisioning"
+      evidence: "The controller verifies the dispatched tenant slug against TenantContext and retains the router query's tenant_id constraint."
+traceability:
+  - requirement: "Phase 1 HIGH F-02"
+    plan_item: "Authorized operator provisioning and one-time per-router secret delivery"
+    task: "t22.2"
+    files:
+      - "app/Services/RadiusRouterCredentialService.php"
+      - "app/Http/Controllers/Operator/RadiusRouterCredentialController.php"
+      - "routes/web.php"
+      - "resources/views/operator/routers/show.blade.php"
+      - "resources/views/operator/routers/radius-credential.blade.php"
+      - "tests/Feature/RouterRadiusCredentialDeliveryTest.php"
+    status: "completed"
+protocol_violation: false
+errors: []
+warnings: []
+test_results:
+  t22.2:
+    command: 'php D:\projects\wifi-billing-saas\vendor\bin\phpunit --configuration=C:\Users\Jdoe\AppData\Local\Temp\wifi-billing-isolated-7fb4c7b581754f4cb64c5405a99205e8\phpunit.xml --do-not-cache-result tests/Feature/RouterRadiusCredentialDeliveryTest.php'
+    working_directory: "isolated temporary Laravel base path"
+    database: "SQLite :memory:"
+    passed: 4
+    failed: 0
+    errors: 0
+    skipped: 0
+    assertions: 35
+    exit_code: 0
+    failures: []
+    additional_checks:
+      - "PHP syntax checks passed for the changed controller and regression test."
+      - "Editor diagnostics and direct trailing-whitespace checks passed for the changed controller and regression test."
+    endpoint_verification: "The focused feature tests exercised the actual Laravel POST route through the HTTP kernel; the authorized request returned 200."
+endpoint_probes:
+  - method: "POST"
+    path: "/operator/routers/{router}/radius-credential"
+    status: 200
+    result: "PASS"
+    verification: "Authorized route request in RouterRadiusCredentialDeliveryTest using isolated SQLite :memory:."
+validation:
+  passed: true
+  errors: []
+  warnings: []
+  blocking_issues: []

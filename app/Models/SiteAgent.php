@@ -14,11 +14,13 @@ class SiteAgent extends Model
         'name',
         'token_hash',
         'last_seen_at',
+        'offline_notified_at',
         'revoked_at',
     ];
 
     protected $casts = [
         'last_seen_at' => 'datetime',
+        'offline_notified_at' => 'datetime',
         'revoked_at' => 'datetime',
     ];
 

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Log;
@@ -47,10 +48,15 @@ class RouterProvisioningService
         $escapedWifiSsid = $this->escapeRouterOs(mb_strcut($wifiSsid, 0, 32, 'UTF-8'));
 
         $gatewayIp = (string) ($hotspotConfig['gateway'] ?? config('services.mikrotik.gateway'));
-        $network = (string) ($hotspotConfig['network'] ?? config('services.mikrotik.hotspot_network'));
+        $network = (string) ($hotspotConfig['network'] ?? PlatformSetting::get('hotspot.default_network', config('services.mikrotik.hotspot_network')));
         $domain = (string) ($hotspotConfig['domain'] ?? config('services.mikrotik.hotspot_domain'));
-        $dnsServers = (string) ($hotspotConfig['dns'] ?? config('services.mikrotik.dns_servers'));
+        $defaultDnsServers = implode(',', (array) PlatformSetting::get(
+            'hotspot.default_dns',
+            explode(',', (string) config('services.mikrotik.dns_servers')),
+        ));
+        $dnsServers = (string) ($hotspotConfig['dns'] ?? $defaultDnsServers);
         $managementSubnet = $hotspotConfig['management_subnet'] ?? null;
+        $wanInterface = (string) ($hotspotConfig['wan_interface'] ?? PlatformSetting::get('hotspot.wan_interface', 'ether1'));
         [$prefix, $poolStart, $poolEnd] = $this->hotspotNetworkDetails($network, $gatewayIp);
         $this->validateDnsServers($dnsServers);
         $this->validateHostname($domain, 'Hotspot domain');
@@ -72,13 +78,14 @@ class RouterProvisioningService
                 throw new \InvalidArgumentException('Ethernet ports must be valid RouterOS etherN or wlanN interface names.');
             }
         }
+        $ports = array_values(array_filter($ports, fn (string $port): bool => $port !== $wanInterface));
 
         $apiUsername = $router->api_username ?: config('services.mikrotik.api_username');
 
         // Password handling: NEVER use literal ****** or hardcoded dummy passwords
         $apiPassword = $router->api_password;
         if (blank($apiPassword)) {
-            $apiPassword = Str::password(32);
+            $apiPassword = Str::password(max(16, (int) PlatformSetting::get('router.password_length', 24)));
             $router->forceFill(['api_password' => $apiPassword])->save();
         }
 
@@ -92,6 +99,7 @@ class RouterProvisioningService
         $escapedBaseDomain = $this->escapeRouterOs((string) $baseDomain);
         $apiPort = (int) ($router->api_port ?: config('services.mikrotik.api_port'));
         $apiService = $apiPort === 8729 ? 'api-ssl' : 'api';
+        $idleTimeout = max(1, (int) PlatformSetting::get('hotspot.idle_timeout', 2));
         $tenantName = preg_replace('/[\r\n\x00-\x1F]/', ' ', $tenant?->name ?? 'Default');
         $gatewayWithPrefix = "{$gatewayIp}/{$prefix}";
 
@@ -109,6 +117,7 @@ class RouterProvisioningService
         $lines[] = '# 2. Intended for a fresh/dedicated router only; review existing bridge, IP, DHCP,';
         $lines[] = '#    hotspot, and firewall configuration before running on a configured router.';
         $lines[] = '# 3. Supply the management subnet allowed to access the RouterOS API.';
+        $lines[] = '# WAN interface '.$this->escapeRouterOs($wanInterface).' is kept outside the client bridge.';
         $lines[] = '#';
         $lines[] = '# IF THE IMPORT FAILS PARTWAY: inspect /log print; do not blindly rerun on a live network.';
         $lines[] = '# Restore if needed: /system backup load name=pre-wifi-billing (may reboot/disconnect).';
@@ -156,14 +165,19 @@ class RouterProvisioningService
 
         // 5. Walled Garden (Captive portal, Payment gateways - Idempotent)
         $lines[] = '# --- Walled Garden Access ---';
+        $configuredWalledGarden = (array) PlatformSetting::get('hotspot.walled_garden', [
+            'pesapal.com', 'flutterwave.com', 'mtn.co.ug', 'airtel.co.ug',
+        ]);
         $walledHosts = [
             "*{$escapedBaseDomain}*" => 'SaaS Platform Portal',
-            '*pesapal.com*' => 'Pesapal Payment Gateway',
-            '*mtn.co.ug*' => 'MTN MoMo Gateway',
-            '*airtel.co.ug*' => 'Airtel Money Gateway',
             '*google.com*' => 'Android Captive Portal Check',
             '*apple.com*' => 'Apple Captive Portal Check',
         ];
+        foreach ($configuredWalledGarden as $host) {
+            if (is_string($host) && $host !== '') {
+                $walledHosts['*'.trim($host).'*'] = 'Configured platform walled garden';
+            }
+        }
         foreach ($walledHosts as $host => $comment) {
             $escapedHost = $this->escapeRouterOs($host);
             $escapedComment = $this->escapeRouterOs($comment);
@@ -174,6 +188,10 @@ class RouterProvisioningService
 
         // 6. Restrict API access to the explicitly configured management subnet.
         $lines[] = '# --- RouterOS API Management Service ---';
+        if (PlatformSetting::get('router.disable_insecure', true)) {
+            $lines[] = '/ip service set [find name=telnet] disabled=yes';
+            $lines[] = '/ip service set [find name=ftp] disabled=yes';
+        }
         $unusedApiService = $apiService === 'api' ? 'api-ssl' : 'api';
         $lines[] = "/ip service set {$unusedApiService} disabled=yes";
         if ($apiService === 'api-ssl') {
@@ -199,7 +217,7 @@ class RouterProvisioningService
                 $escapedRateLimit = $this->escapeRouterOs($profile['rate-limit']);
                 $settings = "rate-limit=\"{$escapedRateLimit}\" shared-users={$profile['shared-users']}";
                 $lines[] = '# Voucher uptime and data caps are applied to each HotSpot user by the site agent.';
-                $lines[] = ":if ([:len [/ip hotspot user profile find name=\"{$escapedPkgName}\"]] = 0) do={ /ip hotspot user profile add name=\"{$escapedPkgName}\" {$settings} keepalive-timeout=2m status-autorefresh=1m } else={ /ip hotspot user profile set [find name=\"{$escapedPkgName}\"] {$settings} }";
+                $lines[] = ":if ([:len [/ip hotspot user profile find name=\"{$escapedPkgName}\"]] = 0) do={ /ip hotspot user profile add name=\"{$escapedPkgName}\" {$settings} keepalive-timeout={$idleTimeout}m status-autorefresh=1m } else={ /ip hotspot user profile set [find name=\"{$escapedPkgName}\"] {$settings} keepalive-timeout={$idleTimeout}m }";
             }
             $lines[] = '';
         }

@@ -1,0 +1,75 @@
+﻿## User Input
+
+> The user explicitly approved beginning Phase 1. They selected Local Docker Compose lab and MikroTik CHR 7.24.6 as the eventual lab targets. Proceed with Phase 1 only: repository/domain and payment-safety work described in the attached architecture plan, preserving existing agent behavior, API contracts, sales/access terms, and all current tests. First capture a fresh current-checkout baseline and investigate applicable code; make precise changes only. Do not run migrations against the default DB, do not deploy, do not modify/configure routers, and do not begin Phase 2 infrastructure/hub onboarding. The lab choices apply only to later isolated lab work, not permission to change infrastructure now. Stop at the Phase 1 release gate and report exact changes, test evidence, residual risks, and whether Phase 1 criteria pass; wait for explicit approval before Phase 2.
+
+> Explicit follow-up approval: The user authorized the narrowly scoped VoucherActivationService change and rollback tests. Only routers explicitly configured for RADIUS mode may take the new path; default and agent-managed routers retain existing behavior. Add focused tests for compatibility and per-router rollback to the agent backend. No production DB access/migrations, deployment, infrastructure, or real-router changes; stop at Phase 1 release gate.
+
+> Follow-up decision: The user confirmed phase-by-phase execution. Production DB is unknown; inspect repository configuration only, do not connect or migrate. Phase 1 tests may use only the existing automated SQLite test DB. Use a private authenticated Laravel policy API over a protected channel for the RADIUS boundary, not public RADIUS/database access. Generate per-router secrets, encrypt at rest, deliver once, use a separate RADIUS-to-Laravel service secret, and never expose APP_KEY. Use the existing documented platform retention policy; add no raw-event retention until verified. Proceed only with safely implementable Phase 1 work. Keep DB/migration execution and dependent production configuration blocked. Do not start Phase 2, infrastructure setup, deployment, or router changes. Stop at the Phase 1 release gate; do not ask to reconfirm phase-by-phase.
+
+**Project started**: 2026-11-13T18:10:44Z
+
+## Tasks
+
+### Phase: Phase 1 Discovery 📌 29aad52
+- ✅ t1 [architect] Analyze existing access/payment seams and define the additive Phase 1 architecture (18:14:36Z→18:18:40Z, 4m 4s)
+- ✅ t2 [backend] Map current domain and payment fulfillment extension points (18:14:37Z→18:18:07Z, 3m 30s)
+- ✅ t3 [pm] Define preserved API, agent, sales, and access invariants for Phase 1 (18:14:24Z→18:17:33Z, 3m 9s)
+- ✅ t4 [security] Re-review Pesapal callback remediation and confirm no HIGH/CRITICAL findings remain (18:39:23Z→18:41:17Z, 1m 54s) — Pesapal clear; Airtel MEDIUM remains, follow-up scheduled [deps: t4.1, t4.2]
+- ✅ t5 [tester] Capture fresh current-checkout test and build baseline using isolated test configuration (18:14:36Z→18:20:21Z, 5m 45s)
+- ✅ t4.1 [backend] Remediate the HIGH Pesapal callback order-binding finding from t4 (18:22:12Z→18:31:49Z, 9m 37s) [deps: t4]
+- ✅ t4.2 [tester] Add focused regression coverage for Pesapal callback order binding (18:33:58Z→18:37:39Z, 3m 41s) [deps: t4.1]
+- ✅ t4.3 [backend] Confirm Airtel success-response contract and close the missing-field verification gap (18:43:09Z→18:52:57Z, 9m 48s) [deps: t4]
+- ✅ t4.4 [tester] Verify Airtel refusal and contract-boundary regression coverage (18:55:41Z→19:02:28Z, 6m 47s) [deps: t4.3]
+- ✅ t4.5 [security] Re-review payment verification changes and confirm no HIGH/CRITICAL findings remain (19:04:42Z→19:07:46Z, 3m 4s) — 0 HIGH/CRITICAL; LOW dependency advisory and Airtel contract uncertainty recorded [deps: t4.3, t4.4]
+
+### Phase: Phase 1 Data Model 📌 c1fd3bd
+- ✅ t6 [dba] Design additive per-router domain/accounting schema and rollback requirements (19:11:15Z→19:17:38Z, 6m 23s) — implementation dependencies/open decisions documented; no migrations run [deps: t1, t2, t3, t4.5]
+
+### Phase: Phase 1 Plan & Gate 📌 e81a76a
+- ✅ t7 [teamlead] Produce Phase 1 implementation plan and test strategy (19:19:40Z→19:27:15Z, 7m 35s) [deps: t1, t2, t3, t4.5, t5, t6]
+- ✅ t8 [teamlead] Quality-gate Phase 1 plan and strategy (19:30:27Z→19:35:52Z, 5m 25s) — 0 HIGH/CRITICAL; traceability inconsistency resolved by t8.1 [deps: t7]
+- ✅ t8.1 [teamlead] Align T005 plan traceability and rerun mapping validation (19:38:02Z→19:41:27Z, 3m 25s) — 0 mapping findings [deps: t7, t8]
+
+### Phase: Phase 1 Decision Gates 📌 ca02263
+- ✅ t9 [dba] Confirm the supported production database and isolated test target (19:54:37Z→19:55:35Z, 58s) — production engine remains unknown; SQLite in-memory tests only [deps: clarification.md]
+- ✅ t10 [architect] Record the approved adapter and accounting policy decisions (19:57:28Z→19:59:30Z, 2m 2s) — user boundary recorded; DB and retention remain constrained [deps: t9]
+- ✅ t10.1 [dba] Refine disconnect outbox and NAS-session generation schema proposal (20:00:39Z→20:03:34Z, 2m 55s) — ambiguous reused NAS IDs remain pending for reconciliation [deps: t6, t10]
+- ✅ t11 [security] Approve the secret-isolation and least-privilege boundary (20:04:53Z→20:06:50Z, 1m 57s) — design approved; implementation controls remain for t18 [deps: t10.1]
+- ⏳ t10 [architect] Record the approved adapter and accounting policy decisions [deps: t9]
+
+
+### Phase: Phase 1 Domain Schema 📌 b04c6d4
+- ✅ t12 [dba] Add the additive router, sale-link, and accounting schemas (20:09:07Z→20:13:17Z, 4m 10s) — migrations authored, not run; tests used SQLite :memory: [deps: t10.1, t11]
+
+### Phase: Phase 1 Application Implementation 📌 33bff7b
+- ✅ t13 [backend] Implement the opt-in access path and payment-safe domain behavior (20:42:48Z→20:53:55Z, 11m 7s) — radius-only activation and tested per-router fallback; existing agent/payment contracts preserved [deps: t10, t11, t12]
+
+### Phase: Phase 1 Regression Tests 📌 e77f250
+- ✅ t14 [tester] Add isolated migration and focused domain regression tests (20:55:47Z→21:01:15Z, 5m 28s) — 555 full-suite passes; SQLite in-memory only [deps: t12, t13]
+
+### Phase: Phase 1 Browser Validation Setup
+- ✅ t15 [tester] Add the pinned Playwright portal journey (2026-11-13T22:15:07Z→2026-11-13T22:32:10Z, 17m 3s) — 1 Playwright journey passed; isolated SQLite only; no .env access [deps: t14]
+
+### Phase: Phase 1 Dependency Security
+- ✅ t16 [backend] Scan all dependency manifests for advisories via skill(cve-remediation) (2026-11-13T22:34:31Z→2026-11-13T22:42:59Z, 8m 28s) — 0 HIGH/CRITICAL; LOW advisory fixed in composer.lock; PHP 8.3 locked-package mismatch flagged for gates [deps: t15]
+
+### Phase: Phase 1 Remediation
+- ✅ t22.1 [backend] Align locked Composer dependencies with PHP 8.2 without changing the target (2026-11-13T22:52:24Z→2026-11-13T22:56:48Z, 4m 24s) — PHP 8.2.12 lock check and install dry-run passed; application runtime behavior remains for t20 [deps: t16]
+- ✅ t22.2 [backend] Add authorized one-time router-secret delivery and regression coverage (2026-11-13T23:22:51Z→2026-11-13T23:29:41Z, 6m 50s) — 4 isolated SQLite tests passed; one-time tenant-scoped delivery verified [deps: t22.1]
+- ✅ t22.3 [backend] Add a fail-closed private-channel policy guard and tests (2026-11-13T23:31:26Z→2026-11-13T23:47:09Z, 15m 43s) — fail-closed CIDR guard; 13 isolated tests pass; production reachability remains unverified [deps: t22.2]
+- ✅ t22.4 [backend] Re-scan dependency manifests after PHP 8.2 compatibility changes (2026-11-13T22:58:14Z→2026-11-13T23:01:28Z, 3m 14s) — Composer/npm audits clear; PHP 8.2 platform checks passed [deps: t22.1]
+
+### Phase: Phase 1 Independent Review
+- ✅ t17 [architect] Review implementation against the approved architecture (2026-11-14T04:00:34Z→2026-11-14T04:03:37Z, 3m 3s) — 0 HIGH/CRITICAL; MEDIUM F-04 concurrent admission vs capacity accounting remains open; F-03 deployment reachability unverified [deps: t12, t13, t14, t15, t16, t22.1, t22.2, t22.3, t22.4]
+- ✅ t18 [security] Audit payment, tenant, credential, and replay protections (2026-11-13T22:48:32Z→2026-11-13T22:49:38Z, 1m 6s) — 0 HIGH/CRITICAL; MEDIUM control gaps and Airtel contract uncertainty retained [deps: t12, t13, t14, t15, t16]`r`n- ✅ t18.1 [security] Re-audit post-remediation payment, tenant, credential, and replay protections (2026-11-14T04:00:34Z→2026-11-14T04:07:10Z, 6m 36s) — 0 HIGH/CRITICAL; production ingress/TLS/cache and Airtel provider-field guarantees unverified [deps: t12, t13, t14, t15, t16, t22.1, t22.2, t22.3, t22.4]
+
+### Phase: Phase 1 Smoke Test
+- ✅ t19 [architect] Run the independent full build and startup smoke test (2026-11-14T04:00:34Z→2026-11-14T04:15:31Z, 14m 57s) — PHP 8.2/Laravel 12 dependency and Vite builds, syntax checks, isolated startup passed; 344 checks passed [deps: t12, t13, t14, t15, t16, t22.1, t22.2, t22.3, t22.4]
+
+### Phase: Phase 1 Runtime Validation
+- ✅ t20 [tester] Execute the Phase 1 runtime and compatibility validation matrix (2026-11-14T04:18:06Z→2026-11-14T04:27:27Z, 9m 21s) — 564 PHPUnit tests, 1 Playwright flow, PHP 8.2 Composer check passed; 1 MEDIUM F-04 and environment/selector blockers remain [deps: t17, t18.1, t19]
+
+### Phase: Phase 1 Release Gate
+- ❌ t21 [teamlead] Apply the binary Phase 1 release gate and stop — FAIL at 2026-11-14T04:33:45Z; 2 MEDIUM issues and target DB/runtime prerequisites unresolved [deps: t20]
+
+**Phase 1 release gate**: FAIL. Phase 2 not started. Blockers: supported DB engine unknown and Docker unavailable; ccess_mode vs ccess_backend selector mismatch; device-capacity concurrency race; active site-agent sessions may not revoke on switch to RADIUS. Also confirm provider-field guarantees, private-channel deployment settings, and credential-loss rotation. No production DB, infrastructure, deployment, or live-router operations authorized.

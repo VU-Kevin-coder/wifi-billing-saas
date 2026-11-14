@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
-use App\Models\Transaction;
 use App\Services\PaymentService;
+use App\Services\PesapalOrderVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -15,8 +15,11 @@ use Illuminate\Support\Facades\Log;
 
 class PesapalWebhookController extends Controller
 {
-    public function handle(Request $request, PaymentService $paymentService): JsonResponse
-    {
+    public function handle(
+        Request $request,
+        PaymentService $paymentService,
+        PesapalOrderVerifier $orderVerifier
+    ): JsonResponse {
         $orderTrackingId = $request->input('OrderTrackingId', $request->query('OrderTrackingId'));
         $merchantReference = $request->input('OrderMerchantReference', $request->query('OrderMerchantReference'));
         $notificationType = $request->input('OrderNotificationType', $request->query('OrderNotificationType', 'IPNCHANGE'));
@@ -55,21 +58,17 @@ class PesapalWebhookController extends Controller
                 return response()->json(['status' => 'status_check_failed'], 502);
             }
 
-            $status = strtoupper($statusResponse->json('payment_status_description') ?? 'FAILED');
+            $providerDetails = $statusResponse->json();
+            $status = strtoupper($providerDetails['payment_status_description'] ?? 'FAILED');
 
-            $transaction = Transaction::withoutGlobalScopes()
-                ->where(function ($q) use ($merchantReference, $orderTrackingId) {
-                    if ($merchantReference) {
-                        $q->where('reference', $merchantReference);
-                    }
-                    if ($orderTrackingId) {
-                        $q->orWhere('provider_reference', $orderTrackingId);
-                    }
-                })
-                ->first();
+            $transaction = $orderVerifier->findTransaction($orderTrackingId, $merchantReference);
 
             if (! $transaction) {
                 return response()->json(['status' => 'transaction_not_found'], 404);
+            }
+
+            if (! $orderVerifier->matchesMerchantReference($transaction, $providerDetails)) {
+                return $this->acknowledge($notificationType, $orderTrackingId, $merchantReference);
             }
 
             $tenant = Tenant::withoutGlobalScopes()->find($transaction->tenant_id);
@@ -83,7 +82,7 @@ class PesapalWebhookController extends Controller
                     ->find($transaction->meta['package_id'] ?? null);
                 $phone = $transaction->phone ?? ($transaction->meta['phone'] ?? '');
 
-                if ($package) {
+                if ($package && $orderVerifier->matchesCompletedPayment($transaction, $package, $providerDetails)) {
                     $paymentService->handleSuccessfulPackagePayment(
                         $tenant,
                         $package,
@@ -95,16 +94,21 @@ class PesapalWebhookController extends Controller
                 $transaction->update(['status' => 'failed']);
             }
 
-            return response()->json([
-                'orderNotificationType' => $notificationType,
-                'orderTrackingId' => $orderTrackingId,
-                'orderMerchantReference' => $merchantReference,
-                'status' => 200,
-            ]);
+            return $this->acknowledge($notificationType, $orderTrackingId, $merchantReference);
         } catch (\Throwable $e) {
             Log::error('Pesapal Webhook Exception: '.$e->getMessage());
 
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    private function acknowledge(string $notificationType, string $orderTrackingId, ?string $merchantReference): JsonResponse
+    {
+        return response()->json([
+            'orderNotificationType' => $notificationType,
+            'orderTrackingId' => $orderTrackingId,
+            'orderMerchantReference' => $merchantReference,
+            'status' => 200,
+        ]);
     }
 }

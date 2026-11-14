@@ -8,6 +8,7 @@ use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
 use App\Models\SiteAgent;
+use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
 use App\Models\Voucher;
 use Illuminate\Http\Request;
@@ -41,11 +42,16 @@ class VoucherActivationService
                     throw new LogicException('This voucher session has already expired or disconnected.');
                 }
 
+                $this->resumeAgentProvisioningAfterExplicitRollback($tenant, $session, $voucher);
+
                 return $session;
             }
 
             if ($voucher->status !== 'unused') {
                 throw new LogicException('This voucher has already been activated.');
+            }
+            if ($voucher->expires_at?->lte(now())) {
+                throw new LogicException('This voucher has expired.');
             }
 
             $startedAt = now();
@@ -56,6 +62,16 @@ class VoucherActivationService
 
             $router = $this->resolveRouter($tenant, $voucher, $request, $sessionContext);
             $site = $this->resolveSite($tenant, $voucher, $router);
+            $accessBackend = $router?->access_backend ?? 'site_agent';
+            if (! in_array($accessBackend, ['site_agent', 'radius'], true)) {
+                throw new LogicException('This router has an unsupported access backend. Access was not activated.');
+            }
+
+            $usesRadius = $accessBackend === 'radius';
+            if ($usesRadius && ! $router->hasUsableRadiusConfiguration()) {
+                throw new LogicException('This RADIUS router is not fully configured. Access was not activated.');
+            }
+
             $siteAgent = $router?->site_id
                 ? SiteAgent::query()
                     ->where('tenant_id', $tenant->id)
@@ -64,7 +80,7 @@ class VoucherActivationService
                     ->first()
                 : null;
 
-            if (config('site_agent.required') && (! $router || ! $siteAgent)) {
+            if (config('site_agent.required') && (! $router || (! $usesRadius && ! $siteAgent))) {
                 throw new LogicException('This site is not connected to a paired site agent. Access was not activated.');
             }
 
@@ -101,19 +117,51 @@ class VoucherActivationService
                 'voucher_id' => $voucher->id,
                 'package_id' => $package->id,
                 'router_id' => $router?->id,
-                'status' => $siteAgent ? 'provisioning' : 'active',
+                'status' => ($usesRadius || $siteAgent) ? 'provisioning' : 'active',
                 'started_at' => $startedAt,
                 'expires_at' => $package->expiresAt($startedAt),
                 'ip_address' => $clientIp,
                 'mac_address' => $clientMac,
             ]);
 
-            if ($siteAgent) {
+            if (! $usesRadius && $siteAgent) {
                 app(SiteAgentCommandService::class)->provision($router, $session, $voucher);
             }
 
             return $session;
         });
+    }
+
+    private function resumeAgentProvisioningAfterExplicitRollback(Tenant $tenant, Session $session, Voucher $voucher): void
+    {
+        if ($session->status !== 'provisioning'
+            || ! $session->router_id
+            || $session->pending_revocation
+            || $session->pending_device_ban) {
+            return;
+        }
+
+        $router = Router::query()
+            ->where('tenant_id', $tenant->id)
+            ->find($session->router_id);
+        if (! $router || $router->access_backend !== 'site_agent' || ! $router->site_id) {
+            return;
+        }
+
+        $siteAgent = SiteAgent::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('site_id', $router->site_id)
+            ->whereNull('revoked_at')
+            ->first();
+        $hasProvisionCommand = SiteAgentCommand::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('session_id', $session->id)
+            ->where('operation', 'provision_user')
+            ->exists();
+
+        if ($siteAgent && ! $hasProvisionCommand) {
+            app(SiteAgentCommandService::class)->provision($router, $session, $voucher);
+        }
     }
 
     private function resolveRouter(Tenant $tenant, Voucher $voucher, Request $request, array $context): ?Router

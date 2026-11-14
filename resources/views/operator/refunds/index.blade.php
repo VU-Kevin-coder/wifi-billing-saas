@@ -22,6 +22,7 @@
                 </div>
             @endif
 
+            @if($canRequestRefund)
             <section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-100 p-4"><h2 class="font-bold text-gray-900">Recent sales you can refund</h2></div>
                 <div class="overflow-x-auto">
@@ -44,7 +45,7 @@
                                             <label class="sr-only" for="amount-{{ $sale->id }}">Amount</label>
                                             <input id="amount-{{ $sale->id }}" name="amount" type="number" step="0.01" min="0.01" max="{{ $sale->refundable }}" value="{{ $sale->refundable }}" required class="w-28 rounded-lg border border-gray-300 px-2 py-1 text-sm">
                                             <label class="sr-only" for="reason-{{ $sale->id }}">Reason</label>
-                                            <input id="reason-{{ $sale->id }}" name="reason" type="text" minlength="10" maxlength="500" required placeholder="Reason (min 10 characters)" class="w-64 rounded-lg border border-gray-300 px-2 py-1 text-sm">
+                                            <input id="reason-{{ $sale->id }}" name="reason" type="text" @if($requireRefundNote) minlength="10" required placeholder="Reason (min 10 characters)" @else placeholder="Optional reason" @endif maxlength="500" class="w-64 rounded-lg border border-gray-300 px-2 py-1 text-sm">
                                             <label class="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" name="revoke_access" value="1" checked> Remove access</label>
                                             <button type="submit" class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700">Request</button>
                                         </form>
@@ -57,6 +58,11 @@
                     </table>
                 </div>
             </section>
+            @else
+                <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">
+                    Refund requests are currently disabled by the platform.
+                </div>
+            @endif
 
             <section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-100 p-4"><h2 class="font-bold text-gray-900">Your requests</h2></div>

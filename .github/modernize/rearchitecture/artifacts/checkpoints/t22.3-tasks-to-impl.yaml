@@ -1,0 +1,81 @@
+metadata:
+  generated: "2026-11-13T23:45:50Z"
+  source_tasks: "Task assignment t22.3; approved remediation of t17 F-03"
+  last_updated: "2026-11-13T23:45:50Z"
+
+summary:
+  total_tasks: 1
+  completed_tasks: 1
+  in_progress_tasks: 0
+  pending_tasks: 0
+  completion_percentage: 100.0
+
+tasks:
+  - task_id: "t22.3"
+    description: "Add a fail-closed direct-peer CIDR guard to internal RADIUS policy routes and focused tests."
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "app/Http/Middleware/AuthenticateRadiusPolicyService.php"
+          changes:
+            - change_type: "modified"
+              description: "Reject missing/invalid/nonmatching production peer allowlists before HMAC service authentication."
+            - change_type: "modified"
+              description: "Use REMOTE_ADDR and preserve existing HTTPS/HMAC/timestamp/nonce/replay checks."
+        - file: "config/radius_policy.php"
+          changes:
+            - change_type: "modified"
+              description: "Expose comma-separated RADIUS_POLICY_ALLOWED_SOURCE_CIDRS configuration."
+        - file: "tests/Feature/RadiusPolicyBoundaryTest.php"
+          changes:
+            - change_type: "modified"
+              description: "Add peer allow/deny, spoofed forwarding, production missing/invalid, HTTPS/HMAC/replay regressions."
+        - file: "docs/RADIUS-POLICY-CHANNEL.md"
+          changes:
+            - change_type: "added"
+              description: "Record the production allowlist prerequisite and unverified reachability."
+    verification:
+      build_passed: null
+      test_results:
+        command: "php C:\\Users\\Jdoe\\AppData\\Local\\Temp\\wifi-billing-isolated-f03-run-fabd24e0ac8d4f38850bb8dbd7dfc0e4\\vendor\\bin\\phpunit --configuration C:\\Users\\Jdoe\\AppData\\Local\\Temp\\wifi-billing-isolated-f03-run-fabd24e0ac8d4f38850bb8dbd7dfc0e4\\phpunit.xml --do-not-cache-result --testdox tests/Feature/RadiusPolicyBoundaryTest.php"
+        passed: 13
+        failed: 0
+        skipped: 0
+        assertions: 73
+        failures: []
+      notes: "Ran in a temporary Laravel base path with explicit SQLite :memory:, empty DB_URL, and test-only APP_KEY. The isolated root had no .env or .env.testing. PHP lint, Pint --test, git diff --check, and editor diagnostics passed. Production network reachability was not tested."
+    upstream_trace:
+      plan_item: "F-03 private-channel source restriction"
+      requirements:
+        - "F-03"
+      full_trace: "t17-architect.md#F-03 → t22.3 → direct-peer allowlist, fail-closed production config, and focused regression tests"
+
+upstream_artifacts_consumed:
+  - ".github/modernize/rearchitecture/artifacts/t22.2-backend.md — approved channel and isolated testing pattern."
+  - ".github/modernize/rearchitecture/artifacts/t17-architect.md#F-03 — source-boundary finding and no reachability claim."
+  - ".github/modernize/rearchitecture/artifacts/t10-architect.md#Network boundary and #Internal API contract — private source and preserved auth requirements."
+  - ".github/modernize/rearchitecture/artifacts/t15-tester.md — no-env SQLite harness."
+  - ".github/modernize/rearchitecture/clarification.md — stack and operational constraints."
+
+traceability_chain:
+  - chain_id: "TRACE-t22.3-F03"
+    requirement: "F-03"
+    plan_phase: "Phase 1 Remediation"
+    plan_item: "Fail-closed private/trusted source allowlist"
+    tasks:
+      - "t22.3"
+    files:
+      - "app/Http/Middleware/AuthenticateRadiusPolicyService.php"
+      - "config/radius_policy.php"
+      - "tests/Feature/RadiusPolicyBoundaryTest.php"
+      - "docs/RADIUS-POLICY-CHANNEL.md"
+    status: "completed"
+
+pending_tasks: []
+untracked_changes: []
+validation:
+  passed: true
+  errors: []
+  warnings:
+    - "Production configuration and reachability remain unverified prerequisites."
+  blocking_issues: []

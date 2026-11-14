@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
@@ -155,6 +156,25 @@ class OperatorControlsTest extends TestCase
             ->assertOk();
 
         $this->assertDatabaseCount('sessions_log', 0);
+    }
+
+    public function test_platform_site_and_router_limits_block_additional_resources(): void
+    {
+        PlatformSetting::set('tenant.max_sites', 1);
+        Site::create(['tenant_id' => $this->tenant->id, 'name' => 'First site']);
+
+        $this->actingAs($this->admin)
+            ->post(route('operator.sites.store'), ['name' => 'Second site'])
+            ->assertSessionHasErrors('name');
+
+        PlatformSetting::set('tenant.max_routers', 1);
+        Router::create(['tenant_id' => $this->tenant->id, 'name' => 'First router']);
+
+        $this->actingAs($this->admin)
+            ->post(route('operator.routers.store'), ['name' => 'Second router'], [
+                'X-Idempotency-Key' => 'router-limit-test-001',
+            ])
+            ->assertSessionHasErrors('name');
     }
 
     public function test_a_voided_or_foreign_voucher_cannot_be_voided_again(): void
