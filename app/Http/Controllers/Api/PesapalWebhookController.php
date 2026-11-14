@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Services\PaymentService;
 use App\Services\PesapalOrderVerifier;
 use Illuminate\Http\JsonResponse;
@@ -91,7 +92,8 @@ class PesapalWebhookController extends Controller
                     );
                 }
             } elseif ($status === 'FAILED' && $transaction->status === 'pending') {
-                $transaction->update(['status' => 'failed']);
+                Transaction::withoutTenancy()->where('tenant_id', $transaction->tenant_id)
+                    ->whereKey($transaction->id)->where('status', 'pending')->update(['status' => 'failed']);
             }
 
             return $this->acknowledge($notificationType, $orderTrackingId, $merchantReference);
