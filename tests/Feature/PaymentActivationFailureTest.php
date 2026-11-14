@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class PaymentActivationFailureTest extends TestCase
@@ -74,7 +75,7 @@ class PaymentActivationFailureTest extends TestCase
         $this->assertDatabaseCount('sale_fulfillment_work', 1);
         $this->assertDatabaseCount('wallet_ledger_entries', 1);
         DB::table('sale_fulfillment_work')->where('transaction_id', $sale->id)->update([
-            'status' => 'running', 'attempts' => 1, 'lease_token' => 'dead-worker', 'next_attempt_at' => now()->subSecond(),
+            'status' => 'running', 'attempts' => 1, 'lease_token' => '00000000-0000-4000-8000-000000000001', 'next_attempt_at' => now()->subSecond(),
         ]);
         $this->artisan('payments:retry-fulfillment')->assertExitCode(0);
         $this->assertDatabaseHas('sale_fulfillment_work', ['transaction_id' => $sale->id, 'status' => 'completed', 'attempts' => 2]);
@@ -103,12 +104,44 @@ class PaymentActivationFailureTest extends TestCase
             'X-Idempotency-Key' => 'durability-test-activation-key-001'])->assertStatus(409);
         app(SaleFulfillmentService::class)->confirm($tenant, $package, '0771234567', $sale);
         DB::table('sale_fulfillment_work')->where('transaction_id', $sale->id)->update([
-            'status' => 'running', 'attempts' => 10, 'lease_token' => 'dead-worker', 'next_attempt_at' => now()->subSecond(),
+            'status' => 'running', 'attempts' => 10, 'lease_token' => '00000000-0000-4000-8000-000000000001', 'next_attempt_at' => now()->subSecond(),
         ]);
         $this->artisan('payments:retry-fulfillment')->assertExitCode(0);
         $this->assertDatabaseHas('sale_fulfillment_work', ['transaction_id' => $sale->id, 'status' => 'exhausted', 'attempts' => 10]);
         $this->assertDatabaseCount('vouchers', 0);
         $this->assertSame('completed', $sale->fresh()->status);
+    }
+
+    public function test_final_failure_is_logged_as_exhausted_and_inspectable_without_retrying(): void
+    {
+        [$tenant, $package, $sale] = $this->createPendingPayment();
+        app(SaleFulfillmentService::class)->confirm($tenant, $package, '0771234567', $sale);
+        DB::table('sale_fulfillment_work')->where('transaction_id', $sale->id)->update(['attempts' => 9]);
+        $this->mock(VoucherActivationService::class, function ($mock): void {
+            $mock->shouldReceive('activate')->once()->andThrow(new \RuntimeException('private details'));
+        });
+        Log::spy();
+        $this->assertNull(app(SaleFulfillmentService::class)->attempt($tenant->id, $sale->id));
+        Log::shouldHaveReceived('error')->with('Sale fulfillment retries exhausted.', [
+            'tenant_id' => $tenant->id, 'transaction_id' => $sale->id,
+        ])->once();
+        $this->assertDatabaseHas('sale_fulfillment_work', [
+            'transaction_id' => $sale->id, 'status' => 'exhausted', 'attempts' => 10,
+            'next_attempt_at' => null, 'lease_token' => null, 'last_error_class' => \RuntimeException::class,
+        ]);
+        $work = DB::table('sale_fulfillment_work')->where('transaction_id', $sale->id)->first();
+        $this->artisan('payments:inspect-exhausted', ['tenant' => $tenant->id])
+            ->expectsOutput("Tenant {$tenant->id}: 1 exhausted work item(s); showing 1.")
+            ->expectsTable(['Work ID', 'Transaction ID', 'Attempts', 'Last error class', 'Updated at'], [
+                [(string) $work->id, (string) $sale->id, '10', \RuntimeException::class, $work->updated_at],
+            ])->assertExitCode(0);
+        $this->artisan('payments:inspect-exhausted', ['tenant' => $tenant->id + 1000])
+            ->expectsOutput('Tenant '.($tenant->id + 1000).': 0 exhausted work item(s); showing 0.')
+            ->assertExitCode(0);
+        $this->artisan('payments:inspect-exhausted', ['tenant' => $tenant->id, '--limit' => 101])->assertExitCode(2);
+        $this->artisan('payments:retry-fulfillment')->assertExitCode(0);
+        $this->assertDatabaseHas('sale_fulfillment_work', ['transaction_id' => $sale->id, 'status' => 'exhausted', 'attempts' => 10]);
+        $this->assertDatabaseCount('vouchers', 0);
     }
 
     private function fakeMtn(): void
