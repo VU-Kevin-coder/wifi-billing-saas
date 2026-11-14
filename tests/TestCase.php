@@ -14,18 +14,8 @@ abstract class TestCase extends BaseTestCase
         require __DIR__.'/sanitize-libpq-environment.php';
 
         $environmentPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'wifi-billing-phpunit-'.bin2hex(random_bytes(16));
-        // Fixed loopback endpoints and opt-in reduce mistakes; they do not prove
-        // that the service is disposable. Never inherit application DB_* settings.
-        $selectedDriver = $_ENV['TEST_DB_DRIVER'] ?? getenv('TEST_DB_DRIVER') ?: null;
-        $driver = $selectedDriver ?? 'sqlite';
-        $expected = $_ENV['TEST_EXPECTED_DB_DRIVER'] ?? getenv('TEST_EXPECTED_DB_DRIVER') ?: null;
-        $required = $_ENV['TEST_DB_REQUIRE_EXPLICIT'] ?? getenv('TEST_DB_REQUIRE_EXPLICIT') ?: null;
-        if (! in_array($driver, ['sqlite', 'mysql', 'pgsql'], true)
-            || ($required === '1' && ($selectedDriver === null || $expected === null))
-            || ($expected !== null && $expected !== $driver)
-            || ($driver !== 'sqlite' && ($_ENV['TEST_DB_DISPOSABLE'] ?? getenv('TEST_DB_DISPOSABLE')) !== 'yes')) {
-            throw new \RuntimeException('Unsafe or inconsistent test database selection; refusing to run.');
-        }
+        // Recheck in case a test changed its environment after PHPUnit bootstrap.
+        $driver = require __DIR__.'/validate-test-database-selection.php';
 
         $testEnvironment = [
             'APP_ENV' => 'testing',
