@@ -9,172 +9,23 @@ use App\Models\SmsMessage;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
-use App\Models\VoucherBatch;
+use App\Services\Concerns\InitiatesPackagePayments;
 use App\Services\Tenancy\TenantContext;
 use App\Support\SmsTemplate;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PaymentService
 {
+    use InitiatesPackagePayments;
+
     public function __construct(
         private readonly MtnMomoService $mtn,
         private readonly AirtelMoneyService $airtel,
         private readonly VoucherActivationService $voucherActivation,
         private readonly TenantContext $tenantContext,
     ) {}
-
-    public function initiatePackagePayment(
-        Tenant $tenant,
-        Package $package,
-        string $phone,
-        Transaction $transaction,
-        ?string $email = null,
-        ?string $returnUrl = null,
-    ): array {
-        if ($transaction->status !== 'pending') {
-            return ['status' => $transaction->status, 'error' => 'This payment is no longer pending.'];
-        }
-
-        if ((string) $package->tenant_id !== (string) $tenant->id
-            || (string) $transaction->tenant_id !== (string) $tenant->id
-            || $transaction->type !== 'voucher_sale') {
-            return ['status' => 'failed', 'error' => 'Payment details are invalid.'];
-        }
-
-        if (! empty($transaction->provider_reference)) {
-            return ['status' => 'pending'];
-        }
-
-        $msisdn = $this->normalizeUgandanPhone($phone);
-        $network = $msisdn ? $this->networkForPhone($msisdn) : null;
-
-        if (! $msisdn || ! $network) {
-            $transaction->update(['status' => 'failed']);
-
-            return ['status' => 'failed', 'error' => 'Enter a valid MTN or Airtel Uganda number.'];
-        }
-
-        // 1. Ensure price is a valid whole number (no decimals)
-        if ((float) $package->price <= 0
-            || (float) $package->price !== (float) round((float) $package->price)
-            || (float) $package->price !== (float) $transaction->amount) {
-            $transaction->update(['status' => 'failed']);
-
-            return ['status' => 'failed', 'error' => 'Mobile money payments require a valid whole-number package price.'];
-        }
-
-        // Simulation must be explicitly enabled AND only run in non-production
-        // environments. Both gates are required so a stray config value can
-        // never issue vouchers without a real payment in production.
-        if (config('payments.simulation_enabled', false)
-            && app()->environment(['local', 'testing'])) {
-            $voucher = $this->handleSuccessfulPackagePayment($tenant, $package, $phone, $transaction);
-
-            return ['status' => 'simulated_success', 'voucher' => $voucher];
-        }
-
-        $pesapalKey = PlatformSetting::get('pesapal_consumer_key');
-        $pesapalSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
-        if (PlatformSetting::get('pesapal_enabled', true) && filled($pesapalKey) && filled($pesapalSecret)) {
-            return $this->initiatePesapalPayment($tenant, $package, $phone, $transaction, $email);
-        }
-
-        $currency = strtoupper((string) ($package->currency ?: PlatformSetting::get('currency', 'UGX')));
-        if ($currency !== 'UGX') {
-            $transaction->update(['status' => 'failed']);
-
-            return [
-                'status' => 'failed',
-                'error' => "Mobile money currently supports UGX packages only. Configure Pesapal for {$currency} packages.",
-            ];
-        }
-
-        $providerKey = $network === 'MTN' ? 'mtn_enabled' : 'airtel_enabled';
-        if (! PlatformSetting::get($providerKey, true)) {
-            $transaction->update(['status' => 'failed']);
-
-            return ['status' => 'failed', 'error' => "{$network} payments are disabled by platform settings."];
-        }
-
-        $configured = $network === 'MTN' ? $this->mtn->isConfigured() : $this->airtel->isConfigured();
-        if (! $configured) {
-            $transaction->update(['status' => 'failed']);
-
-            return ['status' => 'failed', 'error' => "{$network} payments are not configured."];
-        }
-
-        $meta = $transaction->meta ?? [];
-
-        $reference = (string) Str::uuid();
-        $transaction->update([
-            'provider_reference' => $reference,
-            'meta' => array_merge($meta, [
-                'payment_provider' => $network,
-                'provider_submission' => 'submitting',
-            ]),
-        ]);
-
-        try {
-            if ($network === 'MTN') {
-                $response = $this->mtn->initiate($transaction, $package, $msisdn, $reference);
-                $accepted = $response->successful();
-                $rejected = $response->clientError() && $response->status() !== 409;
-                $providerReference = $reference;
-            } else {
-                $result = $this->airtel->initiate($msisdn, (float) $package->price, $reference);
-                $response = $result['response'];
-                $accepted = $response->successful()
-                    && $response->json('status.success') === true;
-                $rejected = ($response->clientError() && $response->status() !== 409)
-                    || $response->json('status.success') === false;
-                $providerReference = (string) $result['provider_reference'];
-            }
-
-            $transaction->update([
-                'provider_reference' => $providerReference,
-                'meta' => array_merge($transaction->meta ?? [], [
-                    'provider_submission' => $accepted ? 'submitted' : ($rejected ? 'failed' : 'unknown'),
-                ]),
-            ]);
-
-            if (! $accepted) {
-                if ($rejected) {
-                    $transaction->update(['status' => 'failed']);
-                }
-
-                Log::warning($rejected
-                    ? 'Mobile money provider rejected a collection request.'
-                    : 'Mobile money collection submission has an unknown outcome.', [
-                        'transaction_id' => $transaction->id,
-                        'provider' => $network,
-                        'http_status' => $response->status(),
-                    ]);
-
-                return $rejected
-                    ? ['status' => 'failed', 'error' => "{$network} payment could not be initiated."]
-                    : ['status' => 'pending', 'message' => 'Payment status is being confirmed. Check your phone.'];
-            }
-
-            return ['status' => 'pending'];
-        } catch (\Throwable $exception) {
-            $transaction->update([
-                'meta' => array_merge($transaction->meta ?? [], [
-                    'provider_submission' => 'unknown',
-                ]),
-            ]);
-            Log::error('Mobile money collection submission could not be confirmed.', [
-                'transaction_id' => $transaction->id,
-                'provider' => $network,
-                'exception' => $exception::class,
-            ]);
-
-            return ['status' => 'pending', 'message' => 'Payment status is being confirmed. Check your phone.'];
-        }
-    }
 
     public function normalizePurchasePhone(string $phone): ?string
     {
@@ -243,9 +94,9 @@ class PaymentService
                 return 'fulfillment_data_missing';
             }
 
-            $this->handleSuccessfulPackagePayment($tenant, $package, $phone, $transaction);
+            $voucher = $this->handleSuccessfulPackagePayment($tenant, $package, $phone, $transaction);
 
-            return 'completed';
+            return $voucher ? 'completed' : 'fulfillment_pending';
         }
 
         if (in_array($providerStatus, $failureStatuses, true)) {
@@ -260,6 +111,29 @@ class PaymentService
         }
 
         return 'pending';
+    }
+
+    private function updatePending(Transaction $transaction, array $attributes): void
+    {
+        DB::transaction(function () use ($transaction, $attributes): void {
+            $locked = Transaction::withoutTenancy()->where('tenant_id', $transaction->tenant_id)
+                ->lockForUpdate()->findOrFail($transaction->id);
+            if ($locked->status !== 'pending') {
+                return;
+            }
+            // Preserve any concurrent metadata written while a provider request was in flight.
+            if (isset($attributes['meta'])) {
+                $attributes['meta'] = array_merge($locked->meta ?? [], $attributes['meta']);
+            }
+            $locked->update($attributes);
+        });
+        $transaction->refresh();
+    }
+
+    private function markFailedIfPending(Transaction $transaction): void
+    {
+        Transaction::withoutTenancy()->where('tenant_id', $transaction->tenant_id)
+            ->whereKey($transaction->id)->where('status', 'pending')->update(['status' => 'failed']);
     }
 
     private function verifiedDetailsMatch(Transaction $transaction, string $provider, array $details): bool
@@ -352,116 +226,20 @@ class PaymentService
         };
     }
 
-    /**
-     * Credit the payment and immediately redeem its voucher.
-     */
-    public function handleSuccessfulPackagePayment(Tenant $tenant, Package $package, string $phone, Transaction $transaction): Voucher
+    /** Caller must have verified the provider response before invoking this method. */
+    public function handleSuccessfulPackagePayment(Tenant $tenant, Package $package, string $phone, Transaction $transaction): ?Voucher
     {
-        $result = app(TenantContext::class)->runAs($tenant, fn () => DB::transaction(function () use ($tenant, $package, $phone, $transaction): array {
-            $transaction = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
+        $fulfillment = app(SaleFulfillmentService::class);
+        $fulfillment->confirm($tenant, $package, $phone, $transaction);
 
-            if ((int) $transaction->tenant_id !== (int) $tenant->id
-                || (int) $package->tenant_id !== (int) $tenant->id
-                || round((float) $transaction->amount, 2) !== round((float) $package->price, 2)) {
-                throw new \LogicException('The verified sale does not match its tenant and package.');
-            }
+        return $fulfillment->attempt((int) $tenant->id, (int) $transaction->id);
+    }
 
-            if ($transaction->status !== 'pending') {
-                $voucherId = $transaction->meta['voucher_id'] ?? null;
-                $saleVoucher = Voucher::withoutTenancy()
-                    ->where('tenant_id', $tenant->id)
-                    ->where('sale_transaction_id', $transaction->id)
-                    ->first();
-
-                if ($saleVoucher && $voucherId && (int) $voucherId !== (int) $saleVoucher->id) {
-                    throw new \LogicException("Transaction {$transaction->id} has inconsistent voucher linkage.");
-                }
-
-                if ($saleVoucher || $voucherId) {
-                    return [
-                        'voucher' => $saleVoucher ?? Voucher::withoutTenancy()
-                            ->where('tenant_id', $tenant->id)
-                            ->findOrFail($voucherId),
-                        'session' => null,
-                        'send_receipt' => false,
-                    ];
-                }
-
-                throw new \LogicException("Transaction {$transaction->id} has already been processed.");
-            }
-
-            $commissionRate = (float) ($tenant->commission_rate ?? PlatformSetting::get('default_commission_rate', 5.00));
-            $fee = round($transaction->amount * ($commissionRate / 100), 2);
-            $net = round($transaction->amount - $fee, 2);
-
-            $transaction->update([
-                'status' => 'completed',
-                'platform_fee' => $fee,
-                'net_amount' => $net,
-                'phone' => $phone,
-            ]);
-
-            app(WalletService::class)->apply(
-                $tenant,
-                $net,
-                WalletService::SALE_CREDIT,
-                $transaction,
-                "Sale: {$package->name}",
-                null,
-                null,
-                ['gross' => (float) $transaction->amount, 'platform_fee' => $fee, 'package_id' => $package->id],
-            );
-
-            $batchCode = 'ONLINE-'.$tenant->id.'-'.$package->id;
-            $batch = VoucherBatch::withoutTenancy()
-                ->where('tenant_id', $tenant->id)
-                ->where('batch_code', $batchCode)
-                ->first()
-                ?? VoucherBatch::create([
-                    'tenant_id' => $tenant->id,
-                    'package_id' => $package->id,
-                    'batch_code' => $batchCode,
-                    'quantity' => 0,
-                    'status' => 'active',
-                ]);
-
-            $voucherExpiryDays = max(0, (int) PlatformSetting::get('voucher.unused_expiry', 365));
-            $voucher = Voucher::create([
-                'tenant_id' => $tenant->id,
-                'voucher_batch_id' => $batch->id,
-                'package_id' => $package->id,
-                'sale_transaction_id' => $transaction->id,
-                'code' => 'ONL-'.strtoupper(Str::random(6)),
-                'status' => 'unused',
-                'redeemed_by' => $phone,
-                'expires_at' => $voucherExpiryDays > 0
-                    ? now()->addDays($voucherExpiryDays)
-                    : null,
-            ]);
-
-            $transaction->update([
-                'meta' => array_merge($transaction->meta ?? [], [
-                    'voucher_id' => $voucher->id,
-                    'voucher_code' => $voucher->code,
-                ]),
-            ]);
-
-            $session = $this->tenantContext->runAs($tenant, fn () => $this->voucherActivation->activate(
-                $tenant,
-                $voucher,
-                Request::create('/'),
-                $phone,
-                $transaction->fresh()->meta ?? [],
-            ));
-
-            return ['voucher' => $voucher, 'session' => $session, 'send_receipt' => true];
-        }));
-
-        if ($result['send_receipt'] && PlatformSetting::get('sms.voucher_receipt', true)) {
-            $this->sendVoucherReceipt($tenant, $package, $phone, $result['voucher'], $result['session']);
+    public function sendSaleReceipt(Tenant $tenant, Package $package, string $phone, Voucher $voucher, Session $session): void
+    {
+        if ($session->status === 'active' && PlatformSetting::get('sms.voucher_receipt', true)) {
+            $this->sendVoucherReceipt($tenant, $package, $phone, $voucher, $session);
         }
-
-        return $result['voucher'];
     }
 
     private function sendVoucherReceipt(Tenant $tenant, Package $package, string $phone, Voucher $voucher, Session $session): void
@@ -496,105 +274,5 @@ class PaymentService
             'segments' => SmsTemplate::segments($message),
             'detail' => Str::limit((string) ($result['message'] ?? ''), 250, ''),
         ]);
-    }
-
-    public function initiatePesapalPayment(
-        Tenant $tenant,
-        Package $package,
-        string $phone,
-        Transaction $transaction,
-        ?string $email = null,
-    ): array {
-        if (! PlatformSetting::get('pesapal_enabled', true)) {
-            $transaction->update(['status' => 'failed']);
-
-            return ['status' => 'failed', 'error' => 'Pesapal payments are disabled by platform settings.'];
-        }
-
-        $amount = (float) $package->price;
-        $consumerKey = PlatformSetting::get('pesapal_consumer_key');
-        $consumerSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
-        $environment = PlatformSetting::get('pesapal_environment', 'sandbox');
-        $ipnId = PlatformSetting::get('pesapal_ipn_id');
-
-        $msisdn = preg_replace('/\D+/', '', $phone);
-        if (strlen($msisdn) === 10 && str_starts_with($msisdn, '0')) {
-            $msisdn = '256'.substr($msisdn, 1);
-        }
-
-        $baseUrl = $environment === 'production'
-            ? 'https://pay.pesapal.com/v3/api'
-            : 'https://cybqa.pesapal.com/pesapalv3/api';
-
-        try {
-            // 1. Get Access Token
-            $tokenResponse = Http::post("{$baseUrl}/Auth/RequestToken", [
-                'consumer_key' => $consumerKey,
-                'consumer_secret' => $consumerSecret,
-            ]);
-
-            if ($tokenResponse->failed()) {
-                Log::error('Pesapal Auth Error: '.$tokenResponse->body());
-                $transaction->update(['status' => 'failed']);
-
-                return ['status' => 'failed', 'error' => 'Pesapal authentication failed.'];
-            }
-
-            $token = $tokenResponse->json('token');
-            if (! $token) {
-                $transaction->update(['status' => 'failed']);
-
-                return ['status' => 'failed', 'error' => 'Pesapal auth token not returned.'];
-            }
-
-            $callbackUrl = route('portal.pesapal.callback', ['tenant' => $tenant->slug]);
-
-            // 2. Submit Order Request
-            $orderResponse = Http::withToken($token)
-                ->post("{$baseUrl}/Transactions/SubmitOrderRequest", [
-                    'id' => $transaction->reference,
-                    'currency' => strtoupper((string) ($package->currency ?: PlatformSetting::get('currency', 'UGX'))),
-                    'amount' => $amount,
-                    'description' => "Wi-Fi Package: {$package->name}",
-                    'callback_url' => $callbackUrl,
-                    'notification_id' => $ipnId,
-                    'billing_address' => [
-                        'phone_number' => $msisdn,
-                        'email_address' => $email ?: config('mail.from.address'),
-                        'first_name' => 'Hamnet',
-                        'last_name' => 'Customer',
-                        'country_code' => 'UG',
-                    ],
-                ]);
-
-            if ($orderResponse->failed()) {
-                Log::error('Pesapal Order Error: '.$orderResponse->body());
-                $transaction->update(['status' => 'failed']);
-
-                return ['status' => 'failed', 'error' => 'Could not create Pesapal order.'];
-            }
-
-            $orderData = $orderResponse->json();
-            $orderTrackingId = $orderData['order_tracking_id'] ?? null;
-            $redirectUrl = $orderData['redirect_url'] ?? null;
-
-            $transaction->update([
-                'provider_reference' => $orderTrackingId,
-                'meta' => array_merge($transaction->meta ?? [], [
-                    'payment_provider' => 'pesapal',
-                    'order_tracking_id' => $orderTrackingId,
-                    'pesapal_redirect_url' => $redirectUrl,
-                ]),
-            ]);
-
-            return [
-                'status' => 'redirect',
-                'redirect_url' => $redirectUrl,
-            ];
-        } catch (\Throwable $e) {
-            Log::error('Pesapal Exception: '.$e->getMessage());
-
-            return ['status' => 'pending', 'message' => 'Payment request sent.'];
-        }
     }
 }
