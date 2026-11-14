@@ -75,7 +75,7 @@ class SaleFulfillmentService
             }
             if ($work->attempts >= self::MAX_ATTEMPTS) {
                 DB::table('sale_fulfillment_work')->where('id', $work->id)
-                    ->update(['status' => 'exhausted', 'updated_at' => now()]);
+                    ->update(['status' => 'exhausted', 'lease_token' => null, 'next_attempt_at' => null, 'updated_at' => now()]);
                 Log::error('Sale fulfillment retries exhausted.', ['tenant_id' => $tenantId, 'transaction_id' => $saleId]);
 
                 return false;
@@ -141,18 +141,26 @@ class SaleFulfillmentService
                 });
             });
         } catch (\Throwable $exception) {
-            DB::transaction(function () use ($tenantId, $saleId, $token, $exception): void {
+            $exhausted = DB::transaction(function () use ($tenantId, $saleId, $token, $exception): bool {
                 $work = DB::table('sale_fulfillment_work')->where('tenant_id', $tenantId)
                     ->where('transaction_id', $saleId)->lockForUpdate()->first();
                 if ($work && $work->status === 'running' && $work->lease_token === $token) {
+                    $exhausted = $work->attempts >= self::MAX_ATTEMPTS;
                     DB::table('sale_fulfillment_work')->where('id', $work->id)->update([
-                        'status' => $work->attempts >= self::MAX_ATTEMPTS ? 'exhausted' : 'pending',
-                        'lease_token' => null, 'next_attempt_at' => now()->addMinutes(5),
+                        'status' => $exhausted ? 'exhausted' : 'pending',
+                        'lease_token' => null, 'next_attempt_at' => $exhausted ? null : now()->addMinutes(5),
                         'last_error_class' => $exception::class, 'updated_at' => now(),
                     ]);
+
+                    return $exhausted;
                 }
+
+                return false;
             });
             Log::error('Paid sale fulfillment failed.', ['tenant_id' => $tenantId, 'transaction_id' => $saleId, 'exception' => $exception::class]);
+            if ($exhausted) {
+                Log::error('Sale fulfillment retries exhausted.', ['tenant_id' => $tenantId, 'transaction_id' => $saleId]);
+            }
 
             return null;
         }
