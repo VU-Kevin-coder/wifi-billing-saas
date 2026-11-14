@@ -32,8 +32,19 @@ class TestDatabaseSafetyTest extends TestCase
     public function test_ci_requires_explicit_expectation(): void
     {
         $process = $this->runProbe('phpunit.ci-db.xml', [
-            'TEST_DB_DRIVER' => false,
+            'TEST_DB_DRIVER' => 'sqlite',
             'TEST_EXPECTED_DB_DRIVER' => false,
+            'TEST_DB_DISPOSABLE' => false,
+        ]);
+        $this->assertFalse($process->isSuccessful());
+        $this->assertStringContainsString('Unsafe or inconsistent test database selection', $process->getOutput());
+    }
+
+    public function test_ci_requires_explicit_driver_even_when_expected_is_sqlite(): void
+    {
+        $process = $this->runProbe('phpunit.ci-db.xml', [
+            'TEST_DB_DRIVER' => false,
+            'TEST_EXPECTED_DB_DRIVER' => 'sqlite',
             'TEST_DB_DISPOSABLE' => false,
         ]);
         $this->assertFalse($process->isSuccessful());
@@ -50,6 +61,10 @@ class TestDatabaseSafetyTest extends TestCase
             'DB_HOST' => 'production.invalid',
             'DB_URL' => 'mysql://user:password@production.invalid/production',
             'DB_SOCKET' => '/tmp/production.sock',
+            'PGHOSTADDR' => '127.0.0.2',
+            'PGSERVICE' => 'hostile-service',
+            'PGSERVICEFILE' => '/tmp/hostile-service.conf',
+            'PGOPTIONS' => '-c statement_timeout=1',
         ]);
         $this->assertTrue($process->isSuccessful(), $process->getOutput().$process->getErrorOutput());
         $this->assertStringContainsString('OK (1 test', $process->getOutput());
