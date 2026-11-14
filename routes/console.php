@@ -47,6 +47,11 @@ Schedule::command('payments:reconcile')
     ->cron("*/{$paymentMinutes} * * * *")
     ->withoutOverlapping();
 
+// Recover only work recorded by verified new payments; leases survive worker crashes.
+Schedule::command('payments:retry-fulfillment')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 // Provisioning watchdog (default: every minute)
 $watchdogMinutes = max(1, (int) Policy::get('schedule.provisioning_watchdog_minutes', 1));
 
