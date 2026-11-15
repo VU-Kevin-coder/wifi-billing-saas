@@ -14,7 +14,7 @@ class Session extends Model
     protected $table = 'sessions_log';
 
     protected $fillable = [
-        'tenant_id', 'site_id', 'customer_id', 'voucher_id', 'package_id', 'router_id',
+        'tenant_id', 'site_id', 'customer_id', 'voucher_id', 'package_id', 'router_id', 'access_mode',
         'status', 'started_at', 'expires_at', 'ip_address', 'mac_address',
         'bytes_in', 'bytes_out', 'rate_in', 'rate_out',
         'provisioning_requeues', 'provisioning_alerted_at', 'provisioned_at',

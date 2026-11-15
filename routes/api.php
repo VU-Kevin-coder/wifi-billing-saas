@@ -1,9 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\FlutterwaveWebhookController;
-use App\Http\Controllers\Api\MobileMoneyWebhookController;
 use App\Http\Controllers\Api\NotificationController;
-use App\Http\Controllers\Api\PesapalWebhookController;
+use App\Http\Controllers\Api\PaymentGatewayWebhookController;
 use App\Http\Controllers\Api\SiteAgentController;
 use App\Http\Controllers\PortalController;
 use Illuminate\Support\Facades\Route;
@@ -17,16 +15,15 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:public-api')->group(function () {
 
     Route::prefix('webhooks')->group(function () {
-        Route::match(['get', 'post'], '/pesapal', [PesapalWebhookController::class, 'handle'])
-            ->name('api.webhooks.pesapal');
-        Route::post('/flutterwave', [FlutterwaveWebhookController::class, 'handle'])
-            ->name('api.webhooks.flutterwave');
-        Route::post('/mtn', [MobileMoneyWebhookController::class, 'handleMtn'])
+        Route::post('/obpay', [PaymentGatewayWebhookController::class, 'obpay'])
             ->middleware('throttle:60,1')
-            ->name('api.webhooks.mtn');
-        Route::post('/airtel', [MobileMoneyWebhookController::class, 'handleAirtel'])
+            ->name('api.webhooks.obpay');
+        Route::post('/pawapay', [PaymentGatewayWebhookController::class, 'pawapay'])
             ->middleware('throttle:60,1')
-            ->name('api.webhooks.airtel');
+            ->name('api.webhooks.pawapay');
+        Route::post('/xente', [PaymentGatewayWebhookController::class, 'xente'])
+            ->middleware('throttle:60,1')
+            ->name('api.webhooks.xente');
     });
 
     // The payment token is a bearer secret (it unlocks the voucher code), so it travels

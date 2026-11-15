@@ -11,6 +11,9 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <testsuite name="DatabaseConcurrency">
+            <directory>tests/Concurrency</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
@@ -30,6 +33,7 @@
         <env name="PLATFORM_ADMIN_MFA_REQUIRED" value="false"/>
         <env name="MFA_STEP_UP_ENABLED" value="false"/>
         <env name="PULSE_ENABLED" value="false"/>
+        <env name="PHPUNIT_USE_CONFIGURED_DATABASE" value="true" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SEED_ADMIN_PASSWORD" value="Platform-test-password-2026!"/>
         <env name="SEED_TENANT_PASSWORD" value="Operator-test-password-2026!"/>

@@ -190,10 +190,15 @@
                                         <small>{{ $pkg->duration_value }} {{ $pkg->duration_unit }}</small>
                                     </div>
                                     <span class="plan-price">{{ $pkg->currency ?: $currency }} {{ number_format((float) $pkg->price, 0) }}</span>
-                                    <button type="button" class="portal-button small" @click="buyingPackageId = {{ $pkg->id }}">Buy</button>
+                                    @if ($paymentsAvailable)
+                                        <button type="button" class="portal-button small" @click="buyingPackageId = {{ $pkg->id }}">Buy</button>
+                                    @else
+                                        <span class="purchase-note">Online payments unavailable</span>
+                                    @endif
                                 </div>
 
-                                <div class="purchase-form" x-show="buyingPackageId === {{ $pkg->id }}" x-cloak>
+                                @if ($paymentsAvailable)
+                                    <div class="purchase-form" x-show="buyingPackageId === {{ $pkg->id }}" x-cloak>
                                     <form method="POST" action="{{ route('portal.purchase', ['tenant' => $tenant->slug], false) }}">
                                         @csrf
                                         <input type="hidden" name="_idempotency_key" value="{{ $purchaseKeys[$pkg->id] }}">
@@ -204,17 +209,20 @@
                                         @if ($routerIdentity)
                                             <input type="hidden" name="router" value="{{ $routerIdentity }}">
                                         @endif
+                                        <label for="customer-name-{{ $pkg->id }}">Full name</label>
+                                        <input id="customer-name-{{ $pkg->id }}" class="portal-field" type="text" name="customer_name" autocomplete="name" required maxlength="120" value="{{ old('customer_name') }}" placeholder="Your full name">
                                         <label for="phone-{{ $pkg->id }}">Mobile money number</label>
                                         <input id="phone-{{ $pkg->id }}" class="portal-field" type="tel" name="phone" inputmode="tel" autocomplete="tel" required minlength="9" maxlength="15" value="{{ old('phone') }}" placeholder="e.g. 077 123 4567">
                                         <label for="email-{{ $pkg->id }}">Email (optional)</label>
                                         <input id="email-{{ $pkg->id }}" class="portal-field" type="email" name="email" autocomplete="email" value="{{ old('email') }}" placeholder="you@example.com">
-                                        <p class="purchase-note">A payment prompt will be sent to this number. Your Wi-Fi access is issued after payment is confirmed.</p>
+                                        <p class="purchase-note">Secure payment by {{ $paymentGateway }}. A payment prompt will be sent to this number. Wi-Fi access is issued only after payment is confirmed.</p>
                                         <div style="display:flex;gap:8px;margin-top:12px">
                                             <button class="portal-button" type="submit" style="flex:1">Pay {{ $pkg->currency ?: $currency }} {{ number_format((float) $pkg->price, 0) }}</button>
                                             <button class="portal-button small" type="button" @click="buyingPackageId = null" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Cancel</button>
                                         </div>
                                     </form>
-                                </div>
+                                    </div>
+                                @endif
                             </article>
                         @empty
                             <p class="empty-plans">No packages are currently available.</p>

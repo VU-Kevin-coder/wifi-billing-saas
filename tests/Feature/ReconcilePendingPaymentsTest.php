@@ -42,7 +42,17 @@ class ReconcilePendingPaymentsTest extends TestCase
             ->assertExitCode(1);
     }
 
-    private function createPendingTransaction(): Transaction
+    public function test_it_leaves_legacy_pending_payments_for_manual_handling(): void
+    {
+        $this->createPendingTransaction(['payment_provider' => 'MTN']);
+        $this->mock(PaymentService::class, fn ($mock) => $mock->shouldNotReceive('reconcilePendingPayment'));
+
+        $this->artisan('payments:reconcile')
+            ->expectsOutput('Checked 0 pending payment(s); 0 provider check(s) were unavailable.')
+            ->assertSuccessful();
+    }
+
+    private function createPendingTransaction(array $meta = ['payment_provider' => 'obpay']): Transaction
     {
         $tenant = Tenant::create(['name' => 'Payment reconciliation', 'slug' => 'payment-reconciliation']);
 
@@ -53,7 +63,7 @@ class ReconcilePendingPaymentsTest extends TestCase
             'status' => 'pending',
             'reference' => 'RECONCILE-001',
             'provider_reference' => 'provider-001',
-            'meta' => ['payment_provider' => 'MTN'],
+            'meta' => $meta,
         ]);
         $transaction->forceFill(['created_at' => now()->subMinutes(6)])->save();
 

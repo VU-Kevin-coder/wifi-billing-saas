@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Package;
 use App\Models\Router;
+use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
@@ -21,19 +22,20 @@ class Phase1DomainMigrationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_phase_one_migrations_are_repeatable_and_keep_legacy_defaults_on_sqlite_memory(): void
+    public function test_phase_one_migrations_are_repeatable_and_keep_legacy_defaults(): void
     {
-        $this->assertSame('sqlite', DB::connection()->getDriverName());
-        $this->assertSame(':memory:', DB::connection()->getDatabaseName());
-
         $routerAndSaleMigration = $this->loadMigration('2026_11_16_000001_add_radius_router_and_sale_links.php');
         $accountingMigration = $this->loadMigration('2026_11_16_000002_create_radius_accounting_tables.php');
+        $accessModeMigration = $this->loadMigration('2026_11_17_000001_align_access_mode_and_add_radius_device_reservations.php');
 
         // RefreshDatabase already ran the fresh migrations; rerun each to verify safe re-entry.
         $routerAndSaleMigration->up();
         $accountingMigration->up();
+        $accessModeMigration->up();
 
-        $this->assertTrue(Schema::hasColumn('routers', 'access_backend'));
+        $this->assertTrue(Schema::hasColumn('routers', 'access_mode'));
+        $this->assertTrue(Schema::hasColumn('sessions_log', 'access_mode'));
+        $this->assertTrue(Schema::hasTable('radius_device_reservations'));
         $this->assertTrue(Schema::hasColumn('vouchers', 'sale_transaction_id'));
         $this->assertTrue(Schema::hasTable('radius_accounting_sessions'));
         $this->assertTrue(Schema::hasTable('radius_accounting_events'));
@@ -46,8 +48,117 @@ class Phase1DomainMigrationTest extends TestCase
         $router = $this->createRouter($tenant);
         $voucher = $this->createVoucher($tenant);
 
-        $this->assertSame('site_agent', $router->fresh()->access_backend);
+        $this->assertSame('site_agent', $router->fresh()->access_mode);
         $this->assertNull($voucher->fresh()->sale_transaction_id);
+    }
+
+    public function test_access_mode_migration_copies_legacy_selector_and_round_trips_rollback(): void
+    {
+        $tenant = $this->createTenant();
+        $router = $this->createRouter($tenant);
+        $historicalSession = Session::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'status' => 'active',
+        ]);
+        DB::table('routers')->where('id', $router->id)->update(['access_backend' => 'radius']);
+        Schema::table('routers', fn ($table) => $table->dropColumn('access_mode'));
+        Schema::table('sessions_log', fn ($table) => $table->dropColumn('access_mode'));
+        $migration = $this->loadMigration('2026_11_17_000001_align_access_mode_and_add_radius_device_reservations.php');
+
+        $migration->up();
+        $this->assertSame('radius', DB::table('routers')->where('id', $router->id)->value('access_mode'));
+        $this->assertSame('site_agent', $historicalSession->fresh()->access_mode);
+        $session = Session::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'status' => 'provisioning',
+        ]);
+        $this->assertSame('site_agent', $session->fresh()->access_mode);
+
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('routers', 'access_mode'));
+        $this->assertSame('radius', DB::table('routers')->where('id', $router->id)->value('access_backend'));
+        $this->assertFalse(Schema::hasTable('radius_device_reservations'));
+
+        $migration->up();
+        $this->assertSame('radius', DB::table('routers')->where('id', $router->id)->value('access_mode'));
+    }
+
+    public function test_access_mode_rollback_refuses_radius_session_and_keeps_migration_objects(): void
+    {
+        $tenant = $this->createTenant();
+        $router = $this->createRouter($tenant);
+        Session::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'access_mode' => 'radius',
+            'status' => 'provisioning',
+        ]);
+        $migration = $this->loadMigration('2026_11_17_000001_align_access_mode_and_add_radius_device_reservations.php');
+
+        $this->assertGuardedRollback(
+            fn () => $migration->down(),
+            'Cannot roll back session access mode while a session uses RADIUS.'
+        );
+        $this->assertTrue(Schema::hasColumn('routers', 'access_mode'));
+        $this->assertTrue(Schema::hasColumn('sessions_log', 'access_mode'));
+        $this->assertTrue(Schema::hasTable('radius_device_reservations'));
+    }
+
+    public function test_access_mode_rollback_refuses_populated_reservations(): void
+    {
+        $tenant = $this->createTenant();
+        $router = $this->createRouter($tenant);
+        $session = Session::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'access_mode' => 'radius',
+            'status' => 'provisioning',
+        ]);
+        $now = now();
+        $identityId = DB::table('radius_nas_session_identities')->insertGetId([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'nas_session_id' => 'migration-reservation',
+            'last_generation' => 0,
+            'current_generation_id' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('radius_device_reservations')->insert([
+            'identity_id' => $identityId,
+            'generation' => 1,
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'session_id' => $session->id,
+            'state' => 'reserved',
+            'reserved_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $migration = $this->loadMigration('2026_11_17_000001_align_access_mode_and_add_radius_device_reservations.php');
+
+        $this->assertGuardedRollback(
+            fn () => $migration->down(),
+            'Cannot roll back populated RADIUS device reservations.'
+        );
+        $this->assertSame(1, DB::table('radius_device_reservations')->count());
+    }
+
+    public function test_access_mode_rollback_refuses_to_drop_radius_mode_without_legacy_copy_target(): void
+    {
+        $tenant = $this->createTenant();
+        $router = $this->createRouter($tenant);
+        $router->forceFill(['access_mode' => 'radius'])->saveOrFail();
+        Schema::table('routers', fn ($table) => $table->dropColumn('access_backend'));
+        $migration = $this->loadMigration('2026_11_17_000001_align_access_mode_and_add_radius_device_reservations.php');
+
+        $this->assertGuardedRollback(
+            fn () => $migration->down(),
+            'Cannot roll back router access mode without preserving legacy selector data.'
+        );
+        $this->assertSame('radius', DB::table('routers')->where('id', $router->id)->value('access_mode'));
     }
 
     public function test_typed_sale_link_is_unique_per_transaction(): void
@@ -93,16 +204,20 @@ class Phase1DomainMigrationTest extends TestCase
     {
         $tenant = $this->createTenant();
         $router = $this->createRouter($tenant);
-        $router->forceFill(['access_backend' => 'radius'])->saveOrFail();
+        $router->forceFill(['access_mode' => 'radius'])->saveOrFail();
+        $accessModeMigration = $this->loadMigration('2026_11_17_000001_align_access_mode_and_add_radius_device_reservations.php');
         $migration = $this->loadMigration('2026_11_16_000001_add_radius_router_and_sale_links.php');
 
+        // The new rollback copies the canonical selector back to the legacy
+        // column; the original schema rollback must then refuse to lose it.
+        $accessModeMigration->down();
         $this->assertGuardedRollback(
             fn () => $migration->down(),
             'Cannot roll back router access mode while a router is not using site_agent.'
         );
 
-        $this->assertTrue(Schema::hasColumn('routers', 'access_backend'));
-        $this->assertSame('radius', $router->fresh()->access_backend);
+        $this->assertFalse(Schema::hasColumn('routers', 'access_mode'));
+        $this->assertSame('radius', DB::table('routers')->where('id', $router->id)->value('access_backend'));
     }
 
     public function test_accounting_migration_refuses_rollback_when_identity_evidence_exists(): void

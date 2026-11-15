@@ -166,7 +166,7 @@ class RouterProvisioningService
         // 5. Walled Garden (Captive portal, Payment gateways - Idempotent)
         $lines[] = '# --- Walled Garden Access ---';
         $configuredWalledGarden = (array) PlatformSetting::get('hotspot.walled_garden', [
-            'pesapal.com', 'flutterwave.com', 'mtn.co.ug', 'airtel.co.ug',
+            'obpay.online', 'pawapay.io', 'xente.co',
         ]);
         $walledHosts = [
             "*{$escapedBaseDomain}*" => 'SaaS Platform Portal',

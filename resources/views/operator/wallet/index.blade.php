@@ -252,7 +252,7 @@
                                                        x-model="phone" 
                                                        placeholder="+256700000000"
                                                        class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
-                                                <p class="text-xs text-gray-500 mt-1">Enter a whole {{ $currency }} amount. Mobile Money payouts are sent through Flutterwave.</p>
+                                                <p class="text-xs text-gray-500 mt-1">Enter a whole {{ $currency }} amount. The platform approver selects the payment provider for mobile-money payouts.</p>
                                             </div>
                                             <div x-show="method === 'bank_transfer'" class="space-y-4">
                                                 <div>

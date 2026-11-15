@@ -81,3 +81,20 @@
 - Debugging dead-ends and what actually worked: The isolated harness needs a copied `composer.json` and a test-only `APP_KEY`; initial harness attempts failed before test logic. Using an HTTPS request URI allowed the production HTTPS/HMAC/nonce path to run against SQLite `:memory:`.
 - Techniques/patterns worth reusing for future tasks: Validate all configured CIDRs before matching any of them, reject `/0`, and test both a forged forwarded header and production missing/invalid configuration. Treat production reachability as an external prerequisite, not a code-level claim.
 - Learnings consumed: [backend/radius-policy-boundary, backend/one-time-router-secret-delivery, backend/current-voucher-fulfillment-seam]
+
+## [Phase1-blockers] Aligned RADIUS mode, reservations, and session revocation
+- Codebase/domain discoveries: The approved selector is now `access_mode`; the forward migration copies legacy `access_backend` data and keeps the old column available for downgrade compatibility. RADIUS admission serializes on the session entitlement row, counts active accounting generations plus pending reservations, binds a reservation on Start, and releases only on a validated Stop.
+- Wrong assumptions and corrections: SQLite `:memory:` passes focused behavior tests but does not establish target-engine row-lock concurrency. Historical sessions must default to `site_agent`; a pending RADIUS session that is explicitly resumed through the site agent changes its session snapshot only when the agent command is actually queued.
+- Debugging dead-ends and what actually worked: Rollback tests must exercise the new selector migration before the historical schema migration; the prior SQLite migration's drop-column/FK limitation is outside the new additive migration's rollback contract.
+- Techniques/patterns worth reusing for future tasks: Keep router mode as the selector for new authorization, but use each session's immutable access-mode snapshot for revocation, retries, expiry, accounting Stop, and disconnect retries. Preserve pending reservations when Start or disconnect confirmation is ambiguous.
+- Learnings consumed: [backend/radius-policy-boundary, backend/one-time-router-secret-delivery, backend/current-voucher-fulfillment-seam]
+- Additional user clarification: Airtel's existing polling flow remains the settlement path; do not add a callback handler. The remaining blocker is official status-endpoint/response-schema evidence; outbound IP allowlisting is deployment work, not an application-code blocker.
+- Verification: focused PHPUnit 48/48 tests and full PHPUnit 575/575 passed on SQLite `:memory:`; Pint and `git diff --check` passed.
+
+## [Phase1-blockers-followup] Revalidated current reads and CI concurrency harness
+- Codebase/domain discoveries: capacity admission fetches matching active accounting generations and pending reservations with locking/current reads after taking the shared entitlement lock, avoiding a stale consistent-read snapshot after lock wait.
+- Wrong assumptions and corrections: the default PHPUnit run is intentionally SQLite-only and excludes `tests/Concurrency`; passing that suite does not establish PostgreSQL row-lock concurrency.
+- Debugging dead-ends and what actually worked: a true two-process test is gated to the dedicated CI DB config and local `testing` target; no disposable PostgreSQL 16 target or `psql` client was available here, so the engine-specific test was not run.
+- Techniques/patterns worth reusing for future tasks: use committed fixtures for separate worker processes, synchronize workers at a barrier, and assert exactly one admission and one reservation; keep the normal SQLite suite free of concurrency-test skips.
+- Learnings consumed: [backend/radius-session-snapshots-and-capacity]
+- Verification: focused RADIUS policy tests 17/17 passed (102 assertions); full SQLite PHPUnit suite 576/576 passed (3,127 assertions); Pint, PHP syntax checks, and `git diff --check` passed. PostgreSQL 16 concurrency remains unverified.

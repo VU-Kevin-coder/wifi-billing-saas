@@ -66,7 +66,7 @@ class AccessRevoker
             $tenant = Tenant::find($voucher->tenant_id);
 
             if ($router && $tenant) {
-                if ($router->access_backend === 'radius') {
+                if ($session->access_mode === 'radius') {
                     return app(RadiusAccountingService::class)->requestDisconnect(
                         $session,
                         "revocation:{$session->id}:{$finalSessionStatus}",

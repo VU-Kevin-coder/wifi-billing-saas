@@ -66,6 +66,8 @@
                 @csrf
                 <input type="hidden" name="_idempotency_key" value="{{ $purchaseKey }}">
                 <input type="hidden" name="package_id" value="{{ $package->id }}">
+                <label for="customer_name">Full name</label>
+                <input id="customer_name" name="customer_name" type="text" autocomplete="name" required maxlength="120" value="{{ old('customer_name') }}">
                 <label for="phone">Mobile money number</label>
                 <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required minlength="9" maxlength="15" value="{{ $phone }}">
                 <button type="submit" class="button">{{ $active ? 'Renew now' : 'Buy again' }} · {{ $currency }} {{ number_format((float) $package->price, 0) }}</button>

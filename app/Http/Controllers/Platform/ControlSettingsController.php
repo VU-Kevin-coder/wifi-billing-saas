@@ -202,13 +202,6 @@ class ControlSettingsController extends Controller
         if (in_array($field['type'], ['policy', 'policy_select'], true)) {
             return Policy::get($field['policy_key'] ?? $key, $field['default']);
         }
-        if ($field['type'] === 'readonly') {
-            return match ($key) {
-                'pay.pesapal.ipn' => route('api.webhooks.pesapal'),
-                default => (string) ($field['default'] ?? ''),
-            };
-        }
-
         if ($field['type'] === 'secret') {
             $storageKey = $field['secret_key'] ?? $key;
 
@@ -225,9 +218,6 @@ class ControlSettingsController extends Controller
 
         $storageKey = $this->storageKey($key);
         $value = PlatformSetting::get($storageKey, $field['default']);
-        if (in_array($key, ['pay.pesapal.mode', 'pay.flw.mode', 'pay.mtn.mode', 'pay.airtel.mode'], true)) {
-            return $value === 'production' ? 'live' : $value;
-        }
 
         return $value;
     }
@@ -243,11 +233,7 @@ class ControlSettingsController extends Controller
         if ($field['type'] === 'secret') {
             if ($value !== '') {
                 $storageKey = $field['secret_key'] ?? $key;
-                if (in_array($storageKey, ['pesapal_consumer_key', 'flutterwave_public_key'], true)) {
-                    PlatformSetting::set($storageKey, $value);
-                } else {
-                    PlatformSetting::setSecret($storageKey, $value);
-                }
+                PlatformSetting::setSecret($storageKey, $value);
             }
 
             return;
@@ -265,10 +251,6 @@ class ControlSettingsController extends Controller
             return;
         }
 
-        if (in_array($key, ['pay.pesapal.mode', 'pay.flw.mode', 'pay.mtn.mode', 'pay.airtel.mode'], true)) {
-            $value = $value === 'live' ? 'production' : $value;
-        }
-
         PlatformSetting::set($this->storageKey($key), $value);
     }
 
@@ -281,16 +263,6 @@ class ControlSettingsController extends Controller
             'app.support_email' => 'support_email',
             'app.support_phone' => 'support_phone',
             'tenant.commission_rate' => 'default_commission_rate',
-            'pay.pesapal.enabled' => 'pesapal_enabled',
-            'pay.pesapal.mode' => 'pesapal_environment',
-            'pay.pesapal.key' => 'pesapal_consumer_key',
-            'pay.flw.enabled' => 'flutterwave_enabled',
-            'pay.flw.mode' => 'flutterwave_environment',
-            'pay.flw.public' => 'flutterwave_public_key',
-            'pay.mtn.enabled' => 'mtn_enabled',
-            'pay.mtn.mode' => 'mtn_environment',
-            'pay.airtel.enabled' => 'airtel_enabled',
-            'pay.airtel.mode' => 'airtel_environment',
             'sms.provider' => 'sms_provider',
             'sms.username' => 'sms_username',
             'sms.environment' => 'sms_environment',

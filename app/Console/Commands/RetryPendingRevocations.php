@@ -56,7 +56,7 @@ class RetryPendingRevocations extends Command
                             ? 'disconnected'
                             : 'expired';
 
-                        if ($router->access_backend === 'radius') {
+                        if ($session->access_mode === 'radius') {
                             if ($radiusAccounting->requestDisconnect(
                                 $session,
                                 "revocation:{$session->id}:{$finalStatus}",

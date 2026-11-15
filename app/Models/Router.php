@@ -84,8 +84,16 @@ class Router extends Model
      */
     public function hasUsableRadiusConfiguration(): bool
     {
-        if ($this->access_backend !== 'radius'
-            || ! is_string($this->radius_nas_identifier)
+        return $this->access_mode === 'radius' && $this->hasRadiusCredentialMaterial();
+    }
+
+    /**
+     * Existing RADIUS sessions may need revocation after the router's selected
+     * mode changes. Keep credential usability independent from that selector.
+     */
+    public function hasRadiusCredentialMaterial(): bool
+    {
+        if (! is_string($this->radius_nas_identifier)
             || trim($this->radius_nas_identifier) === '') {
             return false;
         }

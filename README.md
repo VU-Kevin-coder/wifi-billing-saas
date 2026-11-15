@@ -178,7 +178,7 @@ The first milestone prioritizes a **complete, testable customer journey** over a
 | **Vouchers** | Generate and manage vouchers |
 | **MikroTik** | Connect to and manage a supported test router |
 | **Customer portal** | Select a package and initiate access |
-| **Payments** | Initiate MTN MoMo or Airtel Money Uganda collections and verify them before fulfillment |
+| **Payments** | Accept Uganda (UGX) mobile-money collections through ObPay, PawaPay, or Xente and verify settlement before fulfillment |
 | **Access activation** | Verify payment before granting access |
 | **Sessions** | Track relevant access status and expiration |
 | **Dashboard** | Show essential operational records and summaries |
@@ -328,7 +328,7 @@ app/
 | **Local development** | ![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?style=flat-square&logo=docker&logoColor=white) (Docker Desktop on Windows, Docker Engine on Linux) | Compose v2 |
 | **Source control** | ![Git](https://img.shields.io/badge/Git-F05032?style=flat-square&logo=git&logoColor=white) [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/VU-Kevin-coder/wifi-billing-saas) | n/a |
 | **Router integration** | ![MikroTik](https://img.shields.io/badge/MikroTik-293239?style=flat-square&logo=mikrotik&logoColor=white) `evilfreelancer/routeros-api-php` (RouterOS 6/7 API) | Latest stable at lock time |
-| **Payment integration** | Direct MTN MoMo and Airtel Money Uganda collections; Flutterwave retained for operator payouts and legacy transactions | n/a |
+| **Payment integration** | ObPay, PawaPay, and Xente for Uganda (UGX) collections and operator wallet payouts | n/a |
 | **Automated testing** | ![Pest](https://img.shields.io/badge/Pest-F472B6?style=flat-square&logo=pestphp&logoColor=white) (on top of PHPUnit) | Pest 2.x |
 | **Static analysis** | Laravel Pint (formatting) and PHPStan | PHPStan level 6 |
 | **Continuous integration** | ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white) (test and lint on every PR) | n/a |
@@ -657,12 +657,7 @@ MIKROTIK_DEFAULT_CLIENT_PORTS=ether2,ether3
 HEALTH_SCHEDULER_STALE_SECONDS=120
 MAIL_FROM_ADDRESS=hello@example.com
 
-# Flutterwave legacy collections and operator payouts (never commit real credentials)
-FLUTTERWAVE_PUBLIC_KEY=
-FLUTTERWAVE_SECRET_KEY=
-FLUTTERWAVE_ENCRYPTION_KEY=
-FLUTTERWAVE_WEBHOOK_SECRET=
-FLUTTERWAVE_ENVIRONMENT=sandbox
+# Payment provider credentials are stored encrypted in Platform → Configuration.
 PAYMENT_SIMULATION_ENABLED=false
 ```
 
@@ -677,26 +672,30 @@ These values are illustrative. The final settings must match the service names, 
 - [x] Never enable Laravel debug mode in production
 - [x] Rotate any secret that is accidentally committed
 
-### Direct mobile money setup
+### Payment gateway setup
 
-Configure MTN MoMo and Airtel Money credentials in **Platform → Configuration**.
-These credentials are encrypted in the platform settings database; do not put
-them in `.env`. Leave a saved secret field blank to keep its current value.
-Register `https://<your-app-host>/api/webhooks/mtn` and
-`https://<your-app-host>/api/webhooks/airtel` with the respective providers.
-Callbacks trigger an authenticated provider status check; callback contents alone
-never issue a voucher. MTN sandbox requests use EUR while production collections
-use UGX.
+Configure ObPay, PawaPay, and Xente in **Platform → Configuration**. Credentials
+are encrypted in platform settings and are not configured through `.env`. Select
+at most one active gateway for new customer checkout; platform approvers select
+the gateway for each mobile-money withdrawal. Manual bank transfers remain
+available.
 
-### Flutterwave compatibility
+Register the following callbacks with the corresponding providers:
 
-Flutterwave remains configured for existing operator payout transfers and
-verification of legacy collections. New captive-portal collections use MTN MoMo
-or Airtel Money. Configure the Flutterwave credentials in **Platform → Configuration**
-or through the environment variables above. Set the Flutterwave dashboard webhook URL to
-`https://<your-app-host>/api/webhooks/flutterwave` and use the same webhook
-secret hash in both systems. Payouts and legacy payments remain pending until the
-server verifies their status directly with Flutterwave.
+- ObPay: `https://<your-app-host>/api/webhooks/obpay`
+- PawaPay: `https://<your-app-host>/api/webhooks/pawapay`
+- Xente: `https://<your-app-host>/api/webhooks/xente`
+
+Use the Xente product catalog action to load and select Uganda collection and
+payout products. Webhook payloads are not treated as proof of payment: the
+application verifies status, reference, amount, and UGX currency with the provider
+before issuing vouchers or completing payouts. Provider credentials and live
+transactions must be validated with authorized merchant accounts before
+production use.
+
+Historical transactions and legacy provider secrets are retained, but old
+providers are no longer used for new transactions or automatic reconciliation.
+Previously pending legacy transactions require manual handling.
 
 ---
 
@@ -1245,9 +1244,10 @@ Record significant architectural decisions here as they are made. Each entry sho
 | 1 | Modular monolith (Laravel) | Fits a 2-person team and the 14-day deadline | 2026-10-24 |
 | 2 | Multi-tenancy: single DB, shared schema, `tenant_id` | Simpler operations; adequate isolation when tested | 2026-10-24 |
 | 3 | Frontend: Blade + Livewire + Alpine + Tailwind | Fastest path to a working tenant-scoped UI | 2026-10-24 |
-| 4 | Payment provider: **Flutterwave** | Uganda mobile-money collection and operator payouts; verify charges and transfers with Flutterwave before fulfillment | 2026-11-03 |
+| 4 | Payment provider: **Flutterwave** *(superseded)* | Historical decision; replaced by decision 7 | 2026-11-03 |
 | 5 | MikroTik target: hAP ac², RouterOS 7.x | Available test hardware; RouterOS 7 is current | 2026-10-24 |
-| 6 | Direct mobile-money collections: **MTN MoMo and Airtel Money** | Store collection credentials encrypted in platform settings and verify provider status before voucher fulfillment; preserve Flutterwave for payouts | 2026-11-04 |
+| 6 | Direct mobile-money collections: **MTN MoMo and Airtel Money** *(superseded)* | Historical decision; replaced by decision 7 | 2026-11-04 |
+| 7 | Payment providers: **ObPay, PawaPay, and Xente** | Uganda (UGX) collections; approver-selected provider for mobile-money payouts; retain old data and manually handle unresolved legacy transactions | 2026-11-17 |
 
 ---
 

@@ -26,6 +26,7 @@
         <env name="CACHE_STORE" value="array" force="true"/>
         <env name="DB_CONNECTION" value="sqlite" force="true"/>
         <env name="DB_DATABASE" value=":memory:" force="true"/>
+        <env name="PHPUNIT_USE_CONFIGURED_DATABASE" value="false" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PLATFORM_ADMIN_MFA_REQUIRED" value="false"/>
         <env name="MFA_STEP_UP_ENABLED" value="false"/>

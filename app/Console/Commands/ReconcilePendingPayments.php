@@ -24,7 +24,7 @@ class ReconcilePendingPayments extends Command
             ->where('status', 'pending')
             ->whereNotNull('provider_reference')
             ->where('created_at', '<=', now()->subMinutes($minutes))
-            ->whereIn('meta->payment_provider', ['MTN', 'AIRTEL'])
+            ->whereIn('meta->payment_provider', ['obpay', 'pawapay', 'xente'])
             ->orderBy('id')
             ->chunkById(100, function ($transactions) use ($payments, &$checked, &$unavailable): void {
                 foreach ($transactions as $transaction) {

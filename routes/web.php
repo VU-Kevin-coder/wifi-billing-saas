@@ -68,9 +68,6 @@ Route::prefix('portal')
         Route::get('/{tenant?}/success', [PortalController::class, 'success'])
             ->middleware('throttle:portal-browse')
             ->name('success');
-        Route::get('/{tenant}/pesapal/callback', [PortalController::class, 'pesapalCallback'])
-            ->middleware('throttle:portal-browse')
-            ->name('pesapal.callback');
         Route::get('/{tenant}/pending/{transaction}', [PortalController::class, 'pending'])
             ->whereNumber('transaction')
             ->middleware('throttle:portal-browse')
@@ -125,10 +122,16 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
             ->name('configuration.control.action');
         Route::put('/configuration/general', [ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
-        Route::put('/configuration/pesapal', [ConfigurationController::class, 'updatePesapal'])->middleware('mfa.recent')->name('configuration.pesapal.update');
-        Route::put('/configuration/flutterwave', [ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
-        Route::put('/configuration/mtn', [ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
-        Route::put('/configuration/airtel', [ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
+        Route::put('/configuration/payments', [ConfigurationController::class, 'updatePayments'])
+            ->middleware(['mfa.recent', 'throttle:10,1'])
+            ->name('configuration.payments.update');
+        Route::post('/configuration/payments/test/{provider}', [ConfigurationController::class, 'testPaymentGateway'])
+            ->whereIn('provider', ['obpay', 'pawapay', 'xente'])
+            ->middleware(['mfa.recent', 'throttle:5,1'])
+            ->name('configuration.payments.test');
+        Route::post('/configuration/payments/xente/products', [ConfigurationController::class, 'xenteProducts'])
+            ->middleware(['mfa.recent', 'throttle:5,1'])
+            ->name('configuration.payments.xente.products');
         Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
         Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
         Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
@@ -164,9 +167,6 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::get('/success', [PortalController::class, 'success'])
                     ->middleware('throttle:portal-browse')
                     ->name('success');
-                Route::get('/pesapal/callback', [PortalController::class, 'pesapalCallback'])
-                    ->middleware('throttle:portal-browse')
-                    ->name('pesapal.callback');
                 Route::get('/pending/{transaction}', [PortalController::class, 'pending'])
                     ->whereNumber('transaction')
                     ->middleware('throttle:portal-browse')

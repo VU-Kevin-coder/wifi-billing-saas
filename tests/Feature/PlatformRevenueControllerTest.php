@@ -23,7 +23,7 @@ class PlatformRevenueControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const API_URL = 'https://api.flutterwave.com/v3';
+    private const API_URL = 'https://obpay.online/api/public/v1';
 
     private User $admin;
 
@@ -38,7 +38,8 @@ class PlatformRevenueControllerTest extends TestCase
         $this->admin = User::factory()->create(['tenant_id' => null]);
         $this->admin->assignRole('platform_admin');
 
-        PlatformSetting::setSecret('flutterwave_secret_key', 'test-secret-key');
+        PlatformSetting::setSecret('payment.obpay.secret_key', 'test-secret-key');
+        PlatformSetting::setSecret('payment.obpay.webhook_secret', 'test-webhook-secret');
         PlatformSetting::set('currency', 'UGX');
 
         $this->tenant = Tenant::create([
@@ -107,24 +108,26 @@ class PlatformRevenueControllerTest extends TestCase
         $operatorAdmin = $this->operatorAdmin();
 
         Http::fake([
-            self::API_URL.'/transfers' => Http::response([
-                'status' => 'success',
-                'data' => ['id' => 9911, 'status' => 'NEW'],
+            self::API_URL.'/payouts' => Http::response([
+                'success' => true,
+                'data' => ['reference' => $tx->reference, 'status' => 'pending'],
             ]),
-            self::API_URL.'/transfers/9911' => Http::response([
-                'status' => 'success',
+            self::API_URL.'/transactions/'.$tx->reference => Http::response([
+                'success' => true,
                 'data' => [
-                    'id' => 9911,
                     'reference' => $tx->reference,
                     'amount' => 10000,
                     'currency' => 'UGX',
-                    'status' => 'SUCCESSFUL',
+                    'status' => 'completed',
                 ],
             ]),
         ]);
 
         $this->actingAs($this->admin)
-            ->post(route('platform.revenue.withdrawals.approve', $tx->id), ['_idempotency_key' => $this->idempotencyKey()])
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), [
+                'gateway' => 'obpay',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ])
             ->assertSessionHasNoErrors();
 
         $this->assertSame('completed', Transaction::withoutTenancy()->find($tx->id)->status);
@@ -171,7 +174,7 @@ class PlatformRevenueControllerTest extends TestCase
         $completed = Transaction::withoutTenancy()->findOrFail($tx->id);
         $this->assertSame('completed', $completed->status);
         $this->assertSame('BANK-REF-2026-001', $completed->meta['manual_payout_reference']);
-        $this->assertSame('manual', $completed->meta['flutterwave_transfer_submission']);
+        $this->assertSame('BANK-REF-2026-001', $completed->meta['manual_payout_reference']);
         Http::assertNothingSent();
         Notification::assertSentTo($operatorAdmin, WithdrawalApproved::class);
     }

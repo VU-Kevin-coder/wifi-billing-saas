@@ -215,8 +215,18 @@
                                                     @csrf
                                                     @if(($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer')
                                                         <input type="text" name="payout_reference" required minlength="3" maxlength="100" placeholder="Bank transfer reference" class="mb-2 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs">
+                                                    @else
+                                                        <select name="gateway" required class="mb-2 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs">
+                                                            <option value="">Select payout gateway</option>
+                                                            @foreach($paymentGateways as $gateway)
+                                                                <option value="{{ $gateway }}">{{ ['obpay' => 'ObPay', 'pawapay' => 'PawaPay', 'xente' => 'Xente'][$gateway] }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                        @if(empty($paymentGateways))
+                                                            <p class="mb-2 text-[11px] text-red-600">No payment gateway is fully configured for payouts.</p>
+                                                        @endif
                                                     @endif
-                                                    <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm">
+                                                    <button type="submit" {{ ($pendingTx->meta['payout_method'] ?? null) !== 'bank_transfer' && empty($paymentGateways) ? 'disabled' : '' }} class="w-full bg-green-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50">
                                                         {{ ($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer' ? 'Confirm Bank Transfer' : 'Approve Payout' }}
                                                     </button>
                                                 </form>

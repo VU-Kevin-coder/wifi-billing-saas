@@ -62,7 +62,7 @@ class VoucherActivationService
 
             $router = $this->resolveRouter($tenant, $voucher, $request, $sessionContext);
             $site = $this->resolveSite($tenant, $voucher, $router);
-            $accessBackend = $router?->access_backend ?? 'site_agent';
+            $accessBackend = $router?->access_mode ?? 'site_agent';
             if (! in_array($accessBackend, ['site_agent', 'radius'], true)) {
                 throw new LogicException('This router has an unsupported access backend. Access was not activated.');
             }
@@ -117,6 +117,7 @@ class VoucherActivationService
                 'voucher_id' => $voucher->id,
                 'package_id' => $package->id,
                 'router_id' => $router?->id,
+                'access_mode' => $accessBackend,
                 'status' => ($usesRadius || $siteAgent) ? 'provisioning' : 'active',
                 'started_at' => $startedAt,
                 'expires_at' => $package->expiresAt($startedAt),
@@ -144,7 +145,7 @@ class VoucherActivationService
         $router = Router::query()
             ->where('tenant_id', $tenant->id)
             ->find($session->router_id);
-        if (! $router || $router->access_backend !== 'site_agent' || ! $router->site_id) {
+        if (! $router || $router->access_mode !== 'site_agent' || ! $router->site_id) {
             return;
         }
 
@@ -161,6 +162,7 @@ class VoucherActivationService
 
         if ($siteAgent && ! $hasProvisionCommand) {
             app(SiteAgentCommandService::class)->provision($router, $session, $voucher);
+            $session->update(['access_mode' => 'site_agent']);
         }
     }
 

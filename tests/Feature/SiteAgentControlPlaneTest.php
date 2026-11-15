@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\BlockedDevice;
 use App\Models\Package;
+use App\Models\RadiusDisconnectCommand;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
@@ -32,7 +33,7 @@ class SiteAgentControlPlaneTest extends TestCase
         config(['site_agent.required' => true]);
         [$tenant, $site, $router, $agent, $voucher] = $this->createSiteSetup();
 
-        $this->assertSame('site_agent', $router->fresh()->access_backend);
+        $this->assertSame('site_agent', $router->fresh()->access_mode);
 
         $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
             ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
@@ -69,11 +70,12 @@ class SiteAgentControlPlaneTest extends TestCase
         $radiusSession = Session::query()->where('voucher_id', $radiusVoucher->id)->sole();
 
         $this->assertSame('provisioning', $radiusSession->status);
+        $this->assertSame('radius', $radiusSession->access_mode);
         $this->assertSame('redeemed', $radiusVoucher->fresh()->status);
         $this->assertDatabaseCount('site_agent_commands', 0);
 
         // Rollback is an explicit per-router backend change, not automatic fallback.
-        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $router->forceFill(['access_mode' => 'site_agent'])->saveOrFail();
         $agent = SiteAgent::create([
             'tenant_id' => $tenant->id,
             'site_id' => $site->id,
@@ -96,7 +98,32 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertSame('redeemed', $radiusVoucher->fresh()->status);
         $this->assertDatabaseCount('sessions_log', 1);
         $this->assertDatabaseCount('site_agent_commands', 1);
-        $this->assertSame('site_agent', $router->fresh()->access_backend);
+        $this->assertSame('site_agent', $router->fresh()->access_mode);
+        $this->assertSame('site_agent', $radiusSession->fresh()->access_mode);
+    }
+
+    public function test_site_agent_session_revocation_keeps_using_agent_after_router_opts_into_radius(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, , $router, , $voucher] = $this->createSiteSetup();
+        $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+
+        app(RadiusRouterCredentialService::class)->optIn($router, 'radius-after-agent-session');
+        $this->assertSame('radius', $router->fresh()->access_mode);
+        $this->assertSame('site_agent', $session->fresh()->access_mode);
+
+        $revoked = app(TenantContext::class)->runAs($tenant, fn () => app(AccessRevoker::class)
+            ->revoke($voucher, 'refund', 'disconnected'));
+
+        $this->assertTrue($revoked);
+        $this->assertSame('disconnecting', $session->fresh()->status);
+        $this->assertTrue($session->fresh()->pending_revocation);
+        $this->assertSame('expire_user', SiteAgentCommand::query()
+            ->where('session_id', $session->id)
+            ->latest('id')
+            ->value('operation'));
+        $this->assertSame(0, RadiusDisconnectCommand::query()->count());
     }
 
     public function test_incomplete_radius_router_fails_closed_without_agent_fallback_or_entitlement_mutation(): void
@@ -104,7 +131,7 @@ class SiteAgentControlPlaneTest extends TestCase
         config(['site_agent.required' => true]);
         [$tenant, , $router, , $voucher] = $this->createSiteSetup();
         $router->forceFill([
-            'access_backend' => 'radius',
+            'access_mode' => 'radius',
             'radius_nas_identifier' => 'radius-incomplete-test',
             'radius_shared_secret' => null,
         ])->saveOrFail();
@@ -125,7 +152,7 @@ class SiteAgentControlPlaneTest extends TestCase
     public function test_paired_agent_can_poll_and_acknowledge_provision_and_expiry(): void
     {
         config(['site_agent.required' => true]);
-        [$tenant, , , $agent, $voucher] = $this->createSiteSetup();
+        [$tenant, , $router, $agent, $voucher] = $this->createSiteSetup();
         $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
             ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
         $token = 'one-time-site-token';
@@ -144,6 +171,7 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertSame('active', Session::withoutTenancy()->findOrFail($session->id)->status);
 
         $session->update(['expires_at' => now()->subSecond()]);
+        app(RadiusRouterCredentialService::class)->optIn($router, 'radius-after-agent-expiry');
         $this->artisan('sessions:expire')->assertSuccessful();
         $expiry = SiteAgentCommand::query()->where('operation', 'expire_user')->firstOrFail();
         $this->assertSame('pending', $expiry->status);
@@ -259,7 +287,7 @@ class SiteAgentControlPlaneTest extends TestCase
     public function test_pending_revocation_remains_pending_when_site_agent_is_unavailable(): void
     {
         config(['site_agent.required' => true]);
-        [$tenant, $site, , $agent, $voucher] = $this->createSiteSetup();
+        [$tenant, $site, $router, $agent, $voucher] = $this->createSiteSetup();
         $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
             ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
         $operator = User::factory()->create(['tenant_id' => $tenant->id]);
@@ -278,6 +306,9 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertSame('disconnecting', $session->fresh()->status);
         $this->assertTrue($session->fresh()->pending_revocation);
         $this->assertDatabaseMissing('site_agent_commands', ['operation' => 'expire_user']);
+
+        app(RadiusRouterCredentialService::class)->optIn($router, 'radius-revocation-retry');
+        $this->assertSame('radius', $router->fresh()->access_mode);
 
         SiteAgent::create([
             'tenant_id' => $tenant->id,

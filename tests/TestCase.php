@@ -6,6 +6,7 @@ use App\Services\Policy\Policy;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use RuntimeException;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -17,16 +18,50 @@ abstract class TestCase extends BaseTestCase
             'APP_ENV' => 'testing',
             'APP_KEY' => 'base64:'.base64_encode(str_repeat('x', 32)),
             'APP_CONFIG_CACHE' => $environmentPath.DIRECTORY_SEPARATOR.'config-cache.php',
-            'DB_CONNECTION' => 'sqlite',
-            'DB_DATABASE' => ':memory:',
-            'DB_URL' => '',
-            'DB_FOREIGN_KEYS' => 'true',
             'CACHE_STORE' => 'array',
             'QUEUE_CONNECTION' => 'sync',
             'SESSION_DRIVER' => 'array',
             'MAIL_MAILER' => 'array',
             'WIREGUARD_ENABLED' => 'false',
         ];
+
+        $environmentValue = static function (string $name): string {
+            $value = getenv($name);
+            if ($value === false) {
+                $value = $_ENV[$name] ?? $_SERVER[$name] ?? '';
+            }
+
+            return is_scalar($value) ? (string) $value : '';
+        };
+
+        if (filter_var($environmentValue('PHPUNIT_USE_CONFIGURED_DATABASE'), FILTER_VALIDATE_BOOLEAN)) {
+            $connection = $environmentValue('DB_CONNECTION');
+            $host = $environmentValue('DB_HOST');
+            $database = $environmentValue('DB_DATABASE');
+
+            if (! in_array($connection, ['mysql', 'pgsql'], true)
+                || ! in_array($host, ['127.0.0.1', 'localhost'], true)
+                || $database !== 'testing') {
+                throw new RuntimeException('Configured-database tests require a local MySQL/PostgreSQL test service and the testing database.');
+            }
+
+            $testEnvironment = array_merge($testEnvironment, [
+                'DB_CONNECTION' => $connection,
+                'DB_HOST' => $host,
+                'DB_PORT' => $environmentValue('DB_PORT'),
+                'DB_DATABASE' => $database,
+                'DB_USERNAME' => $environmentValue('DB_USERNAME'),
+                'DB_PASSWORD' => $environmentValue('DB_PASSWORD'),
+                'DB_URL' => '',
+            ]);
+        } else {
+            $testEnvironment = array_merge($testEnvironment, [
+                'DB_CONNECTION' => 'sqlite',
+                'DB_DATABASE' => ':memory:',
+                'DB_URL' => '',
+                'DB_FOREIGN_KEYS' => 'true',
+            ]);
+        }
 
         foreach ($testEnvironment as $name => $value) {
             putenv($name.'='.$value);

@@ -48,7 +48,7 @@ class RadiusRouterCredentialService
             $secret = bin2hex(random_bytes(32));
 
             $lockedRouter->forceFill([
-                'access_backend' => 'radius',
+                'access_mode' => 'radius',
                 'radius_nas_identifier' => $nasIdentifier,
                 'radius_shared_secret' => $secret,
             ]);

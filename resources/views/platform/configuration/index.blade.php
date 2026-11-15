@@ -135,7 +135,7 @@
                                 <option value="KES" {{ old('currency', $settings['currency']) == 'KES' ? 'selected' : '' }}>KES - Kenyan Shilling</option>
                                 <option value="USD" {{ old('currency', $settings['currency']) == 'USD' ? 'selected' : '' }}>USD - US Dollar</option>
                             </select>
-                            <p class="mt-1 text-[11px] text-gray-500">New packages use this currency. MTN and Airtel collections currently accept UGX only; use Pesapal for KES or USD packages.</p>
+                            <p class="mt-1 text-[11px] text-gray-500">New packages use this currency. The configured online mobile-money gateways currently process Uganda UGX payments.</p>
                         </div>
 
                         <div>
@@ -194,51 +194,42 @@
                         <h2 class="text-base font-bold text-gray-900">Platform integrations</h2>
                         <p class="text-xs text-gray-500 mt-1">Platform-owned credentials only. Operator merchant accounts remain isolated in their respective workspaces.</p>
                     </div>
-                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                    <button @click="openOverlay('payments')" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                         <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        Run all connections check
+                        Configure payment gateways
                     </button>
                 </div>
                 
                 @php
                     $integrationItems = [
                         [
-                            'key' => 'mtn',
-                            'name' => 'MTN MoMo',
-                            'desc' => 'Direct Uganda mobile money collections',
-                            'label' => 'MTN',
-                            'bg' => 'bg-yellow-500/10',
-                            'text' => 'text-yellow-700',
-                            'status' => $settings['mtn_status'],
+                            'key' => 'obpay',
+                            'name' => 'ObPay',
+                            'desc' => 'Uganda collections and operator wallet payouts',
+                            'label' => 'OB',
+                            'bg' => 'bg-indigo-500/10',
+                            'text' => 'text-indigo-600',
+                            'status' => $settings['payment_active_gateway'] === 'obpay' ? 'Active' : ($settings['obpay_configured'] ? 'Configured' : 'Not Configured'),
                         ],
                         [
-                            'key' => 'airtel',
-                            'name' => 'Airtel Money',
-                            'desc' => 'Direct Uganda mobile money collections',
-                            'label' => 'AIR',
-                            'bg' => 'bg-red-500/10',
-                            'text' => 'text-red-600',
-                            'status' => $settings['airtel_status'],
+                            'key' => 'pawapay',
+                            'name' => 'PawaPay',
+                            'desc' => 'Uganda collections and operator wallet payouts',
+                            'label' => 'PAWA',
+                            'bg' => 'bg-cyan-500/10',
+                            'text' => 'text-cyan-700',
+                            'status' => $settings['payment_active_gateway'] === 'pawapay' ? 'Active' : ($settings['pawapay_configured'] ? 'Configured' : 'Not Configured'),
                         ],
                         [
-                            'key' => 'pesapal',
-                            'name' => 'Pesapal',
-                            'desc' => 'Mobile Money (MTN/Airtel) & Card Collections',
-                            'label' => 'PSP',
-                            'bg' => 'bg-emerald-500/10',
-                            'text' => 'text-emerald-600',
-                            'status' => $settings['pesapal_status'],
-                        ],
-                        [
-                            'key' => 'flutterwave',
-                            'name' => 'Flutterwave payouts',
-                            'desc' => 'Existing operator payout transfers',
-                            'label' => 'FLW',
-                            'bg' => 'bg-blue-500/10',
-                            'text' => 'text-blue-600',
-                            'status' => $settings['flutterwave_status'],
+                            'key' => 'xente',
+                            'name' => 'Xente',
+                            'desc' => 'Uganda collections and operator wallet payouts',
+                            'label' => 'XE',
+                            'bg' => 'bg-violet-500/10',
+                            'text' => 'text-violet-700',
+                            'status' => $settings['payment_active_gateway'] === 'xente' ? 'Active' : ($settings['xente_configured'] ? 'Configured' : 'Not Configured'),
                         ],
                         [
                             'key' => 'email',
@@ -286,6 +277,7 @@
                         <div class="flex items-center gap-4">
                             @php
                                 $statusColor = match(true) {
+                                    str_contains($item['status'], 'Active') => 'bg-emerald-100 text-emerald-700',
                                     str_contains($item['status'], 'Connected') => 'bg-emerald-100 text-emerald-700',
                                     str_contains($item['status'], 'Configured') => 'bg-blue-100 text-blue-700',
                                     str_contains($item['status'], 'Failed') => 'bg-red-100 text-red-700',
@@ -293,6 +285,7 @@
                                     default => 'bg-gray-100 text-gray-600',
                                 };
                                 $dotColor = match(true) {
+                                    str_contains($item['status'], 'Active') => 'bg-emerald-500',
                                     str_contains($item['status'], 'Connected') => 'bg-emerald-500',
                                     str_contains($item['status'], 'Configured') => 'bg-blue-500',
                                     str_contains($item['status'], 'Failed') => 'bg-red-500',
@@ -304,7 +297,7 @@
                                 <span class="w-1.5 h-1.5 rounded-full {{ $dotColor }}"></span>
                                 {{ $item['status'] }}
                             </span>
-                            <button @click="openOverlay('{{ $item['key'] }}')" type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                            <button @click="openOverlay('{{ in_array($item['key'], ['obpay', 'pawapay', 'xente'], true) ? 'payments' : $item['key'] }}')" type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
                                 Configure
                             </button>
                         </div>
@@ -316,7 +309,7 @@
                     <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
                     </svg>
-                    <span>Secrets are encrypted at rest using AES-256. Webhook signatures are strictly verified and audited.</span>
+                    <span>Payment secrets are encrypted at rest. New transactions are checked against provider status before fulfillment.</span>
                 </div>
             </div>
 
@@ -387,6 +380,114 @@
 
         </div>
 
+        <div x-show="activeOverlay === 'payments'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
+            <div x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
+            <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                <section x-transition class="w-screen max-w-2xl bg-white shadow-2xl flex flex-col">
+                    <header class="px-6 py-5 border-b border-gray-200 flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-gray-900">Payment gateway configuration</h2>
+                            <p class="text-[11px] text-gray-500">Configure ObPay, PawaPay, and Xente for Uganda (UGX).</p>
+                        </div>
+                        <button type="button" @click="closeOverlay()" class="text-xs text-gray-500 hover:text-gray-900">Close</button>
+                    </header>
+                    <form method="POST" action="{{ route('platform.configuration.payments.update') }}" class="flex-1 overflow-y-auto p-6 space-y-6">
+                        @csrf
+                        @method('PUT')
+                        @if ($errors->any())
+                            <div class="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                                @foreach ($errors->all() as $error)<p>{{ $error }}</p>@endforeach
+                            </div>
+                        @endif
+                        <div>
+                            <label for="active_gateway" class="block text-xs font-semibold text-gray-700 mb-1.5">Checkout gateway</label>
+                            <select id="active_gateway" name="active_gateway" class="block w-full rounded-xl border-gray-300 text-xs py-2.5">
+                                <option value="" {{ $settings['payment_active_gateway'] ? '' : 'selected' }}>Disabled — do not accept online payments</option>
+                                <option value="obpay" {{ $settings['payment_active_gateway'] === 'obpay' ? 'selected' : '' }}>ObPay</option>
+                                <option value="pawapay" {{ $settings['payment_active_gateway'] === 'pawapay' ? 'selected' : '' }}>PawaPay</option>
+                                <option value="xente" {{ $settings['payment_active_gateway'] === 'xente' ? 'selected' : '' }}>Xente</option>
+                            </select>
+                            <p class="mt-1 text-[11px] text-gray-500">Only the selected provider handles new customer checkout. Payout approvers choose a provider separately for each withdrawal.</p>
+                        </div>
+
+                        <section class="rounded-xl border border-gray-200 p-4 space-y-3">
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900">ObPay</h3>
+                                <p class="text-[11px] text-gray-500">Webhook: {{ url('/api/webhooks/obpay') }}</p>
+                            </div>
+                            <label class="block text-[11px] font-semibold text-gray-700">API secret key
+                                <input type="password" name="obpay_secret_key" autocomplete="new-password" placeholder="{{ $settings['obpay_secret_configured'] ? 'Saved securely — leave blank to keep current key' : 'Enter ObPay secret key' }}" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                            </label>
+                            <label class="block text-[11px] font-semibold text-gray-700">Webhook signing secret
+                                <input type="password" name="obpay_webhook_secret" autocomplete="new-password" placeholder="{{ $settings['obpay_webhook_secret_configured'] ? 'Saved securely — leave blank to keep current secret' : 'Enter webhook signing secret' }}" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                            </label>
+                        </section>
+
+                        <section class="rounded-xl border border-gray-200 p-4 space-y-3">
+                            <div>
+                                <h3 class="text-xs font-bold text-gray-900">PawaPay</h3>
+                                <p class="text-[11px] text-gray-500">Configure this URL in PawaPay: {{ url('/api/webhooks/pawapay') }}</p>
+                            </div>
+                            <label class="block text-[11px] font-semibold text-gray-700">API token
+                                <input type="password" name="pawapay_api_token" autocomplete="new-password" placeholder="{{ $settings['pawapay_token_configured'] ? 'Saved securely — leave blank to keep current token' : 'Enter PawaPay API token' }}" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                            </label>
+                            <label class="block text-[11px] font-semibold text-gray-700">Environment
+                                <select name="pawapay_environment" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                                    <option value="sandbox" {{ $settings['pawapay_environment'] === 'sandbox' ? 'selected' : '' }}>Sandbox</option>
+                                    <option value="production" {{ $settings['pawapay_environment'] === 'production' ? 'selected' : '' }}>Production</option>
+                                </select>
+                            </label>
+                        </section>
+
+                        <section x-data="{ products: [], loading: false, productMessage: '' }" class="rounded-xl border border-gray-200 p-4 space-y-3">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 class="text-xs font-bold text-gray-900">Xente</h3>
+                                    <p class="text-[11px] text-gray-500">Configure this IPN URL in Xente: {{ url('/api/webhooks/xente') }}</p>
+                                </div>
+                                <button type="button" :disabled="loading" @click="loading = true; productMessage = ''; fetch('{{ route('platform.configuration.payments.xente.products') }}', { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, credentials: 'same-origin' }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.message || 'Product lookup failed.'); products = data.products; productMessage = products.length ? 'Product list loaded.' : 'No Uganda mobile-money products are available.'; }).catch(error => { productMessage = error.message; }).finally(() => loading = false)" class="shrink-0 rounded-lg border border-gray-300 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 disabled:opacity-50">
+                                    <span x-text="loading ? 'Loading…' : 'Load products'"></span>
+                                </button>
+                            </div>
+                            <label class="block text-[11px] font-semibold text-gray-700">App key
+                                <input type="password" name="xente_app_key" autocomplete="new-password" placeholder="{{ $settings['xente_app_key_configured'] ? 'Saved securely — leave blank to keep current key' : 'Enter app key' }}" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                            </label>
+                            <label class="block text-[11px] font-semibold text-gray-700">App password
+                                <input type="password" name="xente_app_password" autocomplete="new-password" placeholder="{{ $settings['xente_app_password_configured'] ? 'Saved securely — leave blank to keep current password' : 'Enter app password' }}" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                            </label>
+                            <label class="block text-[11px] font-semibold text-gray-700">User ID
+                                <input type="password" name="xente_user_id" autocomplete="new-password" placeholder="{{ $settings['xente_user_id_configured'] ? 'Saved securely — leave blank to keep current ID' : 'Enter user ID' }}" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                            </label>
+                            @foreach (['collection_mtn' => 'MTN collection', 'collection_airtel' => 'Airtel collection', 'payout_mtn' => 'MTN payout', 'payout_airtel' => 'Airtel payout'] as $productKey => $productLabel)
+                                <label class="block text-[11px] font-semibold text-gray-700">{{ $productLabel }} product
+                                    <select name="xente_{{ $productKey }}" class="mt-1 block w-full rounded-lg border-gray-300 text-xs">
+                                        <option value="">Select a product after loading the catalog</option>
+                                        @if (! empty($settings['xente_products'][$productKey]))
+                                            <option value="{{ $settings['xente_products'][$productKey] }}" selected>Saved selection: {{ $settings['xente_products'][$productKey] }}</option>
+                                        @endif
+                                        <template x-for="item in products.filter(product => product.operation === '{{ str_starts_with($productKey, 'collection') ? 'collection' : 'payout' }}' && product.network === '{{ str_ends_with($productKey, 'mtn') ? 'mtn' : 'airtel' }}')" :key="item.id">
+                                            <option :value="item.id" x-text="item.name + ' (' + item.id + ')'"></option>
+                                        </template>
+                                    </select>
+                                </label>
+                            @endforeach
+                            <p x-show="productMessage" x-text="productMessage" class="text-[11px] text-gray-600" role="status"></p>
+                        </section>
+
+                        <div class="rounded-xl bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800">
+                            Provider acceptance is not proof of settlement. Transactions are confirmed using provider status lookup before vouchers or payouts are marked complete. Verify licensing and settlement arrangements before enabling production processing.
+                        </div>
+                        <div class="flex justify-end gap-2 border-t border-gray-100 pt-4">
+                            <button type="button" @click="closeOverlay()" class="rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700">Cancel</button>
+                            <button type="submit" class="rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white">Save payment settings</button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+        </div>
+
+        @if (false)
+        <!-- Legacy payment gateway overlays are intentionally not rendered. -->
         <!-- MTN MoMo settings overlay -->
         <div x-show="activeOverlay === 'mtn'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
             <div x-show="activeOverlay === 'mtn'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
@@ -633,6 +734,8 @@
         </div>
 
         <!-- ─── EMAIL (SMTP) OVERLAY ─── -->
+        @endif
+
         <div x-show="activeOverlay === 'email'" class="fixed inset-0 z-50 overflow-hidden" x-cloak>
             <div x-show="activeOverlay === 'email'" x-transition class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="closeOverlay()"></div>
             <div class="absolute inset-y-0 right-0 max-w-full flex pl-10">

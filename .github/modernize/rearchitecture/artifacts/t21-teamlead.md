@@ -4,28 +4,72 @@
 **Target:** `D:\projects\wifi-billing-saas`  
 **Verdict:** **FAIL — Phase 1 release criteria are not met.** Stop here; no Phase 2 work was started, and this gate makes no Phase 2 readiness claim.
 
-## Decision
+## Current status update — 2026-11-15
 
-The approved Phase 1 plan defines a binary gate: required implementation and migration evidence, passing tests/build, compatibility, and no prohibited activity must all be established. The smoke and repository/SQLite/browser test evidence passed, and no HIGH/CRITICAL vulnerability was confirmed. However, the required target-engine validation is absent; the implementation selector does not match the explicit user-approved name; an architectural capacity race remains open; and the t21 security review identified a router-mode transition that can prevent voucher revocation from disconnecting an existing site-agent session. The gate therefore fails without implying a production vulnerability or claiming production readiness.
+The original review below is retained as historical evidence. Subsequent
+implementation has addressed the selector mismatch, durable device-capacity
+reservations, and session-snapshot revocation routing, but the Phase 1 gate
+remains **FAIL** until target-engine and lab evidence is complete.
+
+- PostgreSQL engine family: user confirmed Render-managed PostgreSQL; the
+  production major version has not been independently confirmed from authorized
+  service configuration.
+- PostgreSQL 16 attempt: the first disposable-suite attempt did not provide
+  valid PostgreSQL evidence. PHPUnit normalized the XML `true` flag to `1`,
+  while the test bootstrap required the literal string `"true"` and therefore
+  selected SQLite. The bootstrap and concurrency guard now use
+  `FILTER_VALIDATE_BOOLEAN`. A host diagnostic confirms the PostgreSQL driver
+  path is selected, but host PHP has no `pdo_pgsql`.
+- Docker/lab: Docker 29.9.3 responds; the pre-existing local CHR 7.24.6
+  container is running and its API/SSH ports answer on loopback. The existing
+  Compose network is `172.18.0.0/16` and does not overlap the host routes
+  observed during this session. Docker returned `read-only file system` when
+  asked to create a disposable PostgreSQL container/network, so target-engine
+  tests could not be rerun. No existing container was stopped, modified, or
+  pruned. CHR licensing and actual RADIUS/WireGuard behavior remain unverified.
+- Local regression: `php artisan test` exited 0 with 2,805 assertions and 515
+  test-environment warnings; `vendor/bin/pint --test` and `git diff --check`
+  passed. `npm run e2e` passed 1 browser test and built Vite assets.
+- Private policy-channel documentation describes the required allowlist, TLS,
+  HMAC, nonce, and shared-cache controls, but deployment topology and actual
+  private reachability are still unverified.
+- The old Airtel-status-contract prerequisite is obsolete after replacing the
+  payment providers. Verify ObPay, PawaPay, and Xente provider response
+  contracts during the Phase 5 payment-flow gate; no live payment was made.
+
+The unresolved Phase 1 release blockers are a green disposable PostgreSQL run
+including the two-process concurrency test, confirmation of the target
+PostgreSQL major version, writable Docker storage for isolated lab/database
+validation, and private-channel deployment evidence. The credential recovery
+boundary is documented in `docs/ROTATION-RUNBOOK.md`; automated repeatable
+credential rotation is not implemented.
+
+## Current decision
+
+Phase 1 remains **FAIL**. The selector, reservation, and session-revocation
+implementation remediations are present and local regression checks pass.
+However, a valid PostgreSQL run including the concurrency test, the target
+PostgreSQL major-version confirmation, and isolated lab/private-channel evidence
+are still missing. Do not start Phase 2 until these gates pass.
 
 ## Gate Criteria
 
 | Criterion | Result | Evidence / disposition |
 |---|---|---|
 | Laravel 12 / PHP 8.2 and repository dependency/build compatibility | PASS at repository scope | t19 reports PHP 8.2.12, Laravel 12.72.0, Composer locked platform check/install and Vite production build passed. No target-version downgrade or ignored platform requirement. |
-| Existing site-agent default, public API/payment contract, tenant and access-term preservation | PASS for reviewed paths, with transition exception below | t17 and t20 report existing routes/contracts and default `site_agent` path preserved; t20 full suite and browser flow pass. The new t21 revocation finding is a specific open transition risk. |
-| Explicit opt-in selector matches the user-approved contract | FAIL | Clarification/user instruction names `access_mode=radius`; t13/t17 and reviewed implementation use `access_backend=radius`. No evidence establishes equivalence. Confirm the canonical field and align implementation, migration, tests, and contract before further acceptance. |
+| Existing site-agent default, public API/payment contract, tenant and access-term preservation | PASS for reviewed paths; transition fix has local regression evidence | t17 and t20 report existing routes/contracts and default `site_agent` path preserved. The backend-transition concern from the original review has been addressed with per-session access-mode snapshots; target-engine concurrency evidence remains pending. |
+| Explicit opt-in selector matches the user-approved contract | Historical FAIL; implementation remediation present | The canonical application selector is now `access_mode`; the follow-up migration copies legacy `access_backend` values. Phase 1 target-engine migration validation remains outstanding. |
 | Focused and complete repository regression tests | PASS | t20: focused 93 passed, 0 failed, 0 skipped; full suite 564 passed, 0 failed, 0 skipped (3,062 assertions), SQLite `:memory:`. |
 | Browser and local startup validation | PASS | t20 Playwright 1 passed, 0 failed; local PHP server/readiness passed; CSS/JS requests returned 200. t19 `/up` returned HTTP 200. Browser scope is pending-payment/status/token transport, not successful live-provider fulfillment or router browsing. |
 | Build and PHP syntax smoke | PASS at isolated repository scope | t19 `## Smoke Test Verdict`: returncode 0, `covers_all_modules: yes`, startup HTTP 200; locked Composer install and isolated Vite build passed; 338 PHP syntax checks passed. The smoke used `node tests/e2e/build-assets.mjs` with an isolated env directory rather than the canonical `npm run build`; it reports all configured Vite entrypoints built. No secret-bearing environment was read. |
 | Disposable migration/domain safety | PASS for SQLite test target only | t14/t20 report isolated SQLite coverage and migration/rollback tests. No default/production DB was connected or migrated. |
-| Required target-engine constraints/FK/locking/concurrency verification | FAIL — required evidence missing | The production/supported DB engine remains unidentified and `docker info` failed because the Docker Desktop Linux-engine pipe is unavailable. The plan explicitly says absent confirmed-engine validation, the release gate is FAIL. SQLite results do not prove engine parity. |
-| Device-capacity enforcement under concurrent/pending authorization | FAIL — open MEDIUM F-04 | t17 reports `provisioning` sessions are eligible before the device-capacity check and no atomic reservation/pre-Accept concurrency evidence exists. Add durable atomic pending reservations or verified adapter-side pre-Accept enforcement and concurrent tests. |
-| Voucher revocation after router switches from active site-agent sessions to RADIUS | FAIL — new MEDIUM security-review finding | The read-only t21 security review found `RadiusRouterCredentialService.php:50-54` and related access/revocation paths can switch backend without first resolving active agent sessions. `AccessRevoker.php:69-73` / `RadiusAccountingService.php:364-375` require RADIUS accounting evidence; an existing agent session may have none. `RetryPendingRevocations.php:59-68` does not fall back to site-agent. Prevent the switch until those sessions close, or retain their provisioning backend for revocation; add focused regression coverage. This is a static-review finding, not a runtime reproduction. |
-| Security severity threshold | PASS only for the threshold; open medium findings remain | t18.1 reports zero confirmed exploitable findings and zero HIGH/CRITICAL. The t21 security review adds one MEDIUM revocation-path finding. The separate t17 MEDIUM capacity race also remains open. No HIGH/CRITICAL finding is asserted by this gate. |
-| No prohibited operation | PASS | Reviewed task artifacts report no `.env`/secret access, production/default DB connection/migration, deployment, infrastructure modification, router operation, live provider call, or Phase 2 work. This gate performed no such operation. |
+| Required target-engine constraints/FK/locking/concurrency verification | FAIL — required evidence missing | Render-managed PostgreSQL is confirmed, but the exact production major version and a valid target-engine run are not. The first test attempt selected SQLite because PHPUnit normalized XML `true` to `1`; the flag parsing is fixed, but Docker now reports a read-only metadata store when starting a disposable PostgreSQL container. SQLite results do not prove engine parity. |
+| Device-capacity enforcement under concurrent/pending authorization | Implementation remediation present; PostgreSQL concurrency proof pending | Durable pending device reservations and serialized/current capacity reads are implemented and covered by SQLite tests. The two-process test is included in `phpunit.ci-db.xml`, but a passing PostgreSQL execution has not yet been obtained. |
+| Voucher revocation after router switches from active site-agent sessions to RADIUS | Implementation remediation present; target-engine regression pending | Per-session `access_mode` snapshots now route revocation and retries for established sessions. Focused SQLite regressions pass; PostgreSQL validation remains pending. The t21 static finding was not a runtime reproduction. |
+| Security severity threshold | Historical review met the threshold; remediations not re-reviewed here | t18.1 reported zero confirmed exploitable findings and zero HIGH/CRITICAL. The t21 review reported MEDIUM findings for capacity and backend-transition behavior; the implementation remediations are described above. No new post-remediation security review was performed for this update. |
+| No prohibited operation | PASS | No `.env`/secret access, production/default DB connection/migration, deployment, live payment, or configuration-changing router operation occurred. Only local Docker state, CHR loopback port reachability, and disposable tests were inspected; existing containers were not changed or pruned. |
 
-## Validation Evidence
+## Historical Validation Evidence
 
 ### Code and security review
 
@@ -42,7 +86,10 @@ The approved Phase 1 plan defines a binary gate: required implementation and mig
 - t20 Docker probe: `docker info` — exit 1; daemon did not respond at `npipe:////./pipe/dockerDesktopLinuxEngine`. This is a documented infrastructure-axis blocker, not a reason to drop browser validation (Playwright was run independently).
 - This gate task executed no additional application tests/build and changed no application source. Evidence above is attributed to the named upstream tasks; the target-engine test tier remains unverified.
 
-## Exact Remaining Prerequisites Before Phase 2
+## Historical Prerequisites From the 2026-11-14 Review
+
+The list below records what the original gate requested. Use the current status
+update at the top and the Phases 2–6 checklist for the current blockers.
 
 1. **Resolve the approved opt-in selector mismatch.** Confirm `access_mode=radius` as specified by the user or obtain an explicit contract decision; align code/schema/tests/docs without changing the `site_agent` default or silently treating the two names as aliases.
 2. **Close device-capacity concurrency gap.** Implement an atomic pending-device reservation or verify adapter-side pre-Accept enforcement; test concurrent and pending-session authorizations against package limits.
@@ -50,7 +97,7 @@ The approved Phase 1 plan defines a binary gate: required implementation and mig
 4. **Identify and approve the supported database engine/version.** Do not infer it from repository defaults or secrets. Obtain a separate disposable, non-production instance and verify additive migration up/repeat/guarded rollback, FKs/constraints, locks, and concurrency. Keep production/default DB access prohibited.
 5. **Restore local lab capability only when Phase 2 work is authorized.** Make the local Docker daemon functional and confirm the isolated Compose/CHR 7.24.6 image, licensing and network layout. No Compose lab, FreeRADIUS, CHR, router, or customer traffic was started here.
 6. **Verify the private policy boundary in the approved isolated environment.** Prove direct-peer CIDRs, TLS/proxy topology, shared nonce-cache behavior and service reachability; code-level guards alone do not prove deployment behavior. Do not alter production infrastructure.
-7. **Obtain authoritative Airtel provider-contract evidence** for whether amount/currency echoes may be absent, and test the documented contract while preserving fail-closed verification.
+7. **Historical payment prerequisite — superseded:** Airtel response evidence is no longer applicable after the gateway replacement. Verify ObPay, PawaPay, and Xente provider response contracts in the Phase 5 payment-flow gate.
 8. **Define authorized credential recovery/rotation/revocation** for lost one-time router credentials without adding a secret retrieval path.
 9. **Measure existing performance/availability/recovery baselines** before defining SLOs; do not invent numeric targets.
 10. **After remediation, rerun the relevant focused tests, full suite, isolated migration matrix, smoke/build, browser tier and target-engine concurrency/locking validation.** Preserve all existing contracts and report exact commands, return codes, counts and per-axis gaps.

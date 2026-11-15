@@ -8,8 +8,8 @@ use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
+use App\Services\Payments\PaymentGatewaySettings;
 use App\Services\PaymentService;
-use App\Services\PesapalOrderVerifier;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
@@ -17,8 +17,6 @@ use App\Support\HotspotLogin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -45,6 +43,9 @@ class PortalController extends Controller
             'tenant' => $tenantModel,
             'packages' => $packages,
             'currency' => PlatformSetting::get('currency', 'UGX'),
+            'paymentGateway' => PaymentGatewaySettings::activeLabel(),
+            'paymentsAvailable' => PaymentGatewaySettings::active() !== null
+                && PaymentGatewaySettings::configured((string) PaymentGatewaySettings::active()),
             'purchaseKeys' => $packages->mapWithKeys(fn (Package $package) => [$package->id => Str::random(32)]),
             'routerId' => $request->query('router_id'),
             'routerIdentity' => $request->query('router'),
@@ -112,6 +113,7 @@ class PortalController extends Controller
                 Rule::exists('packages', 'id')->where('tenant_id', $tenantModel->id),
             ],
             'phone' => ['required', 'string', 'min:9', 'max:15'],
+            'customer_name' => ['required', 'string', 'max:120'],
             'email' => ['nullable', 'email', 'max:255'],
             'router_id' => [
                 'nullable',
@@ -187,6 +189,7 @@ class PortalController extends Controller
                 'meta' => [
                     'package_id' => $package->id,
                     'phone' => $phone,
+                    'customer_name' => $request->input('customer_name'),
                     'router_id' => $request->input('router_id'),
                     'router' => $request->input('router'),
                     'ip' => $request->ip(),
@@ -202,9 +205,9 @@ class PortalController extends Controller
             $tenantModel,
             $package,
             $phone,
+            $request->input('customer_name'),
             $transaction,
             $request->input('email'),
-            $this->portalUrl($request, 'success', $tenantModel)
         );
 
         if ($result['status'] === 'redirect') {
@@ -484,92 +487,5 @@ class PortalController extends Controller
             'voucher_code' => $voucher->code,
             'mikrotik_url' => HotspotLogin::forVoucher($voucher),
         ]);
-    }
-
-    public function pesapalCallback(
-        Request $request,
-        TenantContext $context,
-        PesapalOrderVerifier $orderVerifier,
-        ?string $tenant = null
-    ) {
-        $tenantModel = $this->resolveTenant($request, $context, $tenant);
-        abort_unless($tenantModel, 404);
-
-        $orderTrackingId = $request->query('OrderTrackingId');
-        $merchantReference = $request->query('OrderMerchantReference');
-
-        if (! $orderTrackingId) {
-            return redirect()->to($this->portalUrl($request, 'index', $tenantModel))
-                ->withErrors(['error' => 'Payment was cancelled or missing tracking details.']);
-        }
-
-        // Verify with Pesapal API
-        $consumerKey = PlatformSetting::get('pesapal_consumer_key');
-        $consumerSecret = PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret');
-        $environment = PlatformSetting::get('pesapal_environment', 'sandbox');
-        $baseUrl = $environment === 'production'
-            ? 'https://pay.pesapal.com/v3/api'
-            : 'https://cybqa.pesapal.com/pesapalv3/api';
-
-        try {
-            $tokenResponse = Http::post("{$baseUrl}/Auth/RequestToken", [
-                'consumer_key' => $consumerKey,
-                'consumer_secret' => $consumerSecret,
-            ]);
-
-            $token = $tokenResponse->json('token');
-
-            $statusResponse = Http::withToken($token)
-                ->get("{$baseUrl}/Transactions/GetTransactionStatus?orderTrackingId={$orderTrackingId}");
-
-            $status = $statusResponse->json('payment_status_description') ?? 'FAILED';
-
-            $providerDetails = $statusResponse->json();
-            $transaction = $orderVerifier->findTransaction(
-                $orderTrackingId,
-                $merchantReference,
-                (string) $tenantModel->id
-            );
-
-            if ($transaction && $orderVerifier->matchesMerchantReference($transaction, $providerDetails)
-                && strtoupper($status) === 'COMPLETED' && $transaction->status === 'pending') {
-                $package = Package::withoutGlobalScopes()
-                    ->where('tenant_id', $tenantModel->id)
-                    ->find($transaction->meta['package_id'] ?? null);
-                $phone = $transaction->phone ?? ($transaction->meta['phone'] ?? '');
-
-                if ($package && $orderVerifier->matchesCompletedPayment($transaction, $package, $providerDetails)) {
-                    $voucher = app(PaymentService::class)->handleSuccessfulPackagePayment(
-                        $tenantModel,
-                        $package,
-                        $phone,
-                        $transaction
-                    );
-
-                    return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
-                        ->with('voucher_code', $voucher->code)
-                        ->with('auto_activate', true);
-                }
-            }
-
-            if ($transaction && $orderVerifier->matchesMerchantReference($transaction, $providerDetails)
-                && strtoupper($status) === 'COMPLETED' && $transaction->status === 'completed') {
-                $package = Package::withoutGlobalScopes()
-                    ->where('tenant_id', $tenantModel->id)
-                    ->find($transaction->meta['package_id'] ?? null);
-                $voucherCode = $transaction->meta['voucher_code'] ?? null;
-
-                if ($package && $orderVerifier->matchesCompletedPayment($transaction, $package, $providerDetails)) {
-                    return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
-                        ->with('voucher_code', $voucherCode)
-                        ->with('auto_activate', true);
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::error('Pesapal callback error: '.$e->getMessage());
-        }
-
-        return redirect()->to($this->portalUrl($request, 'index', $tenantModel))
-            ->withErrors(['error' => 'Payment was not successful or is still processing.']);
     }
 }

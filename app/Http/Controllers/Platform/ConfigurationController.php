@@ -5,8 +5,13 @@ namespace App\Http\Controllers\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PlatformSetting;
+use App\Services\Payments\ObPayGateway;
+use App\Services\Payments\PawaPayGateway;
+use App\Services\Payments\PaymentGatewaySettings;
+use App\Services\Payments\XenteGateway;
 use App\Services\PlatformMailService;
 use App\Services\SmsService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -30,52 +35,24 @@ class ConfigurationController extends Controller
             'enforce_2fa' => PlatformSetting::get('enforce_2fa', false),
             'session_timeout' => PlatformSetting::get('session_timeout', 30),
 
-            // Pesapal
-            'pesapal_consumer_key' => PlatformSetting::get('pesapal_consumer_key'),
-            'pesapal_consumer_secret' => PlatformSetting::getSecret('pesapal_consumer_secret') ?: PlatformSetting::get('pesapal_consumer_secret'),
-            'pesapal_environment' => PlatformSetting::get('pesapal_environment', 'sandbox'),
-            'pesapal_status' => PlatformSetting::get('pesapal_status', 'Not Configured'),
-            'pesapal_ipn_id' => PlatformSetting::get('pesapal_ipn_id'),
-
-            // Flutterwave
-            'flutterwave_public_key' => PlatformSetting::get(
-                'flutterwave_public_key',
-                config('services.flutterwave.public_key')
-            ),
-            'flutterwave_public_key_configured' => (bool) PlatformSetting::get(
-                'flutterwave_public_key',
-                config('services.flutterwave.public_key')
-            ),
-            'flutterwave_secret_key_configured' => (bool) PlatformSetting::getSecret(
-                'flutterwave_secret_key',
-                config('services.flutterwave.secret_key')
-            ),
-            'flutterwave_encryption_key_configured' => (bool) PlatformSetting::getSecret(
-                'flutterwave_encryption_key',
-                config('services.flutterwave.encryption_key')
-            ),
-            'flutterwave_webhook_secret_configured' => (bool) PlatformSetting::getSecret(
-                'flutterwave_webhook_secret',
-                config('services.flutterwave.webhook_secret')
-            ),
-            'flutterwave_environment' => PlatformSetting::get(
-                'flutterwave_environment',
-                config('services.flutterwave.environment', 'sandbox')
-            ),
-            'flutterwave_status' => PlatformSetting::get('flutterwave_status', 'Not Configured'),
-
-            // Mobile money collections
-            'mtn_subscription_key_configured' => (bool) PlatformSetting::getSecret('mtn_subscription_key'),
-            'mtn_api_user_configured' => (bool) PlatformSetting::getSecret('mtn_api_user'),
-            'mtn_api_key_configured' => (bool) PlatformSetting::getSecret('mtn_api_key'),
-            'mtn_environment' => PlatformSetting::get('mtn_environment', 'sandbox'),
-            'mtn_webhook_url' => config('services.mtn_momo.webhook_url') ?: route('api.webhooks.mtn'),
-            'mtn_status' => PlatformSetting::get('mtn_status', 'Not Configured'),
-            'airtel_client_id_configured' => (bool) PlatformSetting::getSecret('airtel_client_id'),
-            'airtel_client_secret_configured' => (bool) PlatformSetting::getSecret('airtel_client_secret'),
-            'airtel_environment' => PlatformSetting::get('airtel_environment', 'sandbox'),
-            'airtel_webhook_url' => config('services.airtel_money.webhook_url') ?: route('api.webhooks.airtel'),
-            'airtel_status' => PlatformSetting::get('airtel_status', 'Not Configured'),
+            // Payment gateways
+            'payment_active_gateway' => PaymentGatewaySettings::active(),
+            'obpay_configured' => PaymentGatewaySettings::configured('obpay'),
+            'obpay_secret_configured' => (bool) PlatformSetting::getSecret('payment.obpay.secret_key'),
+            'obpay_webhook_secret_configured' => (bool) PlatformSetting::getSecret('payment.obpay.webhook_secret'),
+            'pawapay_configured' => PaymentGatewaySettings::configured('pawapay'),
+            'pawapay_token_configured' => (bool) PlatformSetting::getSecret('payment.pawapay.api_token'),
+            'pawapay_environment' => PlatformSetting::get('payment.pawapay.environment', 'sandbox'),
+            'xente_configured' => PaymentGatewaySettings::configured('xente'),
+            'xente_app_key_configured' => (bool) PlatformSetting::getSecret('payment.xente.app_key'),
+            'xente_app_password_configured' => (bool) PlatformSetting::getSecret('payment.xente.app_password'),
+            'xente_user_id_configured' => (bool) PlatformSetting::getSecret('payment.xente.user_id'),
+            'xente_products' => [
+                'collection_mtn' => PlatformSetting::get('payment.xente.collection_mtn'),
+                'collection_airtel' => PlatformSetting::get('payment.xente.collection_airtel'),
+                'payout_mtn' => PlatformSetting::get('payment.xente.payout_mtn'),
+                'payout_airtel' => PlatformSetting::get('payment.xente.payout_airtel'),
+            ],
 
             // Email (SMTP)
             'smtp_host' => PlatformSetting::get('smtp_host'),
@@ -134,137 +111,157 @@ class ConfigurationController extends Controller
             ->with('status', 'Security settings updated successfully.');
     }
 
-    public function updatePesapal(Request $request)
+    public function updatePayments(Request $request, XenteGateway $xente)
     {
         $validated = $request->validate([
-            'pesapal_consumer_key' => 'nullable|string|max:255',
-            'pesapal_consumer_secret' => 'nullable|string|max:255',
-            'pesapal_environment' => 'required|in:sandbox,production',
-            'pesapal_ipn_id' => 'nullable|string|max:255',
+            'active_gateway' => ['nullable', Rule::in(PaymentGatewaySettings::PROVIDERS)],
+            'obpay_secret_key' => 'nullable|string|max:4096',
+            'obpay_webhook_secret' => 'nullable|string|max:4096',
+            'pawapay_api_token' => 'nullable|string|max:4096',
+            'pawapay_environment' => 'required|in:sandbox,production',
+            'xente_app_key' => 'nullable|string|max:4096',
+            'xente_app_password' => 'nullable|string|max:4096',
+            'xente_user_id' => 'nullable|string|max:4096',
+            'xente_collection_mtn' => 'nullable|string|max:255',
+            'xente_collection_airtel' => 'nullable|string|max:255',
+            'xente_payout_mtn' => 'nullable|string|max:255',
+            'xente_payout_airtel' => 'nullable|string|max:255',
         ]);
 
-        foreach ($validated as $key => $value) {
-            if ($key === 'pesapal_consumer_secret') {
-                if ($request->filled($key)) {
-                    PlatformSetting::setSecret($key, $value);
-                }
-            } else {
-                PlatformSetting::set($key, $value);
+        foreach ([
+            'obpay_secret_key' => 'payment.obpay.secret_key',
+            'obpay_webhook_secret' => 'payment.obpay.webhook_secret',
+            'pawapay_api_token' => 'payment.pawapay.api_token',
+            'xente_app_key' => 'payment.xente.app_key',
+            'xente_app_password' => 'payment.xente.app_password',
+            'xente_user_id' => 'payment.xente.user_id',
+        ] as $input => $setting) {
+            if ($request->filled($input)) {
+                PlatformSetting::setSecret($setting, $validated[$input]);
             }
         }
 
-        $hasSecret = filled(PlatformSetting::getSecret('pesapal_consumer_secret')) || filled(PlatformSetting::get('pesapal_consumer_secret'));
-        $isConfigured = filled(PlatformSetting::get('pesapal_consumer_key')) && $hasSecret;
-        PlatformSetting::set('pesapal_status', $isConfigured ? 'Configured (Untested)' : 'Not Configured');
+        $activeGateway = $validated['active_gateway'] ?? '';
+        $productSettings = [
+            'xente_collection_mtn' => ['setting' => 'payment.xente.collection_mtn', 'operation' => 'collection', 'network' => 'mtn'],
+            'xente_collection_airtel' => ['setting' => 'payment.xente.collection_airtel', 'operation' => 'collection', 'network' => 'airtel'],
+            'xente_payout_mtn' => ['setting' => 'payment.xente.payout_mtn', 'operation' => 'payout', 'network' => 'mtn'],
+            'xente_payout_airtel' => ['setting' => 'payment.xente.payout_airtel', 'operation' => 'payout', 'network' => 'airtel'],
+        ];
+        $requestedProducts = [];
+        $currentProducts = [];
+        foreach ($productSettings as $input => $product) {
+            $currentProducts[$input] = (string) PlatformSetting::get($product['setting'], '');
+            $requestedProducts[$input] = array_key_exists($input, $validated)
+                ? ($validated[$input] ?? '')
+                : $currentProducts[$input];
+        }
 
-        AuditLog::record('platform.config.updated', null, [
-            'section' => 'pesapal',
-            'environment' => $validated['pesapal_environment'],
-            'credentials_changed' => array_values(array_filter(
-                ['pesapal_consumer_key', 'pesapal_consumer_secret', 'pesapal_ipn_id'],
-                fn (string $key) => $request->filled($key)
-            )),
-        ]);
+        if ($activeGateway === 'xente' && in_array('', $requestedProducts, true)) {
+            return back()->withErrors([
+                'active_gateway' => 'Load and select all four Xente mobile-money products before enabling Xente.',
+            ])->withInput();
+        }
 
-        return redirect()->route('platform.configuration.index')
-            ->with('status', 'Pesapal configuration saved.');
-    }
+        $verifyProducts = $activeGateway === 'xente'
+            || ($requestedProducts !== $currentProducts && count(array_filter($requestedProducts)) > 0);
+        if ($verifyProducts) {
+            try {
+                $availableItems = $xente->availableProductItems();
+            } catch (\Throwable $exception) {
+                report($exception);
 
-    public function updateFlutterwave(Request $request)
-    {
-        $validated = $request->validate([
-            'flutterwave_public_key' => 'nullable|string|max:255',
-            'flutterwave_secret_key' => 'nullable|string|max:255',
-            'flutterwave_encryption_key' => 'nullable|string|max:255',
-            'flutterwave_webhook_secret' => 'nullable|string|max:255',
-            'flutterwave_environment' => 'required|in:sandbox,production',
-        ]);
+                return back()->withErrors([
+                    'active_gateway' => 'Unable to verify Xente product selections. Check saved Xente credentials and load the product catalog again.',
+                ])->withInput();
+            }
 
-        if ($request->filled('flutterwave_public_key')) {
-            PlatformSetting::set('flutterwave_public_key', $validated['flutterwave_public_key']);
+            foreach ($productSettings as $input => $product) {
+                $selectedId = $requestedProducts[$input];
+                if ($selectedId === '') {
+                    continue;
+                }
+                $matches = collect($availableItems)->contains(
+                    fn (array $item): bool => $item['id'] === $selectedId
+                        && $item['operation'] === $product['operation']
+                        && $item['network'] === $product['network']
+                );
+                if (! $matches) {
+                    return back()->withErrors([
+                        $input => 'The selected Xente product does not match the requested network and transaction type. Reload the product list.',
+                    ])->withInput();
+                }
+            }
         }
 
         foreach ([
-            'flutterwave_secret_key',
-            'flutterwave_encryption_key',
-            'flutterwave_webhook_secret',
-        ] as $key) {
-            if ($request->filled($key)) {
-                PlatformSetting::setSecret($key, $validated[$key]);
+            'xente_collection_mtn',
+            'xente_collection_airtel',
+            'xente_payout_mtn',
+            'xente_payout_airtel',
+        ] as $input) {
+            if (array_key_exists($input, $validated)) {
+                PlatformSetting::set($productSettings[$input]['setting'], $validated[$input] ?? '');
             }
         }
 
-        PlatformSetting::set('flutterwave_environment', $validated['flutterwave_environment']);
-        $configured = PlatformSetting::getSecret(
-            'flutterwave_secret_key',
-            config('services.flutterwave.secret_key')
-        );
-        PlatformSetting::set('flutterwave_status', $configured ? 'Configured (Untested)' : 'Not Configured');
+        PlatformSetting::set('payment.pawapay.environment', $validated['pawapay_environment']);
+        if ($activeGateway !== '' && ! PaymentGatewaySettings::configured($activeGateway)) {
+            return back()->withErrors([
+                'active_gateway' => 'Configure valid credentials and all required provider product selections before enabling this gateway.',
+            ]);
+        }
 
+        PlatformSetting::set('payment.active_gateway', $activeGateway);
         AuditLog::record('platform.config.updated', null, [
-            'section' => 'flutterwave',
-            'environment' => $validated['flutterwave_environment'],
-            // Field names only; secret values are never written to the audit log.
+            'section' => 'payments',
+            'active_gateway' => $activeGateway ?: null,
             'credentials_changed' => array_values(array_filter(
-                ['flutterwave_public_key', 'flutterwave_secret_key', 'flutterwave_encryption_key', 'flutterwave_webhook_secret'],
-                fn (string $key) => $request->filled($key)
+                array_keys($validated),
+                fn (string $key): bool => str_ends_with($key, '_key')
+                    || str_ends_with($key, '_password')
+                    || str_ends_with($key, '_token')
+                    || str_ends_with($key, '_secret')
             )),
         ]);
 
         return redirect()->route('platform.configuration.index')
-            ->with('status', 'Flutterwave configuration saved.');
+            ->with('status', 'Payment gateway configuration saved.');
     }
 
-    public function updateMtn(Request $request)
+    public function testPaymentGateway(string $provider, ObPayGateway $obpay, PawaPayGateway $pawapay, XenteGateway $xente): JsonResponse
     {
-        $validated = $request->validate([
-            'mtn_subscription_key' => 'nullable|string|max:255',
-            'mtn_api_user' => 'nullable|string|max:255',
-            'mtn_api_key' => 'nullable|string|max:255',
-            'mtn_environment' => 'required|in:sandbox,production',
-        ]);
+        abort_unless(in_array($provider, PaymentGatewaySettings::PROVIDERS, true), 404);
 
-        foreach (['mtn_subscription_key', 'mtn_api_user', 'mtn_api_key'] as $key) {
-            if ($request->filled($key)) {
-                PlatformSetting::setSecret($key, $validated[$key]);
-            }
+        try {
+            $connected = match ($provider) {
+                'obpay' => $obpay->ping(),
+                'pawapay' => $pawapay->activeConfiguration('DEPOSIT') !== [],
+                'xente' => $xente->products() !== [],
+            };
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json(['ok' => false, 'message' => 'Connection check failed. Verify the saved credentials and provider account.'], 422);
         }
 
-        PlatformSetting::set('mtn_environment', $validated['mtn_environment']);
-        $configured = PlatformSetting::getSecret('mtn_subscription_key')
-            && PlatformSetting::getSecret('mtn_api_user')
-            && PlatformSetting::getSecret('mtn_api_key');
-        PlatformSetting::set('mtn_status', $configured ? 'Configured (Untested)' : 'Not Configured');
-
-        AuditLog::record('platform.config.updated', null, ['section' => 'mtn']);
-
-        return redirect()->route('platform.configuration.index')
-            ->with('status', 'MTN MoMo configuration saved.');
+        return response()->json([
+            'ok' => $connected,
+            'message' => $connected ? 'Provider connection succeeded.' : 'Provider did not confirm the connection.',
+        ], $connected ? 200 : 422);
     }
 
-    public function updateAirtel(Request $request)
+    public function xenteProducts(XenteGateway $xente): JsonResponse
     {
-        $validated = $request->validate([
-            'airtel_client_id' => 'nullable|string|max:255',
-            'airtel_client_secret' => 'nullable|string|max:255',
-            'airtel_environment' => 'required|in:sandbox,production',
-        ]);
+        try {
+            return response()->json(['products' => $xente->availableProductItems()]);
+        } catch (\Throwable $exception) {
+            report($exception);
 
-        foreach (['airtel_client_id', 'airtel_client_secret'] as $key) {
-            if ($request->filled($key)) {
-                PlatformSetting::setSecret($key, $validated[$key]);
-            }
+            return response()->json([
+                'message' => 'Unable to load Uganda mobile-money products. Verify Xente credentials and account permissions.',
+            ], 422);
         }
-
-        PlatformSetting::set('airtel_environment', $validated['airtel_environment']);
-        $configured = PlatformSetting::getSecret('airtel_client_id')
-            && PlatformSetting::getSecret('airtel_client_secret');
-        PlatformSetting::set('airtel_status', $configured ? 'Configured (Untested)' : 'Not Configured');
-
-        AuditLog::record('platform.config.updated', null, ['section' => 'airtel']);
-
-        return redirect()->route('platform.configuration.index')
-            ->with('status', 'Airtel Money configuration saved.');
     }
 
     public function updateEmail(Request $request)

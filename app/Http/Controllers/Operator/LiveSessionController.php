@@ -155,7 +155,7 @@ class LiveSessionController extends Controller
             'disconnected',
         );
         $session->refresh();
-        $usesRadius = $session->router?->access_backend === 'radius';
+        $usesRadius = $session->access_mode === 'radius';
         $siteAgentOnline = $this->siteAgentOnline($session);
 
         return response()->json([

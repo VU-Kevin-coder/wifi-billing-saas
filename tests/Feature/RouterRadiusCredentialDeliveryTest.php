@@ -62,7 +62,7 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         $this->assertSame($secret, Crypt::decryptString($ciphertext));
 
         $freshRouter = $router->fresh();
-        $this->assertSame('radius', $freshRouter->access_backend);
+        $this->assertSame('radius', $freshRouter->access_mode);
         $this->assertSame('nas-radius-owner-01', $freshRouter->radius_nas_identifier);
         $this->assertArrayNotHasKey('radius_shared_secret', $freshRouter->toArray());
 
@@ -119,7 +119,7 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         $operator = $this->operator($tenant);
 
         Router::getEventDispatcher()->listen('eloquent.saving: '.Router::class, function (Router $savingRouter) use ($router): ?bool {
-            if ($savingRouter->is($router) && $savingRouter->access_backend === 'radius') {
+            if ($savingRouter->is($router) && $savingRouter->access_mode === 'radius') {
                 return false;
             }
 
@@ -175,7 +175,7 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
     private function assertUnconfigured(Router $router): void
     {
         $freshRouter = Router::withoutTenancy()->findOrFail($router->id);
-        $this->assertSame('site_agent', $freshRouter->access_backend);
+        $this->assertSame('site_agent', $freshRouter->access_mode);
         $this->assertNull($freshRouter->radius_nas_identifier);
         $this->assertNull(DB::table('routers')->where('id', $router->id)->value('radius_shared_secret'));
     }

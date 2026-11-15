@@ -47,6 +47,13 @@ class PlatformControlSettingsTest extends TestCase
             ->assertOk()
             ->assertSee('Current status')
             ->assertSee('Site agents');
+
+        $this->actingAs($this->admin)
+            ->get(route('platform.configuration.control', ['section' => 'payments']))
+            ->assertOk()
+            ->assertSee('Payment simulation')
+            ->assertDontSee('Pesapal')
+            ->assertDontSee('Flutterwave');
     }
 
     public function test_settings_are_saved_and_audited_with_the_admin_reason(): void

@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -168,14 +169,19 @@ class PortalPlanTest extends TestCase
 
     public function test_renewing_goes_through_the_normal_purchase_flow(): void
     {
-        PlatformSetting::setSecret('mtn_subscription_key', 'k');
-        PlatformSetting::setSecret('mtn_api_user', 'u');
-        PlatformSetting::setSecret('mtn_api_key', 'a');
-        config(['payments.simulation_enabled' => false]);
-        Http::fake([
-            'https://sandbox.momodeveloper.mtn.com/collection/token/' => Http::response(['access_token' => 't']),
-            'https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay' => Http::response([], 202),
-        ]);
+        PlatformSetting::setSecret('payment.obpay.secret_key', 'obpay-test-secret');
+        PlatformSetting::setSecret('payment.obpay.webhook_secret', 'obpay-test-webhook');
+        PlatformSetting::set('payment.active_gateway', 'obpay');
+        Http::fake(function (ClientRequest $request) {
+            if ($request->url() === 'https://obpay.online/api/public/v1/collect') {
+                return Http::response([
+                    'success' => true,
+                    'data' => ['reference' => $request['reference'], 'status' => 'pending'],
+                ]);
+            }
+
+            return Http::response([], 404);
+        });
         $session = $this->createSession($this->tenant, $this->package, 'ACME-0007');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0007']);
         $plan = $this->open($session)->assertOk();
@@ -185,6 +191,7 @@ class PortalPlanTest extends TestCase
         // exactly what the form on the page submits
         $this->post('http://acme.localhost/portal/purchase', [
             'package_id' => $this->package->id,
+            'customer_name' => 'Wi-Fi Customer',
             'phone' => '0771234567',
             '_idempotency_key' => $matches[1],
         ])

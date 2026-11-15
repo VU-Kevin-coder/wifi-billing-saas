@@ -9,7 +9,7 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Notifications\WithdrawalRequested;
-use App\Services\FlutterwaveService;
+use App\Services\Payments\PaymentGatewayService;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WalletService;
@@ -24,7 +24,7 @@ use Throwable;
 
 class WithdrawalController extends Controller
 {
-    public function store(Request $request, TenantContext $context)
+    public function store(Request $request, TenantContext $context, PaymentGatewayService $payments)
     {
         $tenant = $context->getTenant();
         abort_unless($tenant, 404, 'Tenant not found');
@@ -40,7 +40,7 @@ class WithdrawalController extends Controller
         ));
         $method = (string) $request->input('payout_method', '');
         if ($method === '' && filled($request->input('phone'))) {
-            $method = FlutterwaveService::networkForUgandanPhone((string) $request->input('phone')) === 'AIRTEL'
+            $method = $payments->networkForUgandanPhone((string) $request->input('phone')) === 'AIRTEL'
                 ? 'airtel_money'
                 : 'mtn_momo';
         }
@@ -70,8 +70,8 @@ class WithdrawalController extends Controller
             'amount.max' => "The withdrawal amount cannot exceed your available wallet balance of {$currency} ".number_format($tenant->wallet_balance).'.',
             'amount.min' => "The minimum withdrawal amount is {$currency} ".number_format($min).'.',
         ]);
-        if ($method !== 'bank_transfer' && ! FlutterwaveService::normalizeUgandanPhone($validated['phone'])) {
-            return back()->withErrors(['phone' => 'Enter a valid Uganda Mobile Money number.']);
+        if ($method !== 'bank_transfer' && ! $payments->networkForUgandanPhone($validated['phone'])) {
+            return back()->withErrors(['phone' => 'Enter a valid Uganda MTN or Airtel number.']);
         }
 
         $limit = (int) Policy::get('wallet.withdrawal_pending_limit', 1);

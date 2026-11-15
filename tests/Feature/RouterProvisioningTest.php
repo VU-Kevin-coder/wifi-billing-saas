@@ -97,8 +97,9 @@ class RouterProvisioningTest extends TestCase
         $this->assertStringNotContainsString('http-pap', $script);
         $this->assertStringContainsString('policy=api,read,write', $script);
         $this->assertStringNotContainsString('policy=api,read,write,test,password', $script);
-        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*pesapal.com*"', $script);
-        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*mtn.co.ug*"', $script);
+        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*obpay.online*"', $script);
+        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*pawapay.io*"', $script);
+        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*xente.co*"', $script);
         $this->assertStringContainsString('/ip service set api port=8728 address="192.168.88.0/24" disabled=no', $script);
         $this->assertStringContainsString('/ip service set api-ssl disabled=yes', $script);
         $this->assertStringContainsString('ranges=10.10.0.10-10.10.255.254', $script);

@@ -6,6 +6,7 @@ use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\RadiusAccountingEvent;
 use App\Models\RadiusAccountingSession;
+use App\Models\RadiusDeviceReservation;
 use App\Models\RadiusDisconnectCommand;
 use App\Models\RadiusNasSessionIdentity;
 use App\Models\Router;
@@ -62,8 +63,7 @@ class RadiusAccountingService
             ->where('tenant_id', $router->tenant_id)
             ->find($session->package_id);
 
-        if (! $package || (int) $voucher->package_id !== (int) $package->id
-            || ! $this->sessionMayAuthenticate($router, $session, $package, $nasSessionId)) {
+        if (! $package || (int) $voucher->package_id !== (int) $package->id) {
             return ['decision' => 'reject'];
         }
 
@@ -80,6 +80,10 @@ class RadiusAccountingService
                     || (int) $session->bytes_out >= $dataLimitBytes - (int) $session->bytes_in)) {
                 return ['decision' => 'reject'];
             }
+        }
+
+        if (! $this->reserveDeviceCapacity($router, $session, $package, $nasSessionId)) {
+            return ['decision' => 'reject'];
         }
 
         return [
@@ -100,7 +104,10 @@ class RadiusAccountingService
      */
     public function ingestAccountingEvent(array $input): array
     {
-        $router = $this->radiusRouter((string) ($input['nas_identifier'] ?? ''));
+        // Existing RADIUS sessions must still accept authoritative accounting
+        // after an operator changes the router's mode. New authorization stays
+        // gated by the router's current explicit opt-in.
+        $router = $this->radiusRouter((string) ($input['nas_identifier'] ?? ''), false);
         if (! $router) {
             return [
                 'accepted' => false,
@@ -176,6 +183,16 @@ class RadiusAccountingService
                     return $this->quarantineEvent($current, $input, $fingerprint, $eventTime, 'conflicting_start');
                 }
 
+                $reservation = RadiusDeviceReservation::query()
+                    ->where('identity_id', $identity->id)
+                    ->where('state', 'reserved')
+                    ->orderByDesc('generation')
+                    ->lockForUpdate()
+                    ->first();
+                if (! $reservation) {
+                    return $this->quarantineNewGeneration($identity, $router, $input, $fingerprint, $eventTime, 'missing_device_reservation');
+                }
+
                 $previous = RadiusAccountingSession::query()
                     ->where('identity_id', $identity->id)
                     ->orderByDesc('generation')
@@ -189,9 +206,9 @@ class RadiusAccountingService
                 $session = $this->sessionForVoucher(
                     $router,
                     isset($input['voucher_code']) ? (string) $input['voucher_code'] : null,
-                    (string) $input['nas_session_id'],
                 );
-                if (! $session
+                if (! $eventTime || ! $session || (int) $reservation->session_id !== (int) $session->id
+                    || $session->access_mode !== 'radius'
                     || ($session->started_at && $eventTime->lessThan($session->started_at))) {
                     return $this->quarantineNewGeneration($identity, $router, $input, $fingerprint, $eventTime, 'no_eligible_session');
                 }
@@ -211,6 +228,12 @@ class RadiusAccountingService
                 }
 
                 $accounting = $this->newGeneration($identity, $router, $session, 'open', $eventTime, $inputBytes, $outputBytes);
+                $reservation->forceFill([
+                    'generation' => $accounting->generation,
+                    'state' => 'bound',
+                    'accounting_session_id' => $accounting->id,
+                    'bound_at' => now(),
+                ])->save();
                 $this->storeEvent($accounting, $input, $fingerprint, $eventTime, false, null);
                 $sessionChanges = [
                     'status' => 'active',
@@ -310,6 +333,15 @@ class RadiusAccountingService
                 $sessionChanges['pending_revocation'] = false;
                 $sessionChanges['pending_revocation_status'] = null;
                 $identity->forceFill(['current_generation_id' => null])->save();
+                RadiusDeviceReservation::query()
+                    ->where('identity_id', $identity->id)
+                    ->where('generation', $current->generation)
+                    ->where('state', 'bound')
+                    ->update([
+                        'state' => 'released',
+                        'released_at' => now(),
+                        'updated_at' => now(),
+                    ]);
             } elseif (! $session->pending_revocation && $this->limitReached($session, $inputBytes, $outputBytes)) {
                 $sessionChanges['status'] = 'disconnecting';
                 $sessionChanges['pending_revocation'] = true;
@@ -328,7 +360,7 @@ class RadiusAccountingService
                 'duplicate' => false,
                 'generation' => $current->generation,
             ];
-        });
+        }, 3);
     }
 
     /**
@@ -355,11 +387,11 @@ class RadiusAccountingService
             $router = Router::withoutTenancy()
                 ->where('tenant_id', $currentSession->tenant_id)
                 ->whereKey($currentSession->router_id)
-                ->where('access_backend', 'radius')
                 ->whereNotNull('radius_nas_identifier')
                 ->whereNotNull('radius_shared_secret')
                 ->first();
-            if (! $router || ! $router->hasUsableRadiusConfiguration()) {
+            if ($currentSession->access_mode !== 'radius'
+                || ! $router || ! $router->hasRadiusCredentialMaterial()) {
                 return false;
             }
 
@@ -398,7 +430,8 @@ class RadiusAccountingService
                 ->join('radius_accounting_sessions as accounting', 'accounting.id', '=', 'commands.accounting_session_id')
                 ->join('radius_nas_session_identities as identities', 'identities.id', '=', 'accounting.identity_id')
                 ->join('routers', 'routers.id', '=', 'commands.router_id')
-                ->where('routers.access_backend', 'radius')
+                ->join('sessions_log as application_sessions', 'application_sessions.id', '=', 'accounting.session_id')
+                ->where('application_sessions.access_mode', 'radius')
                 ->whereNotNull('routers.radius_nas_identifier')
                 ->where(function ($query) use ($now): void {
                     $query->where(function ($ready) use ($now): void {
@@ -498,7 +531,7 @@ class RadiusAccountingService
         });
     }
 
-    private function radiusRouter(string $nasIdentifier): ?Router
+    private function radiusRouter(string $nasIdentifier, bool $requireCurrentMode = true): ?Router
     {
         if ($nasIdentifier === '' || strlen($nasIdentifier) > 255) {
             return null;
@@ -506,14 +539,18 @@ class RadiusAccountingService
 
         $router = Router::withoutTenancy()
             ->where('radius_nas_identifier', $nasIdentifier)
-            ->where('access_backend', 'radius')
+            ->when($requireCurrentMode, fn ($query) => $query->where('access_mode', 'radius'))
             ->whereNotNull('radius_shared_secret')
             ->first();
 
-        return $router && $router->hasUsableRadiusConfiguration() ? $router : null;
+        if (! $router || ! $router->hasRadiusCredentialMaterial()) {
+            return null;
+        }
+
+        return ! $requireCurrentMode || $router->hasUsableRadiusConfiguration() ? $router : null;
     }
 
-    private function sessionForVoucher(Router $router, ?string $voucherCode, string $nasSessionId): ?Session
+    private function sessionForVoucher(Router $router, ?string $voucherCode): ?Session
     {
         if (! $voucherCode) {
             return null;
@@ -544,63 +581,138 @@ class RadiusAccountingService
             return null;
         }
 
-        $package = Package::withoutTenancy()
+        return ! SiteAgentCommand::query()
             ->where('tenant_id', $router->tenant_id)
-            ->find($session->package_id);
-
-        return $package && $this->sessionMayAuthenticate($router, $session, $package, $nasSessionId)
+            ->where('router_id', $router->id)
+            ->where('session_id', $session->id)
+            ->exists()
             ? $session
             : null;
     }
 
     /**
-     * Do not turn legacy or agent-managed sessions into RADIUS entitlements.
-     * A pending session without an agent command is eligible for the explicit
-     * RADIUS path; active sessions need an existing RADIUS generation and
-     * available package device capacity.
+     * Serialize admission on the shared Laravel entitlement row. A reservation
+     * is durable before Access-Accept; until accounting Start binds it, retries
+     * for the same NAS identity are idempotent and ambiguous access consumes
+     * capacity fail-closed.
      */
-    private function sessionMayAuthenticate(Router $router, Session $session, Package $package, string $nasSessionId): bool
+    private function reserveDeviceCapacity(Router $router, Session $session, Package $package, string $nasSessionId): bool
     {
-        if ($session->pending_revocation || $session->pending_device_ban
-            || ! $session->expires_at || $session->expires_at->isPast()
-            || SiteAgentCommand::query()
+        return DB::transaction(function () use ($router, $session, $package, $nasSessionId): bool {
+            $lockedRouter = Router::withoutTenancy()
+                ->where('tenant_id', $router->tenant_id)
+                ->whereKey($router->id)
+                ->lockForUpdate()
+                ->first();
+            if (! $lockedRouter
+                || $lockedRouter->access_mode !== 'radius'
+                || $lockedRouter->radius_nas_identifier !== $router->radius_nas_identifier
+                || ! $lockedRouter->hasUsableRadiusConfiguration()) {
+                return false;
+            }
+
+            $lockedSession = Session::withoutTenancy()
                 ->where('tenant_id', $router->tenant_id)
                 ->where('router_id', $router->id)
-                ->where('session_id', $session->id)
-                ->exists()) {
-            return false;
-        }
+                ->whereKey($session->id)
+                ->lockForUpdate()
+                ->first();
+            if (! $lockedSession
+                || ! in_array($lockedSession->status, ['provisioning', 'active'], true)
+                || $lockedSession->pending_revocation || $lockedSession->pending_device_ban
+                || ! $lockedSession->expires_at || $lockedSession->expires_at->isPast()
+                || SiteAgentCommand::query()
+                    ->where('tenant_id', $router->tenant_id)
+                    ->where('router_id', $router->id)
+                    ->where('session_id', $lockedSession->id)
+                    ->exists()) {
+                return false;
+            }
 
-        if ($session->status === 'provisioning') {
+            $identity = RadiusNasSessionIdentity::query()->firstOrCreate(
+                [
+                    'router_id' => $router->id,
+                    'nas_session_id' => $nasSessionId,
+                ],
+                [
+                    'tenant_id' => $router->tenant_id,
+                    'last_generation' => 0,
+                ],
+            );
+            $identity = RadiusNasSessionIdentity::query()
+                ->whereKey($identity->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ((int) $identity->tenant_id !== (int) $router->tenant_id
+                || (int) $identity->router_id !== (int) $router->id) {
+                return false;
+            }
+
+            $current = $identity->current_generation_id
+                ? RadiusAccountingSession::query()
+                    ->whereKey($identity->current_generation_id)
+                    ->where('identity_id', $identity->id)
+                    ->where('session_id', $lockedSession->id)
+                    ->where('state', 'open')
+                    ->exists()
+                : false;
+            if ($current) {
+                return true;
+            }
+
+            $nextGeneration = (int) $identity->last_generation + 1;
+            $reservation = RadiusDeviceReservation::query()
+                ->where('identity_id', $identity->id)
+                ->whereIn('state', ['reserved', 'bound'])
+                ->lockForUpdate()
+                ->orderByDesc('generation')
+                ->first();
+            if ($reservation) {
+                return (int) $reservation->session_id === (int) $lockedSession->id
+                    && $reservation->state === 'reserved';
+            }
+
+            $openGenerations = RadiusAccountingSession::query()
+                ->where('tenant_id', $router->tenant_id)
+                ->where('router_id', $router->id)
+                ->where('session_id', $lockedSession->id)
+                ->where('state', 'open')
+                // Use current/locking reads instead of a REPEATABLE READ
+                // snapshot that may predate the entitlement-row lock wait.
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->count();
+            if ($lockedSession->status === 'active' && $openGenerations === 0) {
+                return false;
+            }
+
+            $pendingReservations = RadiusDeviceReservation::query()
+                ->where('tenant_id', $router->tenant_id)
+                ->where('router_id', $router->id)
+                ->where('session_id', $lockedSession->id)
+                ->where('state', 'reserved')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->count();
+            if ($openGenerations + $pendingReservations >= max(1, (int) $package->device_limit)) {
+                return false;
+            }
+
+            RadiusDeviceReservation::create([
+                'identity_id' => $identity->id,
+                'generation' => $nextGeneration,
+                'tenant_id' => $router->tenant_id,
+                'router_id' => $router->id,
+                'session_id' => $lockedSession->id,
+                'state' => 'reserved',
+                'reserved_at' => now(),
+            ]);
+
             return true;
-        }
-
-        if ($session->status !== 'active') {
-            return false;
-        }
-
-        $identity = RadiusNasSessionIdentity::query()
-            ->where('router_id', $router->id)
-            ->where('nas_session_id', $nasSessionId)
-            ->whereNotNull('current_generation_id')
-            ->first();
-        if ($identity && RadiusAccountingSession::query()
-            ->where('identity_id', $identity->id)
-            ->where('id', $identity->current_generation_id)
-            ->where('session_id', $session->id)
-            ->where('state', 'open')
-            ->exists()) {
-            return true;
-        }
-
-        $openSessions = RadiusAccountingSession::query()
-            ->where('tenant_id', $router->tenant_id)
-            ->where('router_id', $router->id)
-            ->where('session_id', $session->id)
-            ->where('state', 'open')
-            ->count();
-
-        return $openSessions > 0 && $openSessions < max(1, (int) $package->device_limit);
+        }, 3);
     }
 
     private function voucherMatchesSession(Session $session, string $voucherCode): bool

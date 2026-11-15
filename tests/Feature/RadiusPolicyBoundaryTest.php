@@ -6,6 +6,7 @@ use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\RadiusAccountingEvent;
 use App\Models\RadiusAccountingSession;
+use App\Models\RadiusDeviceReservation;
 use App\Models\RadiusDisconnectCommand;
 use App\Models\Router;
 use App\Models\Session;
@@ -13,6 +14,7 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
+use App\Services\AccessRevoker;
 use App\Services\PaymentService;
 use App\Services\RadiusAccountingService;
 use App\Services\RadiusRouterCredentialService;
@@ -43,7 +45,7 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertSame(64, strlen($secret));
         $this->assertNotSame($secret, $stored);
         $this->assertSame($secret, Crypt::decryptString($stored));
-        $this->assertSame('radius', $router->access_backend);
+        $this->assertSame('radius', $router->access_mode);
         $this->assertSame('nas-secret-test', $router->radius_nas_identifier);
         $this->assertArrayNotHasKey('radius_shared_secret', $router->toArray());
     }
@@ -324,6 +326,92 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertSame(0, RadiusAccountingSession::query()->count());
     }
 
+    public function test_device_limit_one_reserves_capacity_before_start_and_same_nas_retry_is_idempotent(): void
+    {
+        [$tenant, $router, $voucher, $session, $package] = $this->createRadiusAccess();
+        $package->update(['device_limit' => 1]);
+        $service = app(RadiusAccountingService::class);
+
+        $first = $service->authorize($router->radius_nas_identifier, 'capacity-one-device', $voucher->code);
+        $retry = $service->authorize($router->radius_nas_identifier, 'capacity-one-device', $voucher->code);
+        $distinct = $service->authorize($router->radius_nas_identifier, 'capacity-second-device', $voucher->code);
+
+        $this->assertSame('accept', $first['decision']);
+        $this->assertSame('accept', $retry['decision']);
+        $this->assertSame('reject', $distinct['decision']);
+        $this->assertSame('provisioning', $session->fresh()->status);
+        $this->assertSame(1, RadiusDeviceReservation::query()->count());
+        $this->assertSame('reserved', RadiusDeviceReservation::query()->sole()->state);
+        $this->assertSame(0, RadiusAccountingSession::query()->count());
+        $this->assertSame((int) $tenant->id, (int) $router->fresh()->tenant_id);
+    }
+
+    public function test_distinct_authorizations_serialize_pending_reservations_before_any_start(): void
+    {
+        [, $router, $voucher, , $package] = $this->createRadiusAccess();
+        $package->update(['device_limit' => 2]);
+        $service = app(RadiusAccountingService::class);
+
+        $first = $service->authorize($router->radius_nas_identifier, 'distinct-device-one', $voucher->code);
+        $second = $service->authorize($router->radius_nas_identifier, 'distinct-device-two', $voucher->code);
+        $third = $service->authorize($router->radius_nas_identifier, 'distinct-device-three', $voucher->code);
+
+        $this->assertSame('accept', $first['decision']);
+        $this->assertSame('accept', $second['decision']);
+        $this->assertSame('reject', $third['decision']);
+        $this->assertSame(2, RadiusDeviceReservation::query()->where('state', 'reserved')->count());
+        $this->assertSame(0, RadiusAccountingSession::query()->count());
+    }
+
+    public function test_rejected_policy_does_not_consume_a_device_reservation(): void
+    {
+        [, $router, $voucher, $session, $package] = $this->createRadiusAccess();
+        $package->update(['data_limit' => 'not-a-valid-limit']);
+        PlatformSetting::set('package.data_caps', true);
+
+        $decision = app(RadiusAccountingService::class)->authorize(
+            $router->radius_nas_identifier,
+            'rejected-data-cap-session',
+            $voucher->code,
+        );
+
+        $this->assertSame('reject', $decision['decision']);
+        $this->assertSame(0, RadiusDeviceReservation::query()->count());
+        $this->assertSame('provisioning', $session->fresh()->status);
+    }
+
+    public function test_reservation_binds_on_start_and_releases_only_after_validated_stop(): void
+    {
+        [, $router, $voucher, $session] = $this->createRadiusAccess();
+        $service = app(RadiusAccountingService::class);
+        $nasSessionId = 'reservation-start-stop';
+        $this->assertSame('accept', $service->authorize($router->radius_nas_identifier, $nasSessionId, $voucher->code)['decision']);
+        $startTime = now()->subSeconds(30)->startOfSecond();
+
+        $start = [
+            'nas_identifier' => $router->radius_nas_identifier,
+            'nas_session_id' => $nasSessionId,
+            'status_type' => 'Start',
+            'event_time' => $startTime->toIso8601String(),
+            'input_octets' => 1,
+            'output_octets' => 2,
+            'voucher_code' => $voucher->code,
+        ];
+        $this->assertTrue($service->ingestAccountingEvent($start)['accepted']);
+        $reservation = RadiusDeviceReservation::query()->sole();
+        $this->assertSame('bound', $reservation->state);
+        $this->assertNotNull($reservation->accounting_session_id);
+
+        $stop = array_merge($start, [
+            'status_type' => 'Stop',
+            'event_time' => $startTime->addMinute()->toIso8601String(),
+        ]);
+        $this->assertTrue($service->ingestAccountingEvent($stop)['accepted']);
+        $this->assertSame('released', $reservation->fresh()->state);
+        $this->assertNotNull($reservation->fresh()->released_at);
+        $this->assertSame('disconnected', $session->fresh()->status);
+    }
+
     public function test_accounting_is_idempotent_monotonic_and_terminal_stop_closes_session(): void
     {
         [$tenant, $router, $voucher, $session] = $this->createRadiusAccess();
@@ -333,13 +421,17 @@ class RadiusPolicyBoundaryTest extends TestCase
             'nas_identifier' => $router->radius_nas_identifier,
             'nas_session_id' => 'reused-nas-session',
             'status_type' => 'Start',
-            'nas_session_id' => 'reused-nas-session',
             'event_time' => $startTime->toIso8601String(),
             'input_octets' => 100,
             'output_octets' => 200,
             'voucher_code' => $voucher->code,
         ];
 
+        $this->assertSame('accept', $service->authorize(
+            $router->radius_nas_identifier,
+            'reused-nas-session',
+            $voucher->code,
+        )['decision']);
         $this->assertTrue($service->ingestAccountingEvent($start)['accepted']);
         $duplicate = $service->ingestAccountingEvent($start);
         $this->assertTrue($duplicate['duplicate']);
@@ -372,6 +464,7 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertTrue($service->ingestAccountingEvent($stop)['accepted']);
         $this->assertSame('disconnected', $session->fresh()->status);
         $this->assertSame('stopped', RadiusAccountingSession::query()->sole()->state);
+        $this->assertSame('released', RadiusDeviceReservation::query()->sole()->state);
 
         $replayedStop = $service->ingestAccountingEvent($stop);
         $this->assertTrue($replayedStop['duplicate']);
@@ -386,18 +479,26 @@ class RadiusPolicyBoundaryTest extends TestCase
         $service = app(RadiusAccountingService::class);
         $eventTime = now()->subSeconds(30)->startOfSecond();
 
+        $nasSessionId = 'disconnect-target-session';
+        $this->assertSame('accept', $service->authorize(
+            $router->radius_nas_identifier,
+            $nasSessionId,
+            $voucher->code,
+        )['decision']);
         $service->ingestAccountingEvent([
             'nas_identifier' => $router->radius_nas_identifier,
-            'nas_session_id' => 'disconnect-target-session',
+            'nas_session_id' => $nasSessionId,
             'status_type' => 'Start',
-            'nas_session_id' => 'disconnect-target-session',
             'event_time' => $eventTime->toIso8601String(),
             'input_octets' => 10,
             'output_octets' => 20,
             'voucher_code' => $voucher->code,
         ]);
 
-        $this->assertTrue($service->requestDisconnect($session, 'revocation:'.$session->id.':disconnected'));
+        // The NAS mode changed, but this session was created under RADIUS and
+        // must continue through its original revocation/accounting boundary.
+        $router->forceFill(['access_mode' => 'site_agent'])->saveOrFail();
+        $this->assertTrue(app(AccessRevoker::class)->revoke($voucher, 'manual', 'disconnected'));
         $this->assertTrue($service->requestDisconnect($session, 'revocation:'.$session->id.':disconnected'));
         $this->assertSame(1, RadiusDisconnectCommand::query()->count());
 
@@ -410,6 +511,7 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertSame('delivery_acknowledged', $ack['state']);
         $this->assertSame('disconnecting', $session->fresh()->status);
         $this->assertTrue($session->fresh()->pending_revocation);
+        $this->assertSame('bound', RadiusDeviceReservation::query()->sole()->state);
 
         $this->assertCount(0, $service->claimDisconnectCommands());
         $this->travel(31)->seconds();
@@ -428,6 +530,7 @@ class RadiusPolicyBoundaryTest extends TestCase
             'voucher_code' => $voucher->code,
         ]);
         $this->assertSame('disconnected', $session->fresh()->status);
+        $this->assertSame('released', RadiusDeviceReservation::query()->sole()->state);
         $this->assertSame((int) $tenant->id, (int) $router->fresh()->tenant_id);
     }
 
@@ -506,6 +609,7 @@ class RadiusPolicyBoundaryTest extends TestCase
             'voucher_id' => $voucher->id,
             'package_id' => $package->id,
             'router_id' => $router->id,
+            'access_mode' => 'radius',
             'status' => 'provisioning',
             'started_at' => now()->subMinute(),
             'expires_at' => now()->addHour(),

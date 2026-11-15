@@ -38,7 +38,7 @@ class ExpireSessions extends Command
             ->orderBy('id')
             ->chunkById(100, function ($sessions) use ($routerService, $agentCommands, $radiusAccounting, &$expiredCount, &$queuedCount, &$retryCount): void {
                 foreach ($sessions as $session) {
-                    if ($session->router?->access_backend === 'radius') {
+                    if ($session->access_mode === 'radius') {
                         $session->update([
                             'status' => 'disconnecting',
                             'pending_revocation' => true,
