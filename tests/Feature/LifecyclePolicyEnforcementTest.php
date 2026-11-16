@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Policy\Policy;
 use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
@@ -86,6 +87,19 @@ class LifecyclePolicyEnforcementTest extends TestCase
         $this->actingAs($this->admin)->getJson(route('operator.dashboard'))->assertForbidden();
         Policy::set('lifecycle.suspended.dashboard', true);
         $this->actingAs($this->admin)->get(route('operator.dashboard'))->assertOk();
+    }
+
+    public function test_suspended_portal_actions_are_blocked_before_payment_or_redemption(): void
+    {
+        Http::fake();
+        $this->post('/portal/acme/purchase', ['_idempotency_key' => $this->idempotencyKey()])
+            ->assertSessionHasErrors(['error' => 'This Wi-Fi operator is not accepting payments right now.']);
+        Policy::set('lifecycle.suspended.portal_redeem', false);
+        $this->post('/portal/acme/redeem', ['voucher_code' => 'TEST'])
+            ->assertSessionHasErrors(['error' => 'This Wi-Fi operator is not redeeming vouchers right now.']);
+        $this->assertDatabaseMissing('transactions', ['tenant_id' => $this->tenant->id, 'type' => 'voucher_sale']);
+        $this->assertDatabaseMissing('sessions_log', ['tenant_id' => $this->tenant->id]);
+        Http::assertNothingSent();
     }
 
     public function test_support_is_not_redirected_to_role_restricted_billing(): void

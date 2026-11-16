@@ -20,7 +20,9 @@ class AdjustmentFailClosedRaceTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $requester;
+
     private User $approver;
 
     protected function setUp(): void
