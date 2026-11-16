@@ -2,7 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\RadiusAccountingSession;
+use App\Models\RadiusDisconnectCommand;
 use App\Models\Router;
+use App\Models\Session;
+use App\Models\SiteAgentCommand;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -43,6 +47,18 @@ class RadiusRouterCredentialService
 
             if ($lockedRouter->getRawOriginal('radius_shared_secret') !== null) {
                 throw new LogicException('A RADIUS credential already exists and cannot be disclosed again.');
+            }
+
+            if ($lockedRouter->access_backend !== 'radius'
+                && (Session::withoutTenancy()->where('tenant_id', $lockedRouter->tenant_id)
+                    ->where('router_id', $lockedRouter->id)->where(function ($query): void {
+                        $query->whereIn('status', ['active', 'provisioning', 'disconnecting'])
+                            ->orWhere('pending_revocation', true)->orWhere('pending_device_ban', true);
+                    })->exists()
+                    || SiteAgentCommand::query()->where('tenant_id', $lockedRouter->tenant_id)->where('router_id', $lockedRouter->id)->whereIn('status', ['pending', 'claimed'])->exists()
+                    || RadiusAccountingSession::query()->where('tenant_id', $lockedRouter->tenant_id)->where('router_id', $lockedRouter->id)->where('state', 'open')->exists()
+                    || RadiusDisconnectCommand::query()->where('tenant_id', $lockedRouter->tenant_id)->where('router_id', $lockedRouter->id)->whereIn('state', ['pending', 'retry_wait', 'leased', 'delivery_acknowledged'])->exists())) {
+                throw new LogicException('The router has outstanding sessions or commands; its backend cannot be switched.');
             }
 
             $secret = bin2hex(random_bytes(32));
