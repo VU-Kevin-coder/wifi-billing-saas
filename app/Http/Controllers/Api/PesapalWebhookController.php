@@ -6,11 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
+use App\Models\Transaction;
+use App\Services\PaymentSandboxGuard;
 use App\Services\PaymentService;
 use App\Services\PesapalOrderVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class PesapalWebhookController extends Controller
@@ -36,30 +37,34 @@ class PesapalWebhookController extends Controller
             : 'https://cybqa.pesapal.com/pesapalv3/api';
 
         try {
-            $tokenResponse = Http::post("{$baseUrl}/Auth/RequestToken", [
+            PaymentSandboxGuard::check('pesapal', $baseUrl);
+            $tokenResponse = PaymentSandboxGuard::http()->post("{$baseUrl}/Auth/RequestToken", [
                 'consumer_key' => $consumerKey,
                 'consumer_secret' => $consumerSecret,
             ]);
 
-            if ($tokenResponse->failed()) {
+            if (! $tokenResponse->successful()) {
                 Log::error('Pesapal Webhook Auth Error: '.$tokenResponse->body());
 
                 return response()->json(['status' => 'auth_failed'], 502);
             }
 
             $token = $tokenResponse->json('token');
+            if (! is_string($token) || $token === '') {
+                return response()->json(['status' => 'auth_failed'], 502);
+            }
 
-            $statusResponse = Http::withToken($token)
+            $statusResponse = PaymentSandboxGuard::http()->withToken($token)
                 ->get("{$baseUrl}/Transactions/GetTransactionStatus?orderTrackingId={$orderTrackingId}");
 
-            if ($statusResponse->failed()) {
+            if (! $statusResponse->successful()) {
                 Log::error('Pesapal Webhook Status Error: '.$statusResponse->body());
 
                 return response()->json(['status' => 'status_check_failed'], 502);
             }
 
             $providerDetails = $statusResponse->json();
-            $status = strtoupper($providerDetails['payment_status_description'] ?? 'FAILED');
+            $status = strtoupper($providerDetails['payment_status_description'] ?? '');
 
             $transaction = $orderVerifier->findTransaction($orderTrackingId, $merchantReference);
 
@@ -91,7 +96,8 @@ class PesapalWebhookController extends Controller
                     );
                 }
             } elseif ($status === 'FAILED' && $transaction->status === 'pending') {
-                $transaction->update(['status' => 'failed']);
+                Transaction::withoutTenancy()->where('tenant_id', $transaction->tenant_id)
+                    ->whereKey($transaction->id)->where('status', 'pending')->update(['status' => 'failed']);
             }
 
             return $this->acknowledge($notificationType, $orderTrackingId, $merchantReference);
