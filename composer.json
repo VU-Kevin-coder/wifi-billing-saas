@@ -38,7 +38,7 @@
     },
     "scripts": {
         "test": [
-            "@php artisan test --do-not-cache-result",
+            "@php vendor/bin/phpunit --do-not-cache-result",
             "npm run e2e"
         ],
         "post-autoload-dump": [
