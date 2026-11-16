@@ -64,6 +64,7 @@ class WalletService
         return WalletLedgerEntry::create([
             'tenant_id' => $tenantId,
             'transaction_id' => $transaction?->getKey(),
+            'sale_credit_transaction_id' => $type === self::SALE_CREDIT ? $transaction?->getKey() : null,
             'user_id' => $userId ?? auth()->id(),
             'type' => $type,
             'amount' => $amount,

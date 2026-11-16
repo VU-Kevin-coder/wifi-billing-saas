@@ -92,6 +92,10 @@
                     return;
                 }
 
+                if (result.status === 'fulfillment_pending') {
+                    statusElement.textContent = 'Payment confirmed. Access is being prepared. Please do not pay again.';
+                }
+
                 if (result.status === 'provisioning' || result.status === 'activation_pending') {
                     statusElement.textContent = 'Payment confirmed. Waiting for the site router to activate your access…';
                 }

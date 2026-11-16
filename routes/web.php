@@ -38,7 +38,6 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Services\PaymentService;
-use App\Support\HotspotLogin;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health/ready', [HealthController::class, 'ready'])
@@ -348,6 +347,15 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
         ->where('type', 'voucher_sale')
         ->where('reference', $reference)
         ->firstOrFail();
+
+    // The reference is not a credential: authorize before confirming or fulfilling a sale.
+    $token = session('payment_token');
+    abort_unless(
+        is_string($token) && $token !== '' && is_string($transaction->payment_token_hash)
+            && hash_equals($transaction->payment_token_hash, hash('sha256', $token)),
+        404
+    );
+
     $tenant = Tenant::query()->findOrFail($transaction->tenant_id);
 
     if ($transaction->status === 'pending') {
@@ -379,9 +387,5 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
         : null;
     abort_unless($voucher, 404, 'Completed payment voucher not found.');
 
-    session()->forget('payment_token');
-
-    return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug])
-        ->with('voucher_code', $voucher->code)
-        ->with('mikrotik_url', HotspotLogin::forVoucher($voucher));
+    return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug]);
 })->middleware('web');

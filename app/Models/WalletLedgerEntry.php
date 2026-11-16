@@ -14,7 +14,7 @@ class WalletLedgerEntry extends Model
 
     protected $fillable = [
         'tenant_id', 'transaction_id', 'user_id', 'type', 'amount',
-        'balance_before', 'balance_after', 'reference', 'description', 'meta',
+        'balance_before', 'balance_after', 'reference', 'description', 'meta', 'sale_credit_transaction_id',
     ];
 
     protected $casts = [
