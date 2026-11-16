@@ -98,14 +98,19 @@ class RefundService
      */
     public function approve(Refund $refund, User $by, string $payoutReference): Refund
     {
-        $approved = DB::transaction(function () use ($refund, $by, $payoutReference): Refund {
-            // Lock order everywhere: refund -> sale -> tenant wallet.
-            $locked = Refund::withoutTenancy()->lockForUpdate()->findOrFail($refund->id);
+        if (PaymentSandboxGuard::enabled()) {
+            throw new RefundException('Manual refund payouts are disabled in the payment sandbox lab.');
+        }
+        $identity = Refund::withoutTenancy()->findOrFail($refund->id);
+        $approved = DB::transaction(function () use ($refund, $by, $payoutReference, $identity): Refund {
+            // Sale first, as in request and paid-sale fulfillment.
+            $sale = Transaction::withoutTenancy()->where('tenant_id', $identity->tenant_id)
+                ->lockForUpdate()->findOrFail($identity->transaction_id);
+            $locked = Refund::withoutTenancy()->where('transaction_id', $sale->id)
+                ->where('tenant_id', $sale->tenant_id)->lockForUpdate()->findOrFail($refund->id);
             if ($locked->status !== 'pending') {
                 throw new RefundException('This refund request has already been decided.');
             }
-
-            $sale = Transaction::withoutTenancy()->lockForUpdate()->findOrFail($locked->transaction_id);
 
             $gross = (float) $sale->amount;
             $net = (float) $sale->net_amount;
@@ -191,8 +196,13 @@ class RefundService
 
     private function close(Refund $refund, User $by, string $status, ?string $note, string $audit): Refund
     {
-        return DB::transaction(function () use ($refund, $by, $status, $note, $audit): Refund {
-            $locked = Refund::withoutTenancy()->lockForUpdate()->findOrFail($refund->id);
+        $identity = Refund::withoutTenancy()->findOrFail($refund->id);
+
+        return DB::transaction(function () use ($refund, $by, $status, $note, $audit, $identity): Refund {
+            $sale = Transaction::withoutTenancy()->where('tenant_id', $identity->tenant_id)
+                ->lockForUpdate()->findOrFail($identity->transaction_id);
+            $locked = Refund::withoutTenancy()->where('transaction_id', $sale->id)
+                ->where('tenant_id', $sale->tenant_id)->lockForUpdate()->findOrFail($refund->id);
             if ($locked->status !== 'pending') {
                 throw new RefundException('This refund request has already been decided.');
             }
