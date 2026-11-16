@@ -56,7 +56,7 @@ class RegisteredUserController extends Controller
 
             return back()
                 ->withErrors(['email' => 'We could not send the verification code. Check your email settings and try again.'])
-                ->withInput($request->except(['password', 'password_confirmation', '_token']));
+                ->withInput($request->only('email'));
         }
 
         $key = $this->emailCodeCacheKey($validated['email']);
@@ -65,7 +65,7 @@ class RegisteredUserController extends Controller
 
         return back()
             ->with('email_code_sent', 'A 6-digit verification code was sent to your email. It expires in 10 minutes.')
-            ->withInput($request->except(['password', 'password_confirmation', '_token']));
+            ->withInput($request->only('email'));
     }
 
     public function store(Request $request): RedirectResponse
