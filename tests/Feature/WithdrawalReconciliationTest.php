@@ -239,6 +239,25 @@ class WithdrawalReconciliationTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_command_reports_unavailable_in_lab_without_changing_stuck_withdrawals(): void
+    {
+        config(['payments.lab_mode' => true]);
+        Http::fake();
+        $meta = ['flutterwave_transfer_submission' => 'unknown'];
+        $stuck = $this->withdrawal($meta);
+        $balance = $this->balance();
+
+        $this->travel(15)->minutes();
+        $this->artisan('withdrawals:reconcile')
+            ->expectsOutput('Reconciled withdrawals: unavailable=1')
+            ->assertFailed();
+
+        $this->assertSame('pending', $stuck->fresh()->status);
+        $this->assertSame($meta, $stuck->fresh()->meta);
+        $this->assertSame($balance, $this->balance());
+        Http::assertNothingSent();
+    }
+
     public function test_command_resolves_only_eligible_withdrawals(): void
     {
         $stuck = $this->withdrawal(['flutterwave_transfer_submission' => 'unknown'], 'WTH-STUCK');
