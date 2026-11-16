@@ -11,6 +11,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Policy\AdjustmentService;
 use App\Services\Policy\Policy;
+use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -30,6 +31,7 @@ class CriticalFinancialSecurityRegressionTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seed(PolicySeeder::class);
         Role::findOrCreate('platform_admin', 'web');
         $this->first = User::factory()->create(['tenant_id' => null]);
         $this->first->assignRole('platform_admin');
@@ -44,7 +46,7 @@ class CriticalFinancialSecurityRegressionTest extends TestCase
         return app(AdjustmentService::class)->request($this->tenant, 100, 'Test adjustment', $this->first);
     }
 
-    public function test_missing_policy_requires_single_second_admin_approval(): void
+    public function test_valid_policy_requires_single_second_admin_approval(): void
     {
         $result = $this->requestAdjustment();
         $this->assertSame('pending', $result['status']);
@@ -61,11 +63,13 @@ class CriticalFinancialSecurityRegressionTest extends TestCase
             ['mode', 'invalid'], ['threshold', '100'], ['threshold', 1.5], ['threshold', -1], ['threshold', 100000001],
         ] as [$key, $value]) {
             PolicySetting::query()->delete();
+            $this->seed(PolicySeeder::class);
             Policy::set('approval.wallet_adjustment.'.$key, $value);
             $this->assertSame('blocked', $this->requestAdjustment()['status'], $key);
             $this->assertSame(10000, (int) $this->tenant->fresh()->wallet_balance);
         }
         PolicySetting::query()->delete();
+        $this->seed(PolicySeeder::class);
         Policy::set('approval.wallet_adjustment.enabled', true);
         DB::table('policy_settings')->where('key', 'approval.wallet_adjustment.enabled')->update(['value' => 'null']);
         $this->assertSame('blocked', $this->requestAdjustment()['status']);

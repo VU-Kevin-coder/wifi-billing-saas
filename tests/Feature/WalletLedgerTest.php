@@ -11,6 +11,7 @@ use App\Models\WalletLedgerEntry;
 use App\Services\PaymentService;
 use App\Services\Policy\Policy;
 use App\Services\WalletService;
+use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
@@ -203,6 +204,7 @@ class WalletLedgerTest extends TestCase
     public function test_a_manual_adjustment_is_in_the_ledger_with_its_author(): void
     {
         // Exercise the explicitly permitted auto-apply policy, not the safer default requiring approval.
+        $this->seed(PolicySeeder::class);
         Policy::set('approval.wallet_adjustment.enabled', false);
         Role::findOrCreate('platform_admin', 'web');
         $admin = User::factory()->create(['tenant_id' => null]);

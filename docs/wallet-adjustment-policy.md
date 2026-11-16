@@ -1,0 +1,7 @@
+# Wallet adjustment approval safety
+
+Adjustment requests (including automatic adjustments) and approvals require all six `approval.wallet_adjustment` policy rows to be present and valid: `enabled` and `self_approve` are booleans; `mode` is `always`, `threshold`, or `never`; `threshold` is an integer from 0 to 100000000; `expiry_hours` is an integer from 1 to 336; and `min_admins` is an integer from 1 to 5. Missing rows, invalid values, and policy-store errors block requests and approvals. Rejection remains available for a pending, unexpired adjustment. The minimum is a count of platform admins, not a number of independent approvals.
+
+Before rollout, review the stored configuration and ensure the six rows are present with the intended valid values. The existing `PolicySeeder` supplies defaults for missing rows without overwriting existing values, but does not repair invalid existing rows. Any configuration repair or seeding must be reviewed and authorized for the target environment; do not blindly replace existing policy values. No migration or automatic production repair is included here.
+
+Approval and rejection lock and recheck the pending-adjustment row inside their transactions; expiration updates only rows still pending. Stale competing decisions therefore cannot overwrite a committed decision on databases that enforce row locks. SQLite regression tests exercise stale snapshots and rollback but do not prove actual row-lock concurrency; run controlled concurrency tests against disposable MySQL and PostgreSQL before relying on this in deployment.

@@ -11,6 +11,7 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Policy\Policy;
+use Database\Seeders\PolicySeeder;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -35,6 +36,7 @@ class AuditTrailTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seed(PolicySeeder::class);
 
         foreach (['platform_admin', 'operator_admin', 'operator_finance', 'operator_support', 'operator_network'] as $role) {
             Role::create(['name' => $role, 'guard_name' => 'web']);
