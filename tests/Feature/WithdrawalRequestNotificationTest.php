@@ -25,6 +25,7 @@ class WithdrawalRequestNotificationTest extends TestCase
         Role::findOrCreate('platform_admin', 'web');
 
         $tenant = Tenant::create([
+            'kyc_status' => 'verified',
             'name' => 'Acme',
             'slug' => 'acme',
             'status' => 'active',
@@ -68,6 +69,7 @@ class WithdrawalRequestNotificationTest extends TestCase
     {
         Role::findOrCreate('operator_admin', 'web');
         $tenant = Tenant::create([
+            'kyc_status' => 'verified',
             'name' => 'Acme',
             'slug' => 'acme',
             'status' => 'active',
@@ -111,6 +113,7 @@ class WithdrawalRequestNotificationTest extends TestCase
     {
         Role::findOrCreate('operator_admin', 'web');
         $tenant = Tenant::create([
+            'kyc_status' => 'verified',
             'name' => 'Acme',
             'slug' => 'acme',
             'status' => 'active',
