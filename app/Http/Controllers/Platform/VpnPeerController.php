@@ -50,7 +50,7 @@ class VpnPeerController extends Controller
         try {
             $peer = $wireGuard->createPeer($router, $validated['name']);
         } catch (RuntimeException $exception) {
-            return back()->withInput()->withErrors(['wireguard' => $exception->getMessage()]);
+            return back()->withInput($request->only(['tenant_id', 'router_id', 'name']))->withErrors(['wireguard' => $exception->getMessage()]);
         }
 
         return redirect()->route('platform.vpn-peers.index')

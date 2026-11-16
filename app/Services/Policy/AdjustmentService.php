@@ -4,6 +4,7 @@ namespace App\Services\Policy;
 
 use App\Models\AuditLog;
 use App\Models\PendingAdjustment;
+use App\Models\PolicySetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -45,19 +46,23 @@ class AdjustmentService
         // Manual approval required
         $expiryHours = (int) Policy::get('approval.wallet_adjustment.expiry_hours', 24);
 
-        $adjustment = PendingAdjustment::create([
-            'tenant_id' => $tenant->id,
-            'requested_by' => $requester->id,
-            'amount' => round($amount, 2),
-            'reason' => $reason,
-            'status' => 'pending',
-            'expires_at' => now()->addHours($expiryHours),
-        ]);
+        $adjustment = DB::transaction(function () use ($tenant, $amount, $reason, $requester, $expiryHours) {
+            $adjustment = PendingAdjustment::create([
+                'tenant_id' => $tenant->id,
+                'requested_by' => $requester->id,
+                'amount' => round($amount, 2),
+                'reason' => $reason,
+                'status' => 'pending',
+                'expires_at' => now()->addHours($expiryHours),
+            ]);
 
-        AuditLog::record('adjustment.requested', $adjustment, [
-            'amount' => (float) $amount,
-            'reason' => $reason,
-        ], $requester, $tenant);
+            AuditLog::record('adjustment.requested', $adjustment, [
+                'amount' => (float) $amount,
+                'reason' => $reason,
+            ], $requester, $tenant);
+
+            return $adjustment;
+        });
 
         return ['status' => 'pending', 'adjustment' => $adjustment, 'transaction' => null,
             'message' => 'Adjustment submitted. A second platform admin must approve it.'];
@@ -105,16 +110,18 @@ class AdjustmentService
             return ['ok' => false, 'message' => 'This adjustment is no longer pending.'];
         }
 
-        $adjustment->update([
-            'status' => 'rejected',
-            'approved_by' => $approver->id,
-            'decided_at' => now(),
-            'decision_reason' => $note,
-        ]);
+        DB::transaction(function () use ($adjustment, $approver, $note) {
+            $adjustment->update([
+                'status' => 'rejected',
+                'approved_by' => $approver->id,
+                'decided_at' => now(),
+                'decision_reason' => $note,
+            ]);
 
-        AuditLog::record('adjustment.rejected', $adjustment, [
-            'reason' => $note,
-        ], $approver);
+            AuditLog::record('adjustment.rejected', $adjustment, [
+                'reason' => $note,
+            ], $approver);
+        });
 
         return ['ok' => true, 'message' => 'Adjustment rejected.'];
     }
@@ -136,12 +143,30 @@ class AdjustmentService
 
     private function decision(float $amount): string
     {
-        if (! Policy::get('approval.wallet_adjustment.enabled', false)) {
-            return 'auto';
+        try {
+            // Read the store directly: Policy::get intentionally hides store errors.
+            $settings = PolicySetting::whereIn('key', [
+                'approval.wallet_adjustment.enabled',
+                'approval.wallet_adjustment.mode',
+                'approval.wallet_adjustment.threshold',
+            ])->get()->keyBy('key');
+            $enabled = $settings->has('approval.wallet_adjustment.enabled') ? $settings['approval.wallet_adjustment.enabled']->value : true;
+            $mode = $settings->has('approval.wallet_adjustment.mode') ? $settings['approval.wallet_adjustment.mode']->value : 'always';
+            $threshold = $settings->has('approval.wallet_adjustment.threshold') ? $settings['approval.wallet_adjustment.threshold']->value : 0;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return 'blocked';
         }
 
-        $mode = Policy::get('approval.wallet_adjustment.mode', 'always');
-        $threshold = (float) Policy::get('approval.wallet_adjustment.threshold', 0);
+        if (! is_bool($enabled) || ! in_array($mode, ['always', 'threshold', 'never'], true)
+            || ! is_int($threshold) || $threshold < 0 || $threshold > 100000000) {
+            return 'blocked';
+        }
+
+        if ($enabled === false) {
+            return 'auto';
+        }
 
         return match ($mode) {
             'always' => 'pending',

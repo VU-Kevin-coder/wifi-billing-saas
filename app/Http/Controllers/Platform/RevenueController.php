@@ -151,17 +151,17 @@ class RevenueController extends Controller
                 'Withdrawal rejected; funds returned',
             );
 
+            AuditLog::record('withdrawal.rejected', $locked, [
+                'reference' => $locked->reference,
+                'amount' => (float) $locked->amount,
+            ]);
+
             return null;
         });
 
         if ($rejected) {
             return back()->withErrors(['error' => $rejected]);
         }
-
-        AuditLog::record('withdrawal.rejected', $transaction, [
-            'reference' => $transaction->reference,
-            'amount' => (float) $transaction->amount,
-        ]);
         $this->notifyOperatorAdmins($transaction, false);
 
         return back()->with('status', 'Withdrawal rejected. Funds returned to operator wallet.');

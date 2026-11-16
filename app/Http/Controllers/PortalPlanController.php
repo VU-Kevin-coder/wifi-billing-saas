@@ -40,7 +40,7 @@ class PortalPlanController extends Controller
 
         // One answer for "no such code" and "code never used", so this cannot be used to probe codes.
         if (! $session) {
-            return back()->withErrors(['voucher_code' => 'We could not find a plan for that code.'])->withInput();
+            return back()->withErrors(['voucher_code' => 'We could not find a plan for that code.'])->withInput($request->only('voucher_code'));
         }
 
         return redirect()->route('portal.plan.show', ['tenant' => $business->slug, 'token' => $links->tokenFor($session)]);

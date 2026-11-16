@@ -50,9 +50,15 @@ class AuditLog extends Model
         ?User $actor = null,
         ?Tenant $tenant = null,
     ): self {
-        if (! PlatformSetting::get('audit.enabled', true)
-            && ! str_starts_with($action, 'platform.settings.')
-            && ! str_starts_with($action, 'policy.')) {
+        // Security and financial evidence is mandatory even when optional audit is off.
+        $mandatoryPrefixes = [
+            'platform.settings.', 'platform.config.', 'policy.', 'auth.', 'mfa.',
+            'tenant.', 'staff.', 'device.', 'session.revocation_', 'router.',
+            'voucher.', 'vouchers.', 'provisioning.delay_compensated',
+            'wallet.', 'adjustment.', 'withdrawal.', 'refund.',
+        ];
+        $mandatory = collect($mandatoryPrefixes)->contains(fn (string $prefix) => str_starts_with($action, $prefix));
+        if (! $mandatory && ! PlatformSetting::get('audit.enabled', true)) {
             return new self(['action' => $action]);
         }
 

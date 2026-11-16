@@ -10,6 +10,7 @@ use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Policy\Policy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -86,6 +87,7 @@ class AuditTrailTest extends TestCase
 
     public function test_wallet_adjustment_updates_balance_ledger_and_audit_log(): void
     {
+        Policy::set('approval.wallet_adjustment.enabled', false);
         $this->adjust(['amount' => 5000, 'reason' => 'Router compensation credit'])
             ->assertSessionHasNoErrors();
 
@@ -124,6 +126,7 @@ class AuditTrailTest extends TestCase
 
     public function test_debit_down_to_exactly_zero_is_allowed(): void
     {
+        Policy::set('approval.wallet_adjustment.enabled', false);
         $this->adjust(['amount' => -40000, 'reason' => 'Clawback of mistaken credit'])
             ->assertSessionHasNoErrors();
 
@@ -161,6 +164,28 @@ class AuditTrailTest extends TestCase
 
         AuditLog::record('platform.settings.updated');
         $this->assertSame(2, AuditLog::count());
+    }
+
+    public function test_withdrawal_rejection_rolls_back_if_audit_fails(): void
+    {
+        PlatformSetting::set('audit.enabled', false);
+        $tx = $this->withdrawal();
+        AuditLog::creating(function ($log) {
+            if ($log->action === 'withdrawal.rejected') {
+                throw new \RuntimeException('audit unavailable');
+            }
+        });
+        try {
+            $this->withoutExceptionHandling()->actingAs($this->platformAdmin)
+                ->post(route('platform.revenue.withdrawals.reject', $tx->id), ['_idempotency_key' => $this->idempotencyKey()]);
+            $this->fail('Audit failure must abort rejection');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('audit unavailable', $e->getMessage());
+        } finally {
+            AuditLog::flushEventListeners();
+        }
+        $this->assertSame('pending', $tx->fresh()->status);
+        $this->assertEquals(40000, (float) $this->tenant->fresh()->wallet_balance);
     }
 
     public function test_withdrawal_rejection_is_audited(): void
