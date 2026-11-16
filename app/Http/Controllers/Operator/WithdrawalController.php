@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Notifications\WithdrawalRequested;
 use App\Services\FlutterwaveService;
+use App\Services\PaymentSandboxGuard;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WalletService;
@@ -26,6 +27,10 @@ class WithdrawalController extends Controller
 {
     public function store(Request $request, TenantContext $context)
     {
+        if (PaymentSandboxGuard::enabled()) {
+            return back()->withErrors(['amount' => 'Withdrawals are disabled in the payment sandbox lab.']);
+        }
+
         $tenant = $context->getTenant();
         abort_unless($tenant, 404, 'Tenant not found');
         $user = auth()->user();
