@@ -8,6 +8,7 @@ use App\Models\PlatformSetting;
 use App\Services\PlatformMailService;
 use App\Services\SmsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ConfigurationController extends Controller
@@ -82,7 +83,7 @@ class ConfigurationController extends Controller
             'smtp_port' => PlatformSetting::get('smtp_port', 587),
             'smtp_encryption' => PlatformSetting::get('smtp_encryption', 'tls'),
             'smtp_username' => PlatformSetting::get('smtp_username'),
-            'smtp_password' => PlatformSetting::get('smtp_password'),
+            'smtp_password_configured' => filled(PlatformSetting::getSecret('smtp_password')),
             'mail_from_address' => PlatformSetting::get('mail_from_address', config('mail.from.address')),
             'mail_from_name' => PlatformSetting::get('mail_from_name', 'Hamnet Platform'),
             'email_status' => PlatformSetting::get('email_status', 'Not Tested'),
@@ -90,7 +91,7 @@ class ConfigurationController extends Controller
             // SMS Gateway
             'sms_provider' => PlatformSetting::get('sms_provider', 'africastalking'),
             'sms_username' => PlatformSetting::get('sms_username', 'sandbox'),
-            'sms_api_key' => PlatformSetting::get('sms_api_key'),
+            'sms_api_key_configured' => filled(PlatformSetting::getSecret('sms_api_key')),
             'sms_sender_id' => PlatformSetting::get('sms_sender_id', 'HAMNET'),
             'sms_environment' => PlatformSetting::get('sms_environment', 'sandbox'),
             'sms_status' => PlatformSetting::get('sms_status', 'Not Tested'),
@@ -279,15 +280,24 @@ class ConfigurationController extends Controller
             'mail_from_name' => 'nullable|string',
         ]);
 
-        foreach ($validated as $key => $value) {
-            PlatformSetting::set($key, $value);
-        }
+        DB::transaction(function () use ($validated): void {
+            foreach ($validated as $key => $value) {
+                if ($key === 'smtp_password') {
+                    if (filled($value)) {
+                        PlatformSetting::setSecret($key, $value);
+                    }
 
-        if (! empty($validated['smtp_host'])) {
-            PlatformSetting::set('email_status', 'Configured (Untested)');
-        }
+                    continue;
+                }
+                PlatformSetting::set($key, $value);
+            }
 
-        AuditLog::record('platform.config.updated', null, ['section' => 'email']);
+            if (! empty($validated['smtp_host'])) {
+                PlatformSetting::set('email_status', 'Configured (Untested)');
+            }
+
+            AuditLog::record('platform.config.updated', null, ['section' => 'email']);
+        });
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'Email gateway configuration saved.');
@@ -295,24 +305,17 @@ class ConfigurationController extends Controller
 
     public function testEmail(Request $request)
     {
+        // Tests use saved settings only; callers must save changes explicitly first.
         $validated = $request->validate([
             'test_email' => 'required|email',
-            'smtp_host' => 'nullable|string',
-            'smtp_port' => 'nullable|integer',
-            'smtp_encryption' => 'nullable|in:tls,ssl,none',
-            'smtp_username' => 'nullable|string',
-            'smtp_password' => 'nullable|string',
-            'mail_from_address' => 'nullable|email',
-            'mail_from_name' => 'nullable|string',
+            'smtp_host' => 'prohibited',
+            'smtp_port' => 'prohibited',
+            'smtp_encryption' => 'prohibited',
+            'smtp_username' => 'prohibited',
+            'smtp_password' => 'prohibited',
+            'mail_from_address' => 'prohibited',
+            'mail_from_name' => 'prohibited',
         ]);
-
-        // If credentials were provided in the test form, persist them first
-        $fields = ['smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'];
-        foreach ($fields as $field) {
-            if ($request->filled($field)) {
-                PlatformSetting::set($field, $request->input($field));
-            }
-        }
 
         $result = PlatformMailService::testConnection($validated['test_email']);
 
@@ -337,15 +340,24 @@ class ConfigurationController extends Controller
             'sms_environment' => 'required|in:sandbox,production',
         ]);
 
-        foreach ($validated as $key => $value) {
-            PlatformSetting::set($key, $value);
-        }
+        DB::transaction(function () use ($validated): void {
+            foreach ($validated as $key => $value) {
+                if ($key === 'sms_api_key') {
+                    if (filled($value)) {
+                        PlatformSetting::setSecret($key, $value);
+                    }
 
-        if (! empty($validated['sms_api_key'])) {
-            PlatformSetting::set('sms_status', 'Configured (Untested)');
-        }
+                    continue;
+                }
+                PlatformSetting::set($key, $value);
+            }
 
-        AuditLog::record('platform.config.updated', null, ['section' => 'sms']);
+            if (! empty($validated['sms_api_key'])) {
+                PlatformSetting::set('sms_status', 'Configured (Untested)');
+            }
+
+            AuditLog::record('platform.config.updated', null, ['section' => 'sms']);
+        });
 
         return redirect()->route('platform.configuration.index')
             ->with('status', 'SMS gateway configuration saved.');
@@ -353,22 +365,15 @@ class ConfigurationController extends Controller
 
     public function testSms(Request $request)
     {
+        // Tests use saved settings only; callers must save changes explicitly first.
         $validated = $request->validate([
             'test_phone' => 'required|string|min:9',
-            'sms_provider' => 'nullable|in:africastalking,twilio',
-            'sms_username' => 'nullable|string',
-            'sms_api_key' => 'nullable|string',
-            'sms_sender_id' => 'nullable|string',
-            'sms_environment' => 'nullable|in:sandbox,production',
+            'sms_provider' => 'prohibited',
+            'sms_username' => 'prohibited',
+            'sms_api_key' => 'prohibited',
+            'sms_sender_id' => 'prohibited',
+            'sms_environment' => 'prohibited',
         ]);
-
-        // If credentials were provided in the test form, persist them first
-        $fields = ['sms_provider', 'sms_username', 'sms_api_key', 'sms_sender_id', 'sms_environment'];
-        foreach ($fields as $field) {
-            if ($request->filled($field)) {
-                PlatformSetting::set($field, $request->input($field));
-            }
-        }
 
         $result = SmsService::testConnection($validated['test_phone']);
 

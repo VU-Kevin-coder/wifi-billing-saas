@@ -83,5 +83,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // The control form uses literal dotted secret keys inside settings[].
+        // Do not flash that entire nested payload on validation failures.
+        $exceptions->dontFlash(['smtp_password', 'sms_api_key', 'settings']);
     })->create();

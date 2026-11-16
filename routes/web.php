@@ -129,10 +129,10 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
         Route::put('/configuration/flutterwave', [ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
         Route::put('/configuration/mtn', [ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
         Route::put('/configuration/airtel', [ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
-        Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
-        Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
-        Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
-        Route::post('/configuration/sms/test', [ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
+        Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->middleware('mfa.recent')->name('configuration.email.update');
+        Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->middleware('mfa.recent')->name('configuration.email.test');
+        Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->middleware('mfa.recent')->name('configuration.sms.update');
+        Route::post('/configuration/sms/test', [ConfigurationController::class, 'testSms'])->middleware('mfa.recent')->name('configuration.sms.test');
         Route::get('/configuration/policies', [PolicyController::class, 'index'])->name('policies.index');
         Route::put('/configuration/policies', [PolicyController::class, 'updateAll'])->middleware('mfa.recent')->name('policies.update');
         Route::get('/configuration/policies/export', [PolicyController::class, 'export'])->name('policies.export');
