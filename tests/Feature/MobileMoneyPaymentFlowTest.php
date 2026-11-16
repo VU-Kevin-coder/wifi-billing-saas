@@ -11,6 +11,7 @@ use App\Services\MtnMomoService;
 use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -221,18 +222,45 @@ class MobileMoneyPaymentFlowTest extends TestCase
         $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
     }
 
-    public function test_simulator_does_not_disclose_voucher_to_a_different_token(): void
+    #[DataProvider('invalidSimulatorTokens')]
+    public function test_simulator_rejects_invalid_tokens_without_payment_or_access(?string $token): void
     {
         config(['payments.simulation_enabled' => true]);
         [$tenant, , $transaction] = $this->createPendingPayment();
 
-        $this->withSession(['payment_token' => 'different-token'])
-            ->get('/simulate-momo-success/'.$transaction->reference)
-            ->assertRedirect(route('portal.direct.index', ['tenant' => $tenant->slug]))
+        // The cross-tenant token is a real token belonging to another pending sale.
+        $other = Tenant::create([
+            'name' => 'Other Wi-Fi', 'slug' => 'other-wifi', 'status' => 'active',
+            'contact_email' => 'other@example.test', 'wallet_balance' => 0, 'commission_rate' => 5,
+        ]);
+        Transaction::create([
+            'tenant_id' => $other->id, 'type' => 'voucher_sale', 'amount' => 1000,
+            'status' => 'pending', 'reference' => 'ONL-OTHER',
+            'payment_token_hash' => hash('sha256', 'other-tenant-token'), 'meta' => [],
+        ]);
+        $before = $this->simulatorFinancialState();
+
+        if ($token !== null) {
+            $this->withSession(['payment_token' => $token]);
+        }
+        $response = $this->get('/simulate-momo-success/'.$transaction->reference);
+
+        $this->assertSame($before, $this->simulatorFinancialState());
+        $this->assertSame('pending', $transaction->fresh()->status);
+        $this->assertSame('0.00', $tenant->fresh()->wallet_balance);
+        $response->assertNotFound()
             ->assertSessionMissing('voucher_code')
             ->assertSessionMissing('mikrotik_url');
+    }
 
-        $this->assertSame('completed', $transaction->fresh()->status);
+    public static function invalidSimulatorTokens(): array
+    {
+        return [
+            'missing' => [null],
+            'empty' => [''],
+            'wrong' => ['different-token'],
+            'cross-tenant' => ['other-tenant-token'],
+        ];
     }
 
     public function test_success_page_rejects_another_tenants_payment_and_voucher_session(): void
@@ -253,20 +281,46 @@ class MobileMoneyPaymentFlowTest extends TestCase
             ->assertDontSee('FOREIGN-VOUCHER');
     }
 
-    public function test_momo_simulator_is_not_available_outside_local_or_test_environments(): void
+    public function test_simulator_is_disabled_when_flag_is_off_even_in_testing(): void
     {
-        [, , $transaction] = $this->createPendingPayment();
-        config(['app.env' => 'production']);
+        [$tenant, , $transaction] = $this->createPendingPayment();
+        config(['payments.simulation_enabled' => false]);
+        $this->assertTrue(app()->environment('testing'));
+        $before = $this->simulatorFinancialState();
+
+        $this->withSession(['payment_token' => self::PAYMENT_STATUS_TOKEN])
+            ->get('/simulate-momo-success/'.$transaction->reference)
+            ->assertNotFound()
+            ->assertSessionMissing('voucher_code')
+            ->assertSessionMissing('mikrotik_url');
+
+        $this->assertSame($before, $this->simulatorFinancialState());
+        $this->assertSame('pending', $transaction->fresh()->status);
+        $this->assertSame('0.00', $tenant->fresh()->wallet_balance);
+    }
+
+    public function test_simulator_is_disabled_in_production_even_when_flag_is_on(): void
+    {
+        [$tenant, , $transaction] = $this->createPendingPayment();
+        config(['payments.simulation_enabled' => true]);
+        $before = $this->simulatorFinancialState();
+        $originalEnvironment = app()->environment();
+        app()['env'] = 'production';
 
         try {
-            $this->get('/simulate-momo-success/'.$transaction->reference)
-                ->assertNotFound();
+            $this->assertTrue(app()->environment('production'));
+            $this->withSession(['payment_token' => self::PAYMENT_STATUS_TOKEN])
+                ->get('/simulate-momo-success/'.$transaction->reference)
+                ->assertNotFound()
+                ->assertSessionMissing('voucher_code')
+                ->assertSessionMissing('mikrotik_url');
         } finally {
-            config(['app.env' => 'testing']);
+            app()['env'] = $originalEnvironment;
         }
 
+        $this->assertSame($before, $this->simulatorFinancialState());
         $this->assertSame('pending', $transaction->fresh()->status);
-        $this->assertDatabaseCount('vouchers', 0);
+        $this->assertSame('0.00', $tenant->fresh()->wallet_balance);
     }
 
     public function test_pending_page_is_restricted_to_the_payment_session_and_tenant(): void
@@ -684,6 +738,16 @@ class MobileMoneyPaymentFlowTest extends TestCase
         $this->assertSame('simulated_success', $result['status']);
         $this->assertSame('completed', $transaction->fresh()->status);
         $this->assertDatabaseCount('vouchers', 1);
+    }
+
+    private function simulatorFinancialState(): array
+    {
+        $state = [];
+        foreach (['tenants', 'transactions', 'wallet_ledger_entries', 'sale_fulfillment_work', 'voucher_batches', 'vouchers', 'customers', 'sessions_log', 'site_agent_commands', 'sms_messages'] as $table) {
+            $state[$table] = DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        }
+
+        return $state;
     }
 
     private function createPendingPayment(): array

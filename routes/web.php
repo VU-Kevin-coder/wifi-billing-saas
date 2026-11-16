@@ -347,6 +347,15 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
         ->where('type', 'voucher_sale')
         ->where('reference', $reference)
         ->firstOrFail();
+
+    // The reference is not a credential: authorize before confirming or fulfilling a sale.
+    $token = session('payment_token');
+    abort_unless(
+        is_string($token) && $token !== '' && is_string($transaction->payment_token_hash)
+            && hash_equals($transaction->payment_token_hash, hash('sha256', $token)),
+        404
+    );
+
     $tenant = Tenant::query()->findOrFail($transaction->tenant_id);
 
     if ($transaction->status === 'pending') {
@@ -377,13 +386,6 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
             ->find($voucherId)
         : null;
     abort_unless($voucher, 404, 'Completed payment voucher not found.');
-
-    $token = session('payment_token');
-    if (! is_string($token) || ! is_string($transaction->payment_token_hash)
-        || ! hash_equals($transaction->payment_token_hash, hash('sha256', $token))) {
-        return redirect()->route('portal.direct.index', ['tenant' => $tenant->slug])
-            ->withErrors(['error' => 'Payment confirmed, but this browser cannot access its result. Contact the operator; please do not pay again.']);
-    }
 
     return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug]);
 })->middleware('web');
