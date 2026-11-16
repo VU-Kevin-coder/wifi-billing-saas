@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Concerns;
 
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\PaymentService;
 use App\Services\PesapalOrderVerifier;
@@ -219,13 +220,7 @@ trait PortalPurchaseActions
                         $transaction
                     );
 
-                    if (! $voucher) {
-                        return redirect()->to($this->portalUrl($request, 'pending', $tenantModel, $transaction));
-                    }
-
-                    return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
-                        ->with('voucher_code', $voucher->code)
-                        ->with('auto_activate', true);
+                    return $this->callbackResult($request, $tenantModel, $transaction, (bool) $voucher);
                 }
             }
 
@@ -234,12 +229,8 @@ trait PortalPurchaseActions
                 $package = Package::withoutGlobalScopes()
                     ->where('tenant_id', $tenantModel->id)
                     ->find($transaction->meta['package_id'] ?? null);
-                $voucherCode = $transaction->meta['voucher_code'] ?? null;
-
                 if ($package && $orderVerifier->matchesCompletedPayment($transaction, $package, $providerDetails)) {
-                    return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
-                        ->with('voucher_code', $voucherCode)
-                        ->with('auto_activate', true);
+                    return $this->callbackResult($request, $tenantModel, $transaction, ! empty($transaction->meta['voucher_id']));
                 }
             }
         } catch (\Throwable $e) {
@@ -248,5 +239,19 @@ trait PortalPurchaseActions
 
         return redirect()->to($this->portalUrl($request, 'index', $tenantModel))
             ->withErrors(['error' => 'Payment was not successful or is still processing.']);
+    }
+
+    private function callbackResult(Request $request, Tenant $tenant, Transaction $transaction, bool $ready)
+    {
+        $token = $request->session()->get('payment_token');
+        if (! is_string($token) || ! is_string($transaction->payment_token_hash)
+            || ! hash_equals($transaction->payment_token_hash, hash('sha256', $token))) {
+            return redirect()->to($this->portalUrl($request, 'index', $tenant))
+                ->withErrors(['error' => 'Payment confirmed, but this browser cannot access its result. Contact the operator; please do not pay again.']);
+        }
+
+        return redirect()->to($ready
+            ? $this->portalUrl($request, 'success', $tenant)
+            : $this->portalUrl($request, 'pending', $tenant, $transaction));
     }
 }
