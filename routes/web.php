@@ -38,7 +38,6 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Services\PaymentService;
-use App\Support\HotspotLogin;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health/ready', [HealthController::class, 'ready'])
@@ -379,9 +378,12 @@ Route::get('/simulate-momo-success/{reference}', function ($reference) {
         : null;
     abort_unless($voucher, 404, 'Completed payment voucher not found.');
 
-    session()->forget('payment_token');
+    $token = session('payment_token');
+    if (! is_string($token) || ! is_string($transaction->payment_token_hash)
+        || ! hash_equals($transaction->payment_token_hash, hash('sha256', $token))) {
+        return redirect()->route('portal.direct.index', ['tenant' => $tenant->slug])
+            ->withErrors(['error' => 'Payment confirmed, but this browser cannot access its result. Contact the operator; please do not pay again.']);
+    }
 
-    return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug])
-        ->with('voucher_code', $voucher->code)
-        ->with('mikrotik_url', HotspotLogin::forVoucher($voucher));
+    return redirect()->route('portal.direct.success', ['tenant' => $tenant->slug]);
 })->middleware('web');

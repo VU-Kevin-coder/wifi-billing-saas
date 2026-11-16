@@ -155,13 +155,14 @@ class MobileMoneyPaymentFlowTest extends TestCase
             'redeemed_by' => '0771234567',
         ]);
         $this->assertDatabaseCount('sessions_log', 1);
-        $this->get($successUrl)->assertOk()->assertSee('Waiting for payment');
+        $voucherCode = $transaction->fresh()->meta['voucher_code'];
         $this->get($successUrl)
             ->assertOk()
-            ->assertSee('id="countdown"', false)
-            ->assertSee('seconds = 3', false);
+            ->assertSee('Waiting for payment')
+            ->assertSee('const initialVoucherCode = null;', false)
+            ->assertSee('const initialMikrotikUrl = null;', false)
+            ->assertDontSee($voucherCode);
 
-        $voucherCode = $transaction->fresh()->meta['voucher_code'];
         $this->get($successUrl.'?voucher='.urlencode($voucherCode))
             ->assertRedirect($successUrl);
         $this->get($successUrl.'?voucher=NOT-A-PAID-VOUCHER')
@@ -199,15 +200,17 @@ class MobileMoneyPaymentFlowTest extends TestCase
         [$tenant, , $transaction] = $this->createPendingPayment();
         $successUrl = route('portal.direct.success', ['tenant' => $tenant->slug]);
 
-        $this->get('/simulate-momo-success/'.$transaction->reference)
+        $this->withSession(['payment_token' => self::PAYMENT_STATUS_TOKEN])
+            ->get('/simulate-momo-success/'.$transaction->reference)
             ->assertRedirect($successUrl);
 
         $completed = $transaction->fresh();
         $voucherCode = $completed->meta['voucher_code'];
         $this->get($successUrl)
             ->assertOk()
-            ->assertSee($voucherCode)
-            ->assertSee('seconds = 3', false);
+            ->assertDontSee($voucherCode)
+            ->assertSee('const initialVoucherCode = null;', false)
+            ->assertSee('const initialMikrotikUrl = null;', false);
 
         $this->get('/simulate-momo-success/'.$transaction->reference)
             ->assertRedirect($successUrl);
@@ -216,6 +219,38 @@ class MobileMoneyPaymentFlowTest extends TestCase
         $this->assertDatabaseCount('vouchers', 1);
         $this->assertDatabaseCount('sessions_log', 1);
         $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
+    }
+
+    public function test_simulator_does_not_disclose_voucher_to_a_different_token(): void
+    {
+        config(['payments.simulation_enabled' => true]);
+        [$tenant, , $transaction] = $this->createPendingPayment();
+
+        $this->withSession(['payment_token' => 'different-token'])
+            ->get('/simulate-momo-success/'.$transaction->reference)
+            ->assertRedirect(route('portal.direct.index', ['tenant' => $tenant->slug]))
+            ->assertSessionMissing('voucher_code')
+            ->assertSessionMissing('mikrotik_url');
+
+        $this->assertSame('completed', $transaction->fresh()->status);
+    }
+
+    public function test_success_page_rejects_another_tenants_payment_and_voucher_session(): void
+    {
+        [$tenant] = $this->createPendingPayment();
+        $other = Tenant::create([
+            'name' => 'Other Wi-Fi', 'slug' => 'other-wifi', 'status' => 'active',
+            'contact_email' => 'other@example.test', 'wallet_balance' => 0, 'commission_rate' => 5,
+        ]);
+
+        $this->withSession([
+            'payment_token' => self::PAYMENT_STATUS_TOKEN,
+            'voucher_tenant_id' => $tenant->id,
+            'voucher_code' => 'FOREIGN-VOUCHER',
+            'mikrotik_url' => 'http://foreign.test/login',
+        ])->get(route('portal.direct.success', ['tenant' => $other->slug]))
+            ->assertRedirect(route('portal.index', ['tenant' => $other->slug]))
+            ->assertDontSee('FOREIGN-VOUCHER');
     }
 
     public function test_momo_simulator_is_not_available_outside_local_or_test_environments(): void
