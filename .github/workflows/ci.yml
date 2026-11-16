@@ -37,9 +37,8 @@ jobs:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: composer-${{ hashFiles('composer.lock') }}
           restore-keys: composer-
-      - run: composer install --no-interaction --prefer-dist --no-progress
-      - run: cp .env.example .env && php artisan key:generate
-      - run: php artisan test
+      - run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+      - run: vendor/bin/phpunit
 
   # The suite that matters for money: row locks (lockForUpdate), JSON-path
   # queries and migrations only behave like production on a real server.
@@ -51,19 +50,18 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: testing
-        ports: ["3306:3306"]
+          MYSQL_ROOT_PASSWORD: disposable-root-password
+          MYSQL_DATABASE: wifi_billing_test
+          MYSQL_USER: wifi_test_runner
+          MYSQL_PASSWORD: disposable-test-password
+        ports: ["13306:3306"]
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -ppassword"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pdisposable-root-password"
           --health-interval=10s --health-timeout=5s --health-retries=12
     env:
-      DB_CONNECTION: mysql
-      DB_HOST: 127.0.0.1
-      DB_PORT: "3306"
-      DB_DATABASE: testing
-      DB_USERNAME: root
-      DB_PASSWORD: password
+      TEST_DB_DRIVER: mysql
+      TEST_EXPECTED_DB_DRIVER: mysql
+      TEST_DB_DISPOSABLE: "yes"
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -72,8 +70,7 @@ jobs:
           extensions: mbstring, bcmath, intl, gd, zip, pdo_mysql
           tools: composer:v2
           coverage: none
-      - run: composer install --no-interaction --prefer-dist --no-progress
-      - run: cp .env.example .env && php artisan key:generate
+      - run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
       - run: vendor/bin/phpunit -c phpunit.ci-db.xml
 
   # render.yaml deploys to PostgreSQL, so production's database must be tested too.
@@ -85,19 +82,17 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: testing
-        ports: ["5432:5432"]
+          POSTGRES_PASSWORD: disposable-test-password
+          POSTGRES_USER: wifi_test_runner
+          POSTGRES_DB: wifi_billing_test
+        ports: ["15432:5432"]
         options: >-
-          --health-cmd="pg_isready -U postgres"
+          --health-cmd="pg_isready -U wifi_test_runner -d wifi_billing_test"
           --health-interval=10s --health-timeout=5s --health-retries=12
     env:
-      DB_CONNECTION: pgsql
-      DB_HOST: 127.0.0.1
-      DB_PORT: "5432"
-      DB_DATABASE: testing
-      DB_USERNAME: postgres
-      DB_PASSWORD: password
+      TEST_DB_DRIVER: pgsql
+      TEST_EXPECTED_DB_DRIVER: pgsql
+      TEST_DB_DISPOSABLE: "yes"
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -106,8 +101,7 @@ jobs:
           extensions: mbstring, bcmath, intl, gd, zip, pdo_pgsql, pgsql
           tools: composer:v2
           coverage: none
-      - run: composer install --no-interaction --prefer-dist --no-progress
-      - run: cp .env.example .env && php artisan key:generate
+      - run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
       - run: vendor/bin/phpunit -c phpunit.ci-db.xml
 
   # The production image needs the Vite manifest; fail here, not at 2 a.m.
