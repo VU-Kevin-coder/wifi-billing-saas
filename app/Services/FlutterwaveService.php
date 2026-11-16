@@ -87,6 +87,7 @@ class FlutterwaveService
 
     private function request(): PendingRequest
     {
+        PaymentSandboxGuard::blockUnrelated('Flutterwave');
         $secretKey = $this->secretKey();
         if (blank($secretKey)) {
             throw new RuntimeException('Flutterwave secret key is not configured.');
