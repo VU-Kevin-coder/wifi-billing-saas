@@ -66,6 +66,13 @@ class AccessRevoker
             $tenant = Tenant::find($voucher->tenant_id);
 
             if ($router && $tenant) {
+                if (($session->access_backend_origin === 'radius' && $router->access_backend !== 'radius')
+                    || ($router->access_backend === 'radius' && $session->access_backend_origin !== 'radius')
+                    || ($router->access_backend !== 'radius' && ($router->radius_nas_identifier !== null || $router->getRawOriginal('radius_shared_secret') !== null))) {
+                    Log::warning('Revocation backend is ambiguous; manual reconciliation is required.', ['session_id' => $session->id]);
+
+                    return false;
+                }
                 if ($router->access_backend === 'radius') {
                     return app(RadiusAccountingService::class)->requestDisconnect(
                         $session,
