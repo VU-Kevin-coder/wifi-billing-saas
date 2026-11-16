@@ -16,12 +16,14 @@ class RadiusPolicyController extends Controller
             'nas_identifier' => ['required', 'string', 'max:255', 'not_regex:/[\x00-\x20\x7f]/'],
             'nas_session_id' => ['required', 'string', 'max:255', 'not_regex:/[\x00-\x1f\x7f]/'],
             'voucher_code' => ['required', 'string', 'max:128'],
+            'mac_address' => ['required', 'string', 'regex:/^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/D'],
         ]);
 
         return response()->json($accounting->authorize(
             $validated['nas_identifier'],
             $validated['nas_session_id'],
             $validated['voucher_code'],
+            $validated['mac_address'],
         ));
     }
 
@@ -39,8 +41,8 @@ class RadiusPolicyController extends Controller
             'output_gigawords' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'termination_cause' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9._ -]*$/D'],
             'ip_address' => ['nullable', 'ip'],
-            'mac_address' => ['nullable', 'string', 'regex:/^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/D'],
-            'voucher_code' => ['nullable', 'string', 'max:128'],
+            'mac_address' => ['required', 'string', 'regex:/^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/D'],
+            'voucher_code' => ['required', 'string', 'max:128'],
         ]);
 
         return response()->json($accounting->ingestAccountingEvent($validated));

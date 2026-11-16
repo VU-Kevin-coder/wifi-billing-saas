@@ -47,15 +47,40 @@ class Policy
      */
     public static function denies(Tenant $tenant, string $action): bool
     {
+        $states = self::applicableStates($tenant);
+        if ($states === []) {
+            return false;
+        }
+
+        $catalog = config('platform_control_settings.lifecycle');
+        $actions = array_keys($catalog['actions'] ?? []);
+        $index = array_search($action, $actions, true);
+
         try {
-            foreach (self::applicableStates($tenant) as $state) {
+            // Do not use the general-purpose cache/get() here: it swallows storage
+            // errors and would turn an unavailable policy store into permission.
+            $keys = array_map(fn ($state) => "lifecycle.{$state}.{$action}", $states);
+            $settings = PolicySetting::whereIn('key', $keys)->get()->keyBy('key');
+            foreach ($states as $state) {
                 $key = "lifecycle.{$state}.{$action}";
-                if (PolicySetting::where('key', $key)->exists() && ! self::get($key, true)) {
+                $setting = $settings->get($key);
+                if ($setting) {
+                    // Malformed values are not an affirmative authorization.
+                    if ($setting->value !== true) {
+                        return true;
+                    }
+                } elseif ($index !== false && ($catalog['defaults'][$state][$index] ?? null) === false) {
+                    // Seeded defaults are optional; enforce the advertised default
+                    // even on installations where this row was never seeded.
                     return true;
                 }
+                // A null catalog default means this state does not constrain the
+                // action unless an explicit policy row exists.
             }
-        } catch (\Throwable) {
-            return false;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return true;
         }
 
         return false;
