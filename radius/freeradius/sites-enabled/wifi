@@ -1,0 +1,133 @@
+# Dedicated virtual server; do not enable the stock default server on these ports.
+server wifi {
+    listen { type = auth
+        ipaddr = 127.0.0.1
+        port = 18120
+    }
+    listen { type = acct
+        ipaddr = 127.0.0.1
+        port = 18130
+    }
+    authorize {
+        # Each static client's shortname MUST equal its provisioned NAS identifier.
+        if (!&NAS-Identifier || &NAS-Identifier != "%{client:shortname}" || &NAS-Identifier[1] || !&User-Name || &User-Name[1] || !&Acct-Session-Id || &Acct-Session-Id[1] || !&Calling-Station-Id || &Calling-Station-Id[1]) {
+            reject
+        }
+        if ((&User-Password && &CHAP-Challenge) || &EAP-Message || &MS-CHAP-Challenge || &MS-CHAP-Response || &MS-CHAP2-Response || &User-Password[1] || &CHAP-Password[1] || &CHAP-Challenge[1] || (&User-Password && &CHAP-Password) || (!&User-Password && !&CHAP-Password)) {
+            reject
+        }
+        update control {
+            &NAS-Identifier := &request:NAS-Identifier
+            &User-Name := &request:User-Name
+            &Acct-Session-Id := &request:Acct-Session-Id
+            &Calling-Station-Id := &request:Calling-Station-Id
+        }
+        # Voucher-as-password lab profile. Authentication still happens in PAP/CHAP.
+        update control {
+            &Cleartext-Password := "%{User-Name}"
+        }
+        pap
+        chap
+    }
+    authenticate {
+        Auth-Type PAP {
+            pap
+        }
+        Auth-Type CHAP {
+            chap
+        }
+    }
+    post-auth {
+        # Reserve only AFTER PAP/CHAP has proved possession.
+        wifi_authorize
+        if (fail || reject || invalid || notfound) {
+            reject
+        }
+        Post-Auth-Type REJECT {
+            update reply {
+                &Session-Timeout !* ANY
+                &Mikrotik-Rate-Limit !* ANY
+            }
+        }
+    }
+    accounting {
+        if (!&NAS-Identifier || &NAS-Identifier != "%{client:shortname}" || &NAS-Identifier[1] || !&User-Name || &User-Name[1] || !&Acct-Session-Id || &Acct-Session-Id[1] || !&Event-Timestamp || &Event-Timestamp[1] || !&Acct-Status-Type || &Acct-Status-Type[1] || !&Calling-Station-Id || &Calling-Station-Id[1]) {
+            fail
+        }
+        update control {
+            &NAS-Identifier := &request:NAS-Identifier
+            &User-Name := &request:User-Name
+            &Acct-Session-Id := &request:Acct-Session-Id
+            &Acct-Status-Type := &request:Acct-Status-Type
+            &Tmp-Integer-0 := "%{integer:Event-Timestamp}"
+        }
+        if (&request:Acct-Session-Time[1]) {
+            fail
+        }
+        if (&request:Acct-Session-Time) {
+            update control {
+                &Acct-Session-Time := &request:Acct-Session-Time
+            }
+        }
+        if (&request:Acct-Input-Octets[1]) {
+            fail
+        }
+        if (&request:Acct-Input-Octets) {
+            update control {
+                &Acct-Input-Octets := &request:Acct-Input-Octets
+            }
+        }
+        if (&request:Acct-Input-Gigawords[1]) {
+            fail
+        }
+        if (&request:Acct-Input-Gigawords) {
+            update control {
+                &Acct-Input-Gigawords := &request:Acct-Input-Gigawords
+            }
+        }
+        if (&request:Acct-Output-Octets[1]) {
+            fail
+        }
+        if (&request:Acct-Output-Octets) {
+            update control {
+                &Acct-Output-Octets := &request:Acct-Output-Octets
+            }
+        }
+        if (&request:Acct-Output-Gigawords[1]) {
+            fail
+        }
+        if (&request:Acct-Output-Gigawords) {
+            update control {
+                &Acct-Output-Gigawords := &request:Acct-Output-Gigawords
+            }
+        }
+        if (&request:Framed-IP-Address[1]) {
+            fail
+        }
+        if (&request:Framed-IP-Address) {
+            update control {
+                &Framed-IP-Address := &request:Framed-IP-Address
+            }
+        }
+        if (&request:Calling-Station-Id[1]) {
+            fail
+        }
+        if (&request:Calling-Station-Id) {
+            update control {
+                &Calling-Station-Id := &request:Calling-Station-Id
+            }
+        }
+        if (&request:Acct-Terminate-Cause[1]) {
+            fail
+        }
+        if (&request:Acct-Terminate-Cause) {
+            update control {
+                &Acct-Terminate-Cause := &request:Acct-Terminate-Cause
+            }
+        }
+        wifi_accounting
+        if (fail || reject || invalid || notfound) {
+            fail
+        }
+    }
+}
