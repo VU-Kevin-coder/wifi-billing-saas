@@ -11,6 +11,7 @@ use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
 use App\Models\Voucher;
+use App\Support\DataLimit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use LogicException;
@@ -42,6 +43,15 @@ class VoucherActivationService
                     throw new LogicException('This voucher session has already expired or disconnected.');
                 }
 
+                if ($session->access_backend_origin === 'radius') {
+                    if ($voucher->sale_transaction_id !== null) {
+                        throw new LogicException('Online-sale vouchers are not supported by the isolated RADIUS lab.');
+                    }
+                    $current = Router::withoutTenancy()->where('tenant_id', $tenant->id)->find($session->router_id);
+                    if (! $current || $current->access_backend !== 'radius') {
+                        throw new LogicException('RADIUS session backend changed; manual reconciliation is required.');
+                    }
+                }
                 $this->resumeAgentProvisioningAfterExplicitRollback($tenant, $session, $voucher);
 
                 return $session;
@@ -61,6 +71,9 @@ class VoucherActivationService
             }
 
             $router = $this->resolveRouter($tenant, $voucher, $request, $sessionContext);
+            if ($router) {
+                $router = Router::withoutTenancy()->where('tenant_id', $tenant->id)->lockForUpdate()->findOrFail($router->id);
+            }
             $site = $this->resolveSite($tenant, $voucher, $router);
             $accessBackend = $router?->access_backend ?? 'site_agent';
             if (! in_array($accessBackend, ['site_agent', 'radius'], true)) {
@@ -68,8 +81,21 @@ class VoucherActivationService
             }
 
             $usesRadius = $accessBackend === 'radius';
+            if (! $usesRadius && $router && ($router->radius_nas_identifier !== null || $router->getRawOriginal('radius_shared_secret') !== null)) {
+                throw new LogicException('Router backend transition is ambiguous; manual reconciliation is required.');
+            }
+            if ($usesRadius && $voucher->sale_transaction_id !== null) {
+                throw new LogicException('Online-sale vouchers are not supported by the isolated RADIUS lab.');
+            }
             if ($usesRadius && ! $router->hasUsableRadiusConfiguration()) {
                 throw new LogicException('This RADIUS router is not fully configured. Access was not activated.');
+            }
+            // Reject unsupported plans before consuming a pre-issued voucher.
+            // Authorization repeats this check because package terms can change.
+            if ($usesRadius && ((int) $package->device_limit !== 1
+                || ! DataLimit::isValid($package->data_limit)
+                || ! DataLimit::isUnlimited($package->data_limit))) {
+                throw new LogicException('This package is not supported by the isolated RADIUS lab. Access was not activated.');
             }
 
             $siteAgent = $router?->site_id
@@ -118,6 +144,7 @@ class VoucherActivationService
                 'package_id' => $package->id,
                 'router_id' => $router?->id,
                 'status' => ($usesRadius || $siteAgent) ? 'provisioning' : 'active',
+                'access_backend_origin' => $accessBackend,
                 'started_at' => $startedAt,
                 'expires_at' => $package->expiresAt($startedAt),
                 'ip_address' => $clientIp,
@@ -134,7 +161,8 @@ class VoucherActivationService
 
     private function resumeAgentProvisioningAfterExplicitRollback(Tenant $tenant, Session $session, Voucher $voucher): void
     {
-        if ($session->status !== 'provisioning'
+        if ($session->access_backend_origin !== 'site_agent'
+            || $session->status !== 'provisioning'
             || ! $session->router_id
             || $session->pending_revocation
             || $session->pending_device_ban) {
