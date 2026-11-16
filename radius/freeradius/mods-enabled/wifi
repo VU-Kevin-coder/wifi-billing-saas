@@ -1,0 +1,16 @@
+# Install with adapter.py and JSON config paths changed to your protected locations.
+exec wifi_authorize {
+    wait = yes
+    program = "/usr/bin/python3 /opt/wifi-radius/adapter.py authorize /etc/wifi-radius/adapter.json"
+    input_pairs = control
+    output_pairs = reply
+    shell_escape = no
+    timeout = 3
+}
+exec wifi_accounting {
+    wait = yes
+    program = "/usr/bin/python3 /opt/wifi-radius/adapter.py accounting /etc/wifi-radius/adapter.json"
+    input_pairs = control
+    shell_escape = no
+    timeout = 3
+}
