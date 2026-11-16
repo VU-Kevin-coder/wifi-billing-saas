@@ -51,7 +51,8 @@ class AuditLog extends Model
         ?Tenant $tenant = null,
     ): self {
         if (! PlatformSetting::get('audit.enabled', true)
-            && ! str_starts_with($action, 'platform.settings.')) {
+            && ! str_starts_with($action, 'platform.settings.')
+            && ! str_starts_with($action, 'policy.')) {
             return new self(['action' => $action]);
         }
 

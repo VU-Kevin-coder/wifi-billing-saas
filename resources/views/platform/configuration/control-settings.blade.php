@@ -131,7 +131,9 @@
                                             @if(!empty($field['planned']))<div class="control-help">This request is saved for future deployment; it does not change the running system.</div>@endif
                                         </div>
                                         <div>
-                                            @if($field['type'] === 'boolean' || $field['type'] === 'policy')
+                                            @if($isPolicy && ! \App\Services\Policy\PolicyDefinitions::validStored($field['policy_key'] ?? $key, $value))
+                                                <span class="control-status bad">Invalid stored policy value; review and repair explicitly. Not submitted.</span>
+                                            @elseif($field['type'] === 'boolean' || ($field['type'] === 'policy' && is_bool($field['default'])))
                                                 <div class="control-toggle">
                                                     <input type="hidden" name="{{ $fieldName }}" value="0">
                                                     <input type="checkbox" data-setting-input data-reset-default="{{ (int) (bool) $field['default'] }}" name="{{ $fieldName }}" value="1" @checked((bool) $value) aria-label="{{ $field['label'] }}">
@@ -143,7 +145,7 @@
                                                         <option value="{{ $option }}" @selected((string) $value === (string) $option)>{{ $option }}</option>
                                                     @endforeach
                                                 </select>
-                                            @elseif($field['type'] === 'number')
+                                            @elseif($field['type'] === 'number' || ($field['type'] === 'policy' && is_numeric($field['default'])))
                                                 <div class="control-unit">
                                                     <input class="control-input" type="number" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" value="{{ $value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ $field['step'] ?? 1 }}" aria-label="{{ $field['label'] }}">
                                                     @if(!empty($field['unit']))<span>{{ $field['unit'] }}</span>@endif

@@ -136,9 +136,9 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
         Route::get('/configuration/policies', [PolicyController::class, 'index'])->name('policies.index');
         Route::put('/configuration/policies', [PolicyController::class, 'updateAll'])->middleware('mfa.recent')->name('policies.update');
         Route::get('/configuration/policies/export', [PolicyController::class, 'export'])->name('policies.export');
-        Route::put('/configuration/policies/lifecycle', [PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
-        Route::put('/configuration/policies/approval', [PolicyController::class, 'updateApproval'])->name('policies.approval.update');
-        Route::put('/configuration/policies/{category}', [PolicyController::class, 'updateCategory'])->name('policies.category.update');
+        Route::put('/configuration/policies/lifecycle', [PolicyController::class, 'updateLifecycle'])->middleware('mfa.recent')->name('policies.lifecycle.update');
+        Route::put('/configuration/policies/approval', [PolicyController::class, 'updateApproval'])->middleware('mfa.recent')->name('policies.approval.update');
+        Route::put('/configuration/policies/{category}', [PolicyController::class, 'updateCategory'])->middleware('mfa.recent')->name('policies.category.update');
         Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->middleware('mfa.recent')->name('impersonate');
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });

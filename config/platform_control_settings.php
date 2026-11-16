@@ -134,6 +134,7 @@ return [
         'security.org_require_2fa' => ['section' => 'security', 'group' => 'Two-factor authentication', 'label' => 'Let workspaces require 2FA', 'type' => 'boolean', 'default' => true],
         'security.step_up_enabled' => ['section' => 'security', 'group' => 'Two-factor authentication', 'label' => 'Ask for 2FA again on sensitive actions', 'type' => 'policy', 'default' => true],
         'security.step_up_minutes' => ['section' => 'security', 'group' => 'Two-factor authentication', 'label' => 'Step-up stays valid for', 'type' => 'policy', 'default' => 10, 'min' => 1, 'max' => 120, 'unit' => 'minutes'],
+        'security.login_throttle_ip_attempts' => ['section' => 'security', 'group' => 'Sign-in', 'label' => 'Failed sign-ins per IP before lockout', 'type' => 'policy', 'default' => 5, 'min' => 1, 'max' => 100, 'unit' => 'attempts'],
         'security.login_throttle_attempts' => ['section' => 'security', 'group' => 'Sign-in', 'label' => 'Failed sign-ins before lockout', 'type' => 'policy', 'default' => 6, 'min' => 3, 'max' => 20, 'unit' => 'attempts'],
         'security.login_throttle_decay' => ['section' => 'security', 'group' => 'Sign-in', 'label' => 'Lockout lasts', 'type' => 'policy', 'default' => 1, 'min' => 1, 'max' => 60, 'unit' => 'minutes'],
         'security.password_reset_ttl' => ['section' => 'security', 'group' => 'Sign-in', 'label' => 'Password reset link valid for', 'type' => 'policy', 'default' => 60, 'min' => 5, 'max' => 1440, 'unit' => 'minutes'],

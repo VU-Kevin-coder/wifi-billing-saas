@@ -14,10 +14,12 @@
             'vouchers' => ['Voucher generation', 'Limits on voucher batches and code length.', 'voucher'],
             'scheduling' => ['Background jobs', 'How often scheduled reconciliation and expiry jobs run.', 'schedule'],
         ];
-        $riskCount = 0;
-        if (empty($values['security.platform_admin_mfa'])) $riskCount++;
-        if (empty($values['security.step_up_enabled'])) $riskCount++;
-        if (empty($values['approval.wallet_adjustment.enabled']) || ($values['approval.wallet_adjustment.mode'] ?? '') === 'never') $riskCount++;
+        $adminMfaSafe = ($values['security.platform_admin_mfa'] ?? null) === true;
+        $stepUpSafe = ($values['security.step_up_enabled'] ?? null) === true;
+        $approvalSafe = ($values['approval.wallet_adjustment.enabled'] ?? null) === true && in_array($values['approval.wallet_adjustment.mode'] ?? null, ['always', 'threshold'], true);
+        $riskCount = (int) ! $adminMfaSafe + (int) ! $stepUpSafe + (int) ! $approvalSafe;
+        $displayHistoryValue = fn ($value) => is_bool($value) ? ($value ? 'on' : 'off') : (is_scalar($value) ? $value : ($value === null ? '-' : json_encode($value)));
+
     @endphp
 
     <style>
@@ -82,9 +84,9 @@
                         <section class="policy-card">
                             <header><div><h2>Risk check</h2><p>Critical money and account safeguards.</p></div></header>
                             <ul class="policy-risk">
-                                <li data-risk-item="platform_admin_mfa" @if(!empty($values['security.platform_admin_mfa'])) hidden @endif><span class="policy-sev"></span><div><b>Platform admins can sign in without 2FA</b><div class="policy-help">Turn platform-admin MFA back on.</div></div><a href="#security">Review</a></li>
-                                <li data-risk-item="step_up" @if(!empty($values['security.step_up_enabled'])) hidden @endif><span class="policy-sev warn"></span><div><b>No step-up check on sensitive actions</b><div class="policy-help">A stolen session could approve money movements without a fresh verification.</div></div><a href="#security">Review</a></li>
-                                <li data-risk-item="adjustment_approval" @if(!empty($values['approval.wallet_adjustment.enabled']) && ($values['approval.wallet_adjustment.mode'] ?? '') !== 'never') hidden @endif><span class="policy-sev"></span><div><b>Wallet adjustments need no approval</b><div class="policy-help">One admin can change a balance without review.</div></div><a href="#approvals">Review</a></li>
+                                <li data-risk-item="platform_admin_mfa" @if($adminMfaSafe) hidden @endif><span class="policy-sev"></span><div><b>Platform admins can sign in without 2FA</b><div class="policy-help">Turn platform-admin MFA back on.</div></div><a href="#security">Review</a></li>
+                                <li data-risk-item="step_up" @if($stepUpSafe) hidden @endif><span class="policy-sev warn"></span><div><b>No step-up check on sensitive actions</b><div class="policy-help">A stolen session could approve money movements without a fresh verification.</div></div><a href="#security">Review</a></li>
+                                <li data-risk-item="adjustment_approval" @if($approvalSafe) hidden @endif><span class="policy-sev"></span><div><b>Wallet adjustments need no approval</b><div class="policy-help">One admin can change a balance without review.</div></div><a href="#approvals">Review</a></li>
                                 <li data-risk-item="none" @if($riskCount) hidden @endif><span class="policy-sev ok"></span><div><b>No critical risks detected</b><div class="policy-help">This check updates when you change the settings below.</div></div><span></span></li>
                             </ul>
                         </section>
@@ -94,7 +96,7 @@
                             @if($different->isEmpty())<div class="policy-empty">No saved policies differ from their defaults.</div>
                             @else<div class="policy-table-wrap"><table class="policy-table"><thead><tr><th>Policy</th><th>Default</th><th>Current</th></tr></thead><tbody>
                                 @foreach($different as $policy)
-                                    <tr><td><span class="policy-key">{{ $policy->key }}</span></td><td>{{ is_bool($defaults[$policy->key]) ? ($defaults[$policy->key] ? 'Allowed' : 'Blocked') : $defaults[$policy->key] }}</td><td><b>{{ is_bool($policy->value) ? ($policy->value ? 'Allowed' : 'Blocked') : $policy->value }}</b></td></tr>
+                                    <tr><td><span class="policy-key">{{ $policy->key }}</span></td><td>{{ is_bool($defaults[$policy->key]) ? ($defaults[$policy->key] ? 'Allowed' : 'Blocked') : $defaults[$policy->key] }}</td><td><b>{{ is_bool($policy->value) ? ($policy->value ? 'Allowed' : 'Blocked') : (is_scalar($policy->value) ? $policy->value : '[invalid]') }}</b></td></tr>
                                 @endforeach
                             </tbody></table></div>@endif
                         </section>
@@ -110,8 +112,10 @@
                                         @foreach($catalog['lifecycle']['states'] as $state => $stateLabel)
                                             @php $key = "lifecycle.{$state}.{$action}"; $policy = $byKey->get($key); @endphp
                                             <td>
-                                                @if($policy)
+                                                @if($policy && isset($definitions[$key]) && \App\Services\Policy\PolicyDefinitions::validStored($key, $policy->value))
                                                     <label class="policy-toggle"><input type="hidden" name="policies[{{ $key }}]" value="0"><input class="policy-switch" type="checkbox" name="policies[{{ $key }}]" value="1" @checked($policy->value) aria-label="{{ $stateLabel }}: {{ $label }}"><span>{{ $policy->value ? 'Allowed' : 'Blocked' }}</span></label>
+                                                @elseif($policy)
+                                                    <span data-invalid-policy="{{ $key }}">Invalid policy value; review and repair explicitly.</span>
                                                 @else
                                                     <span title="No policy: always allowed">—</span>
                                                 @endif
@@ -144,7 +148,7 @@
                                 <header><div><h2>{{ $title }}</h2><p>{{ $description }}</p></div></header>
                                 @forelse($items as $policy)
                                     @php
-                                        $field = $catalog['fields'][$policy->key] ?? [];
+                                        $field = $definitions[$policy->key] ?? [];
                                         $label = $field['label'] ?? $policy->description ?? $policy->key;
                                         $unit = $field['unit'] ?? '';
                                         $default = $defaults[$policy->key] ?? null;
@@ -154,18 +158,20 @@
                                             <div class="policy-help">{{ $policy->description }}</div>
                                             @if(array_key_exists($policy->key, $defaults))
                                                 <div class="policy-default">Default: {{ is_bool($default) ? ($default ? 'Allowed' : 'Blocked') : $default }}
-                                                    @if($policy->value !== $default)<button type="button" class="policy-reset" data-key="{{ $policy->key }}" data-value="{{ is_bool($default) ? (int) $default : $default }}">Restore default</button>@endif
+                                                    @if($policy->value !== $default && \App\Services\Policy\PolicyDefinitions::validStored($policy->key, $policy->value))<button type="button" class="policy-reset" data-key="{{ $policy->key }}" data-value="{{ is_bool($default) ? (int) $default : $default }}">Restore default</button>@endif
                                                 </div>
                                             @endif
                                         </div>
                                         <div>
-                                            @if(is_bool($policy->value))
+                                            @if(! \App\Services\Policy\PolicyDefinitions::validStored($policy->key, $policy->value))
+                                                <span>Invalid or unknown policy value; review and repair explicitly. Not submitted.</span>
+                                            @elseif(is_bool($field['default']))
                                                 <label class="policy-toggle"><input type="hidden" name="policies[{{ $policy->key }}]" value="0"><input type="checkbox" name="policies[{{ $policy->key }}]" value="1" @checked($policy->value) aria-label="{{ $label }}"><span>{{ $policy->value ? 'On' : 'Off' }}</span></label>
                                             @elseif(isset($field['options']))
                                                 <select class="policy-input" name="policies[{{ $policy->key }}]" aria-label="{{ $label }}">
                                                     @foreach($field['options'] as $option)<option value="{{ $option }}" @selected((string) $policy->value === (string) $option)>{{ $option }}</option>@endforeach
                                                 </select>
-                                            @elseif(is_numeric($policy->value))
+                                            @elseif(is_numeric($field['default']))
                                                 <div class="control-unit"><input class="policy-input" type="number" name="policies[{{ $policy->key }}]" value="{{ $policy->value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ $field['step'] ?? 1 }}" aria-label="{{ $label }}">@if($unit)<span>{{ $unit }}</span>@endif</div>
                                             @else
                                                 <input class="policy-input" type="text" name="policies[{{ $policy->key }}]" value="{{ $policy->value }}" aria-label="{{ $label }}">
@@ -188,7 +194,7 @@
                                 @foreach($history as $entry)
                                     <tr><td>{{ $entry->created_at->format('Y-m-d H:i') }}</td><td>{{ $entry->user?->name ?? 'System' }}</td><td class="wrap">
                                         @foreach(($entry->meta['changes'] ?? []) as $key => $change)
-                                            <div><span class="policy-key">{{ $key }}</span> <span class="policy-old">{{ is_bool($change['old'] ?? null) ? (($change['old'] ?? false) ? 'on' : 'off') : ($change['old'] ?? '-') }}</span> → <span class="policy-new">{{ is_bool($change['new'] ?? null) ? (($change['new'] ?? false) ? 'on' : 'off') : ($change['new'] ?? '-') }}</span></div>
+                                            <div><span class="policy-key">{{ $key }}</span> <span class="policy-old">{{ $displayHistoryValue($change['old'] ?? null) }}</span> → <span class="policy-new">{{ $displayHistoryValue($change['new'] ?? null) }}</span></div>
                                         @endforeach
                                         @if(empty($entry->meta['changes'])){{ implode(', ', $entry->meta['keys'] ?? []) }}@endif
                                     </td><td>{{ $entry->meta['reason'] ?? '—' }}</td></tr>
@@ -242,19 +248,19 @@
             const policyCheckbox = key => Array.from(form.querySelectorAll('input[type="checkbox"][name^="policies["]'))
                 .find(input => input.name === `policies[${key}]`);
             const renderRisk = () => {
-                const adminMfa = policyCheckbox('security.platform_admin_mfa')?.checked ?? true;
-                const stepUp = policyCheckbox('security.step_up_enabled')?.checked ?? true;
-                const adjustmentApproval = policyCheckbox('approval.wallet_adjustment.enabled')?.checked ?? true;
+                const adminMfa = policyCheckbox('security.platform_admin_mfa')?.checked ?? false;
+                const stepUp = policyCheckbox('security.step_up_enabled')?.checked ?? false;
+                const adjustmentApproval = policyCheckbox('approval.wallet_adjustment.enabled')?.checked ?? false;
                 const approvalMode = Array.from(form.querySelectorAll('select[name^="policies["]'))
                     .find(input => input.name === 'policies[approval.wallet_adjustment.mode]')?.value;
                 const risks = {
                     platform_admin_mfa: !adminMfa,
                     step_up: !stepUp,
-                    adjustment_approval: !adjustmentApproval || approvalMode === 'never',
+                    adjustment_approval: !adjustmentApproval || !['always', 'threshold'].includes(approvalMode),
                 };
                 const total = Object.values(risks).filter(Boolean).length;
                 document.querySelectorAll('[data-risk-item]').forEach(item => {
-                    item.hidden = item.dataset.risk === 'none' ? total > 0 : !risks[item.dataset.risk];
+                    item.hidden = item.dataset.riskItem === 'none' ? total > 0 : !risks[item.dataset.riskItem];
                 });
                 document.getElementById('policyRiskCount').textContent = total;
                 const dot = document.getElementById('policyRiskDot');
@@ -307,11 +313,12 @@
                         const input = form.querySelector(`[name="${CSS.escape(name)}"][type=checkbox]`);
                         return input && !input.checked;
                     });
+                    const unknown = selected.some(state => Array.from(form.querySelectorAll('[data-invalid-policy]')).some(item => item.dataset.invalidPolicy === `lifecycle.${state}.${action}`));
                     const item = document.createElement('div');
                     item.className = 'policy-card';
                     item.style.padding = '10px 12px';
                     item.style.margin = '0';
-                    item.innerHTML = `<b>${label}</b><div class="policy-help">${blocked.length ? 'Blocked by ' + blocked.join(', ') : 'Allowed'}</div>`;
+                    item.innerHTML = `<b>${label}</b><div class="policy-help">${blocked.length ? 'Blocked by ' + blocked.join(', ') : (unknown ? 'Unknown: invalid policy value' : 'Allowed')}</div>`;
                     output.appendChild(item);
                 });
             }

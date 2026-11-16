@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PlatformSetting;
-use App\Models\PolicySetting;
 use App\Models\Session;
 use App\Models\Site;
 use App\Models\SiteAgent;
 use App\Services\Policy\Policy;
+use App\Services\Policy\PolicyDefinitions;
 use App\Services\SystemHealthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -65,8 +65,12 @@ class ControlSettingsController extends Controller
         $validated = $request->validate([
             'reason' => ['required', 'string', 'min:5', 'max:200'],
             'settings' => ['nullable', 'array'],
+            'policies' => ['nullable', 'array'],
         ]);
 
+        if (mb_strlen(trim($validated['reason'])) < 5) {
+            throw ValidationException::withMessages(['reason' => 'A reason of at least five non-space characters is required.']);
+        }
         $definitions = $catalog['fields'];
         $values = $request->input('settings', []);
         $unknown = array_diff(array_keys($values), array_keys($definitions));
@@ -112,7 +116,7 @@ class ControlSettingsController extends Controller
                 ]);
             }
             $storageKey = $field['policy_key'] ?? $key;
-            $normalized = $this->validateField($key, $field, $value);
+            $normalized = PolicyDefinitions::normalize($storageKey, $value);
             $before = $this->readValue($key, $field);
             if ($before !== $normalized) {
                 $changes[] = ['key' => $storageKey, 'old' => $before, 'new' => $normalized, 'source' => 'policy'];
@@ -172,6 +176,9 @@ class ControlSettingsController extends Controller
             'confirmation' => ['required', 'string'],
             'reason' => ['required', 'string', 'min:5', 'max:200'],
         ]);
+        if (mb_strlen(trim($validated['reason'])) < 5) {
+            throw ValidationException::withMessages(['reason' => 'A reason of at least five non-space characters is required.']);
+        }
         $words = ['rotate' => 'ROTATE', 'purge' => 'PURGE', 'freeze' => 'FREEZE', 'resume' => 'RESUME', 'reset' => 'RESET'];
         abort_unless(isset($words[$action]) && hash_equals($words[$action], $validated['confirmation']), 422);
 
@@ -487,20 +494,22 @@ class ControlSettingsController extends Controller
     private function resetSettings(): array
     {
         $catalog = $this->catalog();
+        $policyChanges = [];
         foreach ($catalog['fields'] as $key => $field) {
             if (in_array($field['type'], ['readonly', 'secret'], true)) {
                 continue;
             }
-            $this->writeValue($key, $field, $field['default']);
-        }
-        foreach (PolicySetting::query()->get() as $setting) {
-            $default = $catalog['fields'][$setting->key]['default'] ?? null;
-            if ($default !== null) {
-                Policy::set($setting->key, $default, $setting->description);
+            if (in_array($field['type'], ['policy', 'policy_select'], true)) {
+                $storageKey = $field['policy_key'] ?? $key;
+                $before = $this->readValue($key, $field);
+                if ($before !== $field['default']) {
+                    $policyChanges[$storageKey] = ['old' => $before, 'new' => $field['default']];
+                }
             }
+            $this->writeValue($key, $field, $field['default']);
         }
         PlatformSetting::set('payouts.paused', false);
 
-        return ['reset' => true];
+        return ['reset' => true, 'policy_changes' => $policyChanges];
     }
 }
