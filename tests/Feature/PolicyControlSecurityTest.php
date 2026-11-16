@@ -10,7 +10,7 @@ use App\Services\Policy\Policy;
 use CodingLibs\MFA\Facades\MFA;
 use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -201,12 +201,39 @@ class PolicyControlSecurityTest extends TestCase
         $this->assertSame('damaged', $this->stored('approval.wallet_adjustment.enabled'));
     }
 
-    public function test_policy_and_control_writes_roll_back_when_audit_fails(): void
+    public function test_policy_write_rolls_back_when_audit_fails(): void
     {
-        Schema::drop('audit_logs');
-        $this->putJson(route('platform.policies.update'), ['reason' => 'Change payout limit', 'policies' => ['wallet.min_withdrawal' => 20000]])->assertStatus(500);
+        $this->assertAuditFailureRollsBack('platform.policies.update', 'policy.wallet.updated');
+    }
+
+    public function test_control_write_rolls_back_when_audit_fails(): void
+    {
+        $this->assertAuditFailureRollsBack('platform.configuration.control.update', 'platform.settings.updated');
+    }
+
+    private function assertAuditFailureRollsBack(string $route, string $action): void
+    {
+        $auditAttempts = 0;
+        $faultInjected = false;
+        $writtenValues = [];
+        $transactionLevel = DB::connection()->transactionLevel();
+        // Fail at the audit insert boundary without DDL or an implicit commit.
+        DB::connection()->beforeExecuting(function (string $query, array $bindings) use ($action, &$auditAttempts, &$faultInjected, &$writtenValues): void {
+            if (preg_match('/^insert\s+into\s+[`"]?audit_logs[`"]?/i', $query)) {
+                $auditAttempts++;
+                $writtenValues[] = $this->stored('wallet.min_withdrawal');
+                if (in_array($action, $bindings, true)) {
+                    $faultInjected = true;
+                    throw new \RuntimeException('Simulated mandatory audit insert failure');
+                }
+            }
+        });
+        $this->putJson(route($route), ['reason' => 'Change payout limit', 'policies' => ['wallet.min_withdrawal' => 20000]])->assertStatus(500);
+        $this->assertSame(1, $auditAttempts);
+        $this->assertTrue($faultInjected);
+        $this->assertSame([20000], $writtenValues);
+        $this->assertSame($transactionLevel, DB::connection()->transactionLevel());
         $this->assertSame(10000, $this->stored('wallet.min_withdrawal'));
-        $this->putJson(route('platform.configuration.control.update'), ['reason' => 'Change payout limit', 'policies' => ['wallet.min_withdrawal' => 20000]])->assertStatus(500);
-        $this->assertSame(10000, $this->stored('wallet.min_withdrawal'));
+        $this->assertDatabaseMissing('audit_logs', ['action' => $action]);
     }
 }

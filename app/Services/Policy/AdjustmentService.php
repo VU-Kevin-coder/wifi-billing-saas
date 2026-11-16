@@ -4,6 +4,7 @@ namespace App\Services\Policy;
 
 use App\Models\AuditLog;
 use App\Models\PendingAdjustment;
+use App\Models\PolicySetting;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -18,7 +19,13 @@ class AdjustmentService
      */
     public function request(Tenant $tenant, float $amount, string $reason, User $requester): array
     {
-        $max = (float) Policy::get('wallet.max_adjustment', 1000000);
+        // Read fresh for this authorization; retain the existing missing-row default.
+        [$ok, $setting] = PolicyRead::run(fn () => PolicySetting::where('key', 'wallet.max_adjustment')->first());
+        if (! $ok) {
+            return ['status' => 'blocked', 'adjustment' => null, 'transaction' => null,
+                'message' => 'Wallet adjustment maximum is unavailable.'];
+        }
+        $max = (float) ($setting ? $setting->value : 1000000);
         if (abs($amount) > $max) {
             return ['status' => 'blocked', 'adjustment' => null, 'transaction' => null,
                 'message' => "Amount exceeds the maximum single adjustment ({$max})."];

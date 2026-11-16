@@ -13,20 +13,17 @@ class AdjustmentApprovalPolicy
         $prefix = 'approval.wallet_adjustment.';
         $keys = ['enabled', 'mode', 'threshold', 'self_approve', 'expiry_hours', 'min_admins'];
 
-        try {
-            // Policy::get masks store errors and supplies defaults, neither is safe here.
-            $rows = PolicySetting::whereIn('key', array_map(fn ($key) => $prefix.$key, $keys))->get()->keyBy('key');
-            $values = [];
-            foreach ($keys as $key) {
-                if (! $rows->has($prefix.$key)) {
-                    return null;
-                }
-                $values[$key] = $rows[$prefix.$key]->value;
-            }
-        } catch (\Throwable $e) {
-            report($e);
-
+        // Policy::get masks store errors and supplies defaults, neither is safe here.
+        [$ok, $rows] = PolicyRead::run(fn () => PolicySetting::whereIn('key', array_map(fn ($key) => $prefix.$key, $keys))->get()->keyBy('key'));
+        if (! $ok) {
             return null;
+        }
+        $values = [];
+        foreach ($keys as $key) {
+            if (! $rows->has($prefix.$key)) {
+                return null;
+            }
+            $values[$key] = $rows[$prefix.$key]->value;
         }
 
         if (! is_bool($values['enabled']) || ! in_array($values['mode'], ['always', 'threshold', 'never'], true)
@@ -47,11 +44,8 @@ class AdjustmentApprovalPolicy
             return false;
         }
 
-        try {
-            $adminCount = User::withoutTenancy()->role('platform_admin')->count();
-        } catch (\Throwable $e) {
-            report($e);
-
+        [$ok, $adminCount] = PolicyRead::run(fn () => User::withoutTenancy()->role('platform_admin')->count());
+        if (! $ok) {
             return false;
         }
 

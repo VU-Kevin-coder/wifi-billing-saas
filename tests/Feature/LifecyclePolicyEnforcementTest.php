@@ -11,8 +11,8 @@ use App\Models\User;
 use App\Services\Policy\Policy;
 use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -66,11 +66,18 @@ class LifecyclePolicyEnforcementTest extends TestCase
     {
         Policy::set('lifecycle.suspended.portal_sell', true);
         $this->assertFalse(Policy::denies($this->tenant, 'portal_sell'));
-        Schema::drop('policy_settings');
+        $readFailures = 0;
+        DB::connection()->beforeExecuting(function (string $query) use (&$readFailures): void {
+            if (preg_match('/^select\b.*\bfrom\s+[`"]?policy_settings[`"]?/i', $query)) {
+                $readFailures++;
+                DB::select('select * from __toqi_missing_policy_store_test');
+            }
+        });
         $this->assertTrue(Policy::denies($this->tenant, 'portal_sell'));
         $this->assertTrue(Policy::denies($this->tenant, 'view_billing'));
         $this->tenant->status = 'active';
         $this->assertFalse(Policy::denies($this->tenant, 'portal_sell'));
+        $this->assertSame(2, $readFailures);
     }
 
     public function test_dashboard_reports_and_billing_are_gated_and_no_redirect_loop(): void
@@ -173,7 +180,13 @@ class LifecyclePolicyEnforcementTest extends TestCase
             'policies' => ['security.step_up_enabled' => '0'],
         ])->assertSessionHasNoErrors();
         $log = AuditLog::where('action', 'policy.security.updated')->sole();
-        $this->assertSame(['old' => true, 'new' => false, 'description' => 'Require recent MFA for sensitive actions'], $log->meta['changes']['security.step_up_enabled']);
+        $change = $log->meta['changes']['security.step_up_enabled'];
+        $keys = array_keys($change);
+        sort($keys);
+        $this->assertSame(['description', 'new', 'old'], $keys);
+        $this->assertSame(true, $change['old']);
+        $this->assertSame(false, $change['new']);
+        $this->assertSame('Require recent MFA for sensitive actions', $change['description']);
     }
 
     public function test_policy_change_rolls_back_if_mandatory_audit_fails(): void
@@ -183,11 +196,30 @@ class LifecyclePolicyEnforcementTest extends TestCase
         $platform = User::factory()->create(['tenant_id' => null]);
         $platform->assignRole('platform_admin');
         $this->withoutMiddleware(RequireRecentMfa::class);
-        Schema::drop('audit_logs');
+        $auditAttempts = 0;
+        $faultInjected = false;
+        $writtenValues = [];
+        $transactionLevel = DB::connection()->transactionLevel();
+        // Fail at the audit insert boundary without DDL or an implicit commit.
+        DB::connection()->beforeExecuting(function (string $query, array $bindings) use (&$auditAttempts, &$faultInjected, &$writtenValues): void {
+            if (preg_match('/^insert\s+into\s+[`"]?audit_logs[`"]?/i', $query)) {
+                $auditAttempts++;
+                $writtenValues[] = PolicySetting::where('key', 'security.step_up_enabled')->sole()->value;
+                if (in_array('policy.security.updated', $bindings, true)) {
+                    $faultInjected = true;
+                    throw new \RuntimeException('Simulated mandatory audit insert failure');
+                }
+            }
+        });
         $this->actingAs($platform)->put(route('platform.policies.update'), [
             'reason' => 'Review policy', 'policies' => ['security.step_up_enabled' => '0'],
         ])->assertStatus(500);
+        $this->assertSame(1, $auditAttempts);
+        $this->assertTrue($faultInjected);
+        $this->assertSame([false], $writtenValues);
+        $this->assertSame($transactionLevel, DB::connection()->transactionLevel());
         Policy::flush();
         $this->assertTrue(Policy::get('security.step_up_enabled'));
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'policy.security.updated']);
     }
 }
