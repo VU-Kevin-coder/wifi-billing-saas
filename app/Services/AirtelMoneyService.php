@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\PlatformSetting;
 use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class AirtelMoneyService
@@ -23,7 +22,7 @@ class AirtelMoneyService
                 'client_secret' => PlatformSetting::getSecret('airtel_client_secret'),
                 'grant_type' => 'client_credentials',
             ]);
-        $tokenResponse->throw();
+        PaymentSandboxGuard::requireSuccess($tokenResponse);
 
         $token = $tokenResponse->json('access_token');
         if (! is_string($token) || $token === '') {
@@ -65,27 +64,27 @@ class AirtelMoneyService
                 'client_secret' => PlatformSetting::getSecret('airtel_client_secret'),
                 'grant_type' => 'client_credentials',
             ]);
-        $tokenResponse->throw();
+        PaymentSandboxGuard::requireSuccess($tokenResponse);
 
         $token = $tokenResponse->json('access_token');
         if (! is_string($token) || $token === '') {
             throw new RuntimeException('Airtel Money did not return an access token.');
         }
 
-        return $this->request()
+        $response = $this->request()
             ->withToken($token)
             ->withHeaders([
                 'X-Country' => 'UG',
                 'X-Currency' => 'UGX',
             ])
-            ->get($this->baseUrl().'/standard/v1/payments/'.rawurlencode($reference))
-            ->throw()
-            ->json();
+            ->get($this->baseUrl().'/standard/v1/payments/'.rawurlencode($reference));
+
+        return PaymentSandboxGuard::requireSuccess($response)->json();
     }
 
     private function request(): PendingRequest
     {
-        return Http::acceptJson()->asJson()->timeout(20);
+        return PaymentSandboxGuard::http()->acceptJson()->asJson()->timeout(20);
     }
 
     private function baseUrl(): string
@@ -94,6 +93,9 @@ class AirtelMoneyService
             ? 'production'
             : 'sandbox';
 
-        return rtrim((string) config('services.airtel_money.'.$environment.'_url'), '/');
+        $url = rtrim((string) config('services.airtel_money.'.$environment.'_url'), '/');
+        PaymentSandboxGuard::check('airtel', $url);
+
+        return $url;
     }
 }

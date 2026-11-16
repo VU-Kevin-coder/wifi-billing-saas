@@ -7,7 +7,6 @@ use App\Models\PlatformSetting;
 use App\Models\Transaction;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class MtnMomoService
@@ -42,12 +41,12 @@ class MtnMomoService
 
     public function verify(string $referenceId): array
     {
-        return $this->request()
+        $response = $this->request()
             ->withToken($this->accessToken())
             ->withHeaders(['X-Target-Environment' => $this->targetEnvironment()])
-            ->get($this->baseUrl().'/collection/v1_0/requesttopay/'.rawurlencode($referenceId))
-            ->throw()
-            ->json();
+            ->get($this->baseUrl().'/collection/v1_0/requesttopay/'.rawurlencode($referenceId));
+
+        return PaymentSandboxGuard::requireSuccess($response)->json();
     }
 
     private function accessToken(): string
@@ -59,7 +58,7 @@ class MtnMomoService
             )
             ->withHeader('X-Target-Environment', $this->targetEnvironment())
             ->post($this->baseUrl().'/collection/token/');
-        $tokenResponse->throw();
+        PaymentSandboxGuard::requireSuccess($tokenResponse);
 
         $token = $tokenResponse->json('access_token');
         if (! is_string($token) || $token === '') {
@@ -71,7 +70,7 @@ class MtnMomoService
 
     private function request(): PendingRequest
     {
-        return Http::acceptJson()
+        return PaymentSandboxGuard::http()->acceptJson()
             ->asJson()
             ->withHeader('Ocp-Apim-Subscription-Key', (string) PlatformSetting::getSecret('mtn_subscription_key'))
             ->timeout(20);
@@ -79,7 +78,10 @@ class MtnMomoService
 
     private function baseUrl(): string
     {
-        return rtrim((string) config('services.mtn_momo.'.$this->environment().'_url'), '/');
+        $url = rtrim((string) config('services.mtn_momo.'.$this->environment().'_url'), '/');
+        PaymentSandboxGuard::check('mtn', $url);
+
+        return $url;
     }
 
     private function environment(): string
