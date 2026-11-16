@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\PolicySetting;
 use App\Services\Policy\Policy;
 use Illuminate\Database\Seeder;
 
@@ -95,7 +96,12 @@ class PolicySeeder extends Seeder
         ];
 
         foreach ($defaults as $key => [$value, $description]) {
-            Policy::set($key, $value, $description);
+            PolicySetting::firstOrCreate(
+                ['key' => $key],
+                ['value' => $value, 'category' => explode('.', $key)[0], 'description' => $description],
+            );
         }
+
+        Policy::flush();
     }
 }
