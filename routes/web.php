@@ -129,16 +129,16 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
         Route::put('/configuration/flutterwave', [ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
         Route::put('/configuration/mtn', [ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
         Route::put('/configuration/airtel', [ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
-        Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->name('configuration.email.update');
-        Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->name('configuration.email.test');
-        Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->name('configuration.sms.update');
-        Route::post('/configuration/sms/test', [ConfigurationController::class, 'testSms'])->name('configuration.sms.test');
+        Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->middleware('mfa.recent')->name('configuration.email.update');
+        Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->middleware('mfa.recent')->name('configuration.email.test');
+        Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->middleware('mfa.recent')->name('configuration.sms.update');
+        Route::post('/configuration/sms/test', [ConfigurationController::class, 'testSms'])->middleware('mfa.recent')->name('configuration.sms.test');
         Route::get('/configuration/policies', [PolicyController::class, 'index'])->name('policies.index');
         Route::put('/configuration/policies', [PolicyController::class, 'updateAll'])->middleware('mfa.recent')->name('policies.update');
         Route::get('/configuration/policies/export', [PolicyController::class, 'export'])->name('policies.export');
-        Route::put('/configuration/policies/lifecycle', [PolicyController::class, 'updateLifecycle'])->name('policies.lifecycle.update');
-        Route::put('/configuration/policies/approval', [PolicyController::class, 'updateApproval'])->name('policies.approval.update');
-        Route::put('/configuration/policies/{category}', [PolicyController::class, 'updateCategory'])->name('policies.category.update');
+        Route::put('/configuration/policies/lifecycle', [PolicyController::class, 'updateLifecycle'])->middleware('mfa.recent')->name('policies.lifecycle.update');
+        Route::put('/configuration/policies/approval', [PolicyController::class, 'updateApproval'])->middleware('mfa.recent')->name('policies.approval.update');
+        Route::put('/configuration/policies/{category}', [PolicyController::class, 'updateCategory'])->middleware('mfa.recent')->name('policies.category.update');
         Route::post('/impersonate/{tenant}', [PlatformDashboard::class, 'impersonate'])->middleware('mfa.recent')->name('impersonate');
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
@@ -193,7 +193,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
             ->prefix('operator')
             ->name('operator.')
             ->group(function () {
-                Route::get('/dashboard', OperatorDashboard::class)->name('dashboard');
+                Route::get('/dashboard', OperatorDashboard::class)->middleware('tenant.active:dashboard')->name('dashboard');
 
                 Route::middleware('role:operator_admin|operator_support')->group(function () {
                     Route::get('/customers/export.csv', [CustomerController::class, 'export'])
@@ -251,10 +251,10 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 });
 
                 Route::get('/sessions', [LiveSessionController::class, 'index'])->name('sessions.index');
-                Route::get('/sites/export', [SiteController::class, 'export'])->name('sites.export');
-                Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
+                Route::get('/sites/export', [SiteController::class, 'export'])->middleware('tenant.active:view_reports')->name('sites.export');
+                Route::get('/sites', [SiteController::class, 'index'])->middleware('tenant.active:view_reports')->name('sites.index');
                 Route::get('/billing', [App\Http\Controllers\Operator\BillingController::class, 'index'])
-                    ->middleware('role:operator_admin|operator_finance')
+                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing'])
                     ->name('billing.index');
 
                 // Operator Wallet & Withdrawals
@@ -268,7 +268,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 // Refund requests (the platform approves and pays the customer)
                 Route::middleware('role:operator_admin|operator_finance')->group(function () {
                     // Analytics (read-only sales reporting)
-                    Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+                    Route::get('/analytics', [AnalyticsController::class, 'index'])->middleware('tenant.active:view_reports')->name('analytics');
 
                     Route::get('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
                     Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->middleware('idempotency')->name('refunds.store');

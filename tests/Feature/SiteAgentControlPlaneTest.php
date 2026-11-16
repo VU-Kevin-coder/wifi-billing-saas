@@ -578,7 +578,7 @@ class SiteAgentControlPlaneTest extends TestCase
 
     private function createSiteSetup(): array
     {
-        $tenant = Tenant::create(['name' => 'Agent Test', 'slug' => 'agent-test', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Agent Test', 'slug' => 'agent-test', 'status' => 'active']);
         $site = Site::create(['tenant_id' => $tenant->id, 'name' => 'North Site']);
         $router = Router::create([
             'tenant_id' => $tenant->id,

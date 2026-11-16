@@ -69,7 +69,7 @@ class RefundController extends Controller
                 $request->boolean('revoke_access', true),
             );
         } catch (RefundException $exception) {
-            return back()->withErrors(['amount' => $exception->getMessage()])->withInput();
+            return back()->withErrors(['amount' => $exception->getMessage()])->withInput($validated);
         }
 
         return back()->with('status', 'Refund request sent to the platform for approval.');

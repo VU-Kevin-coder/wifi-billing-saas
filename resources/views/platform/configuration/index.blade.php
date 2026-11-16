@@ -698,7 +698,7 @@
                                     </div>
                                     <div>
                                         <label class="block text-[11px] font-semibold text-gray-700 mb-1">SMTP Password / App Password</label>
-                                        <input type="password" name="smtp_password" value="{{ $settings['smtp_password'] }}" placeholder="••••••••••••" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
+                                        <input type="password" name="smtp_password" autocomplete="new-password" placeholder="{{ $settings['smtp_password_configured'] ? 'Saved — leave blank to keep' : 'Enter SMTP password' }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-blue-500 focus:border-blue-500">
                                     </div>
                                 </div>
                             </div>
@@ -733,7 +733,7 @@
                                 <span class="text-xs font-bold">Verify & Send Live Test Email</span>
                             </div>
                             <p class="text-[11px] text-blue-700/90 leading-relaxed">
-                                Enter a recipient email to immediately test your SMTP connection and dispatch a real verification message.
+                                Tests use saved settings only. Save any changes first, then enter a recipient to send a real verification email.
                             </p>
                             <form method="POST" action="{{ route('platform.configuration.email.test') }}" class="flex gap-2">
                                 @csrf
@@ -748,7 +748,7 @@
                     <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
                         <p class="text-[10px] text-gray-500 flex items-center gap-1">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                            Encrypted at rest
+                            Newly saved secrets are encrypted at rest; existing secrets remain unchanged until replaced.
                         </p>
                         <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Done</button>
                     </div>
@@ -795,6 +795,7 @@
                         </div>
 
                         <!-- Credentials Form -->
+                        <p class="text-xs text-gray-600">Upgrade warning: existing unbound SMS credentials cannot send messages until an administrator re-enters them for the current provider. Reactivating the same previously bound provider keeps its credential if left blank. Switching to a different provider requires a different credential. Test after saving.</p>
                         <form id="sms-settings-form" method="POST" action="{{ route('platform.configuration.sms.update') }}" class="space-y-4">
                             @csrf
                             @method('PUT')
@@ -804,6 +805,7 @@
                                 <select name="sms_provider" x-model="provider" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white focus:ring-purple-500 focus:border-purple-500">
                                     <option value="africastalking">Africa's Talking (Uganda & East Africa Default)</option>
                                     <option value="twilio">Twilio (Global)</option>
+                                    <option value="disabled">Disabled</option>
                                 </select>
                             </div>
 
@@ -819,16 +821,16 @@
                                     </div>
                                     <div>
                                         <label class="block text-[11px] font-semibold text-gray-700 mb-1">AT Username</label>
-                                        <input type="text" name="sms_username" value="{{ $settings['sms_username'] }}" placeholder="sandbox or account_username" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                        <input type="text" name="sms_username" :disabled="provider !== 'africastalking'" value="{{ $settings['sms_username'] }}" placeholder="sandbox or account_username" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
                                     </div>
                                 </div>
                                 <div>
                                     <label class="block text-[11px] font-semibold text-gray-700 mb-1">Africa's Talking API Key</label>
-                                    <input type="password" name="sms_api_key" value="{{ $settings['sms_api_key'] }}" placeholder="at_api_key_..." class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                    <input type="password" name="sms_api_key" :disabled="provider !== 'africastalking'" autocomplete="new-password" placeholder="{{ $settings['sms_api_key_configured'] ? 'Saved — leave blank to keep' : 'Enter API key' }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
                                 </div>
                                 <div>
                                     <label class="block text-[11px] font-semibold text-gray-700 mb-1">Sender ID / Shortcode (Optional in Sandbox)</label>
-                                    <input type="text" name="sms_sender_id" value="{{ $settings['sms_sender_id'] }}" placeholder="HAMNET" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                    <input type="text" name="sms_sender_id" :disabled="provider !== 'africastalking'" value="{{ $settings['sms_sender_id'] }}" placeholder="HAMNET" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
                                 </div>
                             </div>
 
@@ -836,15 +838,15 @@
                             <div x-show="provider === 'twilio'" class="space-y-3 pt-2 border-t border-gray-100" style="display: none;">
                                 <div>
                                     <label class="block text-[11px] font-semibold text-gray-700 mb-1">Twilio Account SID</label>
-                                    <input type="text" name="sms_username" value="{{ $settings['sms_username'] }}" placeholder="ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                    <input type="text" name="sms_username" :disabled="provider !== 'twilio'" value="{{ $settings['sms_username'] }}" placeholder="ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
                                 </div>
                                 <div>
                                     <label class="block text-[11px] font-semibold text-gray-700 mb-1">Twilio Auth Token</label>
-                                    <input type="password" name="sms_api_key" value="{{ $settings['sms_api_key'] }}" placeholder="your_auth_token" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                    <input type="password" name="sms_api_key" :disabled="provider !== 'twilio'" autocomplete="new-password" placeholder="{{ $settings['sms_api_key_configured'] ? 'Saved — leave blank to keep' : 'Enter auth token' }}" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
                                 </div>
                                 <div>
                                     <label class="block text-[11px] font-semibold text-gray-700 mb-1">From Phone Number or Messaging Service SID</label>
-                                    <input type="text" name="sms_sender_id" value="{{ $settings['sms_sender_id'] }}" placeholder="+1234567890" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
+                                    <input type="text" name="sms_sender_id" :disabled="provider !== 'twilio'" value="{{ $settings['sms_sender_id'] }}" placeholder="+1234567890" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500">
                                 </div>
                             </div>
 
@@ -866,6 +868,7 @@
                             <p class="text-[11px] text-purple-700/90 leading-relaxed">
                                 Enter your phone number (e.g. <span class="font-mono">0772123456</span> or <span class="font-mono">+256772123456</span>). The system will normalize to international E.164 and dispatch a live test voucher message.
                             </p>
+                            <p class="text-[11px] text-purple-700">Tests use saved settings only. Save changes first.</p>
                             <form method="POST" action="{{ route('platform.configuration.sms.test') }}" class="flex gap-2">
                                 @csrf
                                 <input type="text" name="test_phone" required placeholder="+256 7XX XXXXXX" class="flex-1 rounded-xl border-purple-200 text-xs py-2 px-3 focus:ring-purple-500 focus:border-purple-500 bg-white font-mono">
@@ -879,7 +882,7 @@
                     <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
                         <p class="text-[10px] text-gray-500 flex items-center gap-1">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                            Encrypted at rest
+                            Newly saved secrets are encrypted at rest; existing secrets remain unchanged until replaced.
                         </p>
                         <button type="button" @click="closeOverlay()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">Done</button>
                     </div>

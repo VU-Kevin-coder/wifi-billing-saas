@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PolicySetting;
 use App\Services\Policy\Policy;
+use App\Services\Policy\PolicyDefinitions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class PolicyController extends Controller
@@ -23,12 +23,8 @@ class PolicyController extends Controller
             ->latest()
             ->limit(100)
             ->get();
-        $defaults = [];
-        foreach ($catalog['fields'] as $key => $field) {
-            if (in_array($field['type'], ['policy', 'policy_select'], true)) {
-                $defaults[$key] = $field['default'];
-            }
-        }
+        $definitions = PolicyDefinitions::all();
+        $defaults = array_map(fn ($field) => $field['default'], $definitions);
         foreach ($catalog['lifecycle']['states'] as $state => $label) {
             foreach (array_keys($catalog['lifecycle']['actions']) as $index => $action) {
                 $default = $catalog['lifecycle']['defaults'][$state][$index];
@@ -38,7 +34,7 @@ class PolicyController extends Controller
             }
         }
 
-        return view('platform.configuration.policy-center', compact('catalog', 'policies', 'history', 'defaults'));
+        return view('platform.configuration.policy-center', compact('catalog', 'policies', 'history', 'defaults', 'definitions'));
     }
 
     public function updateAll(Request $request)
@@ -47,39 +43,24 @@ class PolicyController extends Controller
             'reason' => ['required', 'string', 'min:5', 'max:200'],
             'policies' => ['required', 'array'],
         ]);
+        if (mb_strlen(trim($validated['reason'])) < 5) {
+            throw ValidationException::withMessages(['reason' => 'A reason of at least five non-space characters is required.']);
+        }
         $known = PolicySetting::query()->get()->keyBy('key');
-        $catalog = config('platform_control_settings');
         $changes = [];
 
         foreach ($validated['policies'] as $key => $value) {
             $setting = $known->get($key);
-            if (! $setting) {
+            if (! $setting && (! str_starts_with($key, 'lifecycle.') || ! isset(PolicyDefinitions::all()[$key]))) {
                 throw ValidationException::withMessages(['policies' => 'The submitted form contains an unknown policy.']);
             }
-            $field = $catalog['fields'][$key] ?? null;
-            $rules = match (true) {
-                is_bool($setting->value) => ['required', 'boolean'],
-                isset($field['options']) => ['required', 'in:'.implode(',', $field['options'])],
-                is_numeric($setting->value) => array_filter([
-                    'required',
-                    'numeric',
-                    isset($field['min']) ? 'min:'.$field['min'] : null,
-                    isset($field['max']) ? 'max:'.$field['max'] : null,
-                ]),
-                default => ['required', 'string', 'max:255'],
-            };
-            $normalized = Validator::make(['value' => $value], ['value' => $rules])->validate()['value'];
-            if (is_bool($setting->value)) {
-                $normalized = filter_var($normalized, FILTER_VALIDATE_BOOLEAN);
-            } elseif (is_numeric($setting->value)) {
-                $normalized = str_contains((string) $normalized, '.') ? (float) $normalized : (int) $normalized;
-            }
+            $normalized = PolicyDefinitions::normalize($key, $value);
 
-            if ($normalized !== $setting->value) {
-                $changes[$setting->category][$key] = [
-                    'old' => $setting->value,
+            if (! $setting || $normalized !== $setting->value) {
+                $changes[explode('.', $key)[0]][$key] = [
+                    'old' => $setting?->value,
                     'new' => $normalized,
-                    'description' => $setting->description,
+                    'description' => $setting?->description,
                 ];
             }
         }
@@ -109,67 +90,48 @@ class PolicyController extends Controller
 
     public function updateLifecycle(Request $request)
     {
-        $validated = $request->validate([
-            'policies' => 'required|array',
-            'policies.*' => 'boolean',
-        ]);
-
-        foreach ($validated['policies'] as $key => $value) {
-            Policy::set($key, (bool) $value);
+        $validated = $request->validate(['policies' => ['required', 'array']]);
+        foreach (array_keys($validated['policies']) as $key) {
+            if (! str_starts_with($key, 'lifecycle.') || ! isset(PolicyDefinitions::all()[$key])) {
+                throw ValidationException::withMessages(['policies' => 'Unknown lifecycle policy.']);
+            }
         }
 
-        AuditLog::record('policy.lifecycle.updated', null, [
-            'keys' => array_keys($validated['policies']),
-        ]);
-
-        return back()->with('status', 'Lifecycle policies updated.');
+        return $this->updateAll($request);
     }
 
     public function updateCategory(Request $request, string $category)
     {
-        $validated = $request->validate([
-            'policies' => 'required|array',
-        ]);
-
-        foreach ($validated['policies'] as $key => $value) {
-            if (! str_starts_with($key, $category.'.') && ! ($category === 'voucher' && str_starts_with($key, 'schedule.'))) {
-                abort(403, 'Policy does not belong to this category.');
+        $validated = $request->validate(['policies' => ['required', 'array']]);
+        $allowedCategories = ['approval', 'security', 'wallet', 'provisioning', 'voucher', 'schedule'];
+        if (! in_array($category, $allowedCategories, true)) {
+            throw ValidationException::withMessages(['policies' => 'Unknown policy category.']);
+        }
+        foreach (array_keys($validated['policies']) as $key) {
+            if (! isset(PolicyDefinitions::all()[$key]) || (! str_starts_with($key, $category.'.') && ! ($category === 'voucher' && str_starts_with($key, 'schedule.')))) {
+                throw ValidationException::withMessages(['policies' => 'Unknown policy or wrong category.']);
             }
-            // Coerce based on existing type
-            $existing = PolicySetting::where('key', $key)->first();
-            $value = match (true) {
-                is_bool($existing?->value) => (bool) $value,
-                is_numeric($existing?->value) => $value + 0,
-                default => (string) $value,
-            };
-            Policy::set($key, $value);
         }
 
-        AuditLog::record("policy.{$category}.updated", null, ['keys' => array_keys($validated['policies'])]);
-
-        return back()->with('status', ucfirst($category).' policies updated.');
+        return $this->updateAll($request);
     }
 
     public function updateApproval(Request $request)
     {
         $validated = $request->validate([
-            'enabled' => 'boolean',
-            'mode' => 'required|in:always,threshold,never',
-            'threshold' => 'required|numeric|min:0',
-            'self_approve' => 'boolean',
-            'expiry_hours' => 'required|integer|min:1|max:168',
-            'min_admins' => 'required|integer|min:1|max:10',
+            'enabled' => ['required', 'boolean'],
+            'mode' => ['required', 'string'],
+            'threshold' => ['required'],
+            'self_approve' => ['required', 'boolean'],
+            'expiry_hours' => ['required'],
+            'min_admins' => ['required'],
         ]);
+        $policies = [];
+        foreach ($validated as $key => $value) {
+            $policies['approval.wallet_adjustment.'.$key] = $value;
+        }
+        $request->merge(['policies' => $policies]);
 
-        Policy::set('approval.wallet_adjustment.enabled', (bool) $request->boolean('enabled'));
-        Policy::set('approval.wallet_adjustment.mode', $validated['mode']);
-        Policy::set('approval.wallet_adjustment.threshold', (float) $validated['threshold']);
-        Policy::set('approval.wallet_adjustment.self_approve', (bool) $request->boolean('self_approve'));
-        Policy::set('approval.wallet_adjustment.expiry_hours', (int) $validated['expiry_hours']);
-        Policy::set('approval.wallet_adjustment.min_admins', (int) $validated['min_admins']);
-
-        AuditLog::record('policy.approval.updated', null, ['mode' => $validated['mode']]);
-
-        return back()->with('status', 'Approval policies updated.');
+        return $this->updateAll($request);
     }
 }

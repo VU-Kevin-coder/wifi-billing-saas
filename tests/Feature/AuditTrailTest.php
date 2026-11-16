@@ -10,6 +10,8 @@ use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Policy\Policy;
+use Database\Seeders\PolicySeeder;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -34,6 +36,7 @@ class AuditTrailTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seed(PolicySeeder::class);
 
         foreach (['platform_admin', 'operator_admin', 'operator_finance', 'operator_support', 'operator_network'] as $role) {
             Role::create(['name' => $role, 'guard_name' => 'web']);
@@ -86,6 +89,7 @@ class AuditTrailTest extends TestCase
 
     public function test_wallet_adjustment_updates_balance_ledger_and_audit_log(): void
     {
+        Policy::set('approval.wallet_adjustment.enabled', false);
         $this->adjust(['amount' => 5000, 'reason' => 'Router compensation credit'])
             ->assertSessionHasNoErrors();
 
@@ -124,6 +128,7 @@ class AuditTrailTest extends TestCase
 
     public function test_debit_down_to_exactly_zero_is_allowed(): void
     {
+        Policy::set('approval.wallet_adjustment.enabled', false);
         $this->adjust(['amount' => -40000, 'reason' => 'Clawback of mistaken credit'])
             ->assertSessionHasNoErrors();
 
@@ -132,6 +137,8 @@ class AuditTrailTest extends TestCase
 
     public function test_withdrawal_request_is_audited_with_destination(): void
     {
+        // Withdrawal is only available once KYC has been verified.
+        $this->tenant->update(['kyc_status' => 'verified']);
         $this->actingAs($this->finance)
             ->post(route('operator.wallet.withdraw'), [
                 'amount' => 10000,
@@ -159,6 +166,28 @@ class AuditTrailTest extends TestCase
 
         AuditLog::record('platform.settings.updated');
         $this->assertSame(2, AuditLog::count());
+    }
+
+    public function test_withdrawal_rejection_rolls_back_if_audit_fails(): void
+    {
+        PlatformSetting::set('audit.enabled', false);
+        $tx = $this->withdrawal();
+        AuditLog::creating(function ($log) {
+            if ($log->action === 'withdrawal.rejected') {
+                throw new \RuntimeException('audit unavailable');
+            }
+        });
+        try {
+            $this->withoutExceptionHandling()->actingAs($this->platformAdmin)
+                ->post(route('platform.revenue.withdrawals.reject', $tx->id), ['_idempotency_key' => $this->idempotencyKey()]);
+            $this->fail('Audit failure must abort rejection');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('audit unavailable', $e->getMessage());
+        } finally {
+            AuditLog::flushEventListeners();
+        }
+        $this->assertSame('pending', $tx->fresh()->status);
+        $this->assertEquals(40000, (float) $this->tenant->fresh()->wallet_balance);
     }
 
     public function test_withdrawal_rejection_is_audited(): void

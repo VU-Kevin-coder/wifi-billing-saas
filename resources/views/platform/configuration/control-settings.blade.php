@@ -101,6 +101,9 @@
                     </div>
                 @endif
 
+                @if($activeSection['id'] === 'sms')
+                    <div class="control-banner">SMS status: {{ $smsStatus }}. Upgrade warning: existing unbound SMS credentials cannot send messages until an administrator re-enters them for the current provider. Reactivating the same previously bound provider keeps its credential if left blank; a different provider requires a different credential. Test after saving.</div>
+                @endif
                 @if(in_array($activeSection['id'], ['general','tenants','payments','wallet','refunds','vouchers','provisioning','routers','vpn','sms','email','security','audit']))
                     <form id="settingsForm" method="POST" action="{{ route('platform.configuration.control.update') }}">
                         @csrf
@@ -131,7 +134,9 @@
                                             @if(!empty($field['planned']))<div class="control-help">This request is saved for future deployment; it does not change the running system.</div>@endif
                                         </div>
                                         <div>
-                                            @if($field['type'] === 'boolean' || $field['type'] === 'policy')
+                                            @if($isPolicy && ! \App\Services\Policy\PolicyDefinitions::validStored($field['policy_key'] ?? $key, $value))
+                                                <span class="control-status bad">Invalid stored policy value; review and repair explicitly. Not submitted.</span>
+                                            @elseif($field['type'] === 'boolean' || ($field['type'] === 'policy' && is_bool($field['default'])))
                                                 <div class="control-toggle">
                                                     <input type="hidden" name="{{ $fieldName }}" value="0">
                                                     <input type="checkbox" data-setting-input data-reset-default="{{ (int) (bool) $field['default'] }}" name="{{ $fieldName }}" value="1" @checked((bool) $value) aria-label="{{ $field['label'] }}">
@@ -143,9 +148,9 @@
                                                         <option value="{{ $option }}" @selected((string) $value === (string) $option)>{{ $option }}</option>
                                                     @endforeach
                                                 </select>
-                                            @elseif($field['type'] === 'number')
+                                            @elseif($field['type'] === 'number' || ($field['type'] === 'policy' && is_numeric($field['default'])))
                                                 <div class="control-unit">
-                                                    <input class="control-input" type="number" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" value="{{ $value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ $field['step'] ?? 1 }}" aria-label="{{ $field['label'] }}">
+                                                    <input class="control-input" type="number" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" value="{{ $value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ $isPolicy ? (is_float($field['default']) ? 'any' : '1') : ($field['step'] ?? 1) }}" aria-label="{{ $field['label'] }}">
                                                     @if(!empty($field['unit']))<span>{{ $field['unit'] }}</span>@endif
                                                 </div>
                                             @elseif($field['type'] === 'tags')
@@ -153,7 +158,7 @@
                                             @elseif($field['type'] === 'textarea')
                                                 <textarea class="control-input control-textarea" data-setting-input data-reset-default="{{ $field['default'] ?? '' }}" name="{{ $fieldName }}" aria-label="{{ $field['label'] }}">{{ $value }}</textarea>
                                             @elseif($field['type'] === 'secret')
-                                                <input class="control-input" type="password" data-setting-input name="{{ $fieldName }}" value="" autocomplete="new-password" placeholder="{{ $value ? 'Saved — type to replace' : 'Not set' }}" aria-label="{{ $field['label'] }}">
+                                                <input class="control-input" type="password" data-setting-input name="{{ $fieldName }}" value="" autocomplete="new-password" placeholder="{{ $key === 'sms.api_key' ? ($value ? 'Stored — see SMS status' : 'Not set') : ($value ? 'Saved — type to replace' : 'Not set') }}" aria-label="{{ $field['label'] }}">
                                             @elseif($field['type'] === 'readonly')
                                                 <input class="control-input" type="text" value="{{ $value }}" readonly aria-label="{{ $field['label'] }}">
                                             @else
@@ -168,14 +173,8 @@
                 @endif
 
                 @if($activeSection['id'] === 'roles')
-                    <form id="settingsForm" method="POST" action="{{ route('platform.configuration.control.update') }}">
-                        @csrf @method('PUT')
-                        <input type="hidden" name="section" value="roles">
-                        @foreach($catalog['permissions'] as $roleName => $defaults)
-                            <input type="hidden" name="permission_roles[{{ $roleName }}]" value="1">
-                        @endforeach
                         <section class="control-card">
-                            <header><div><h2>Permission matrix</h2><p>Platform admins keep every permission.</p></div></header>
+                            <header><div><h2>Permission matrix (not operative)</h2><p>Read-only: these assignments do not control application access. Access is enforced by role-based checks elsewhere.</p></div></header>
                             <div class="control-table-wrap"><table class="control-table">
                                 <thead><tr><th>Permission</th>@foreach($catalog['permissions'] as $roleName => $defaults)<th>{{ str_replace('_', ' ', $roleName) }}</th>@endforeach</tr></thead>
                                 <tbody>
@@ -183,7 +182,7 @@
                                     <tr><td><b>{{ $label }}</b><br><span class="control-key">{{ $permission }}</span></td>
                                         @foreach($catalog['permissions'] as $roleName => $defaults)
                                             <td>
-                                                <input type="checkbox" name="permissions[{{ $roleName }}][]" value="{{ $permission }}" @checked(in_array($permission, $roles[$roleName] ?? [], true)) @disabled($roleName === 'platform_admin') aria-label="{{ $roleName }} {{ $permission }}">
+                                                <input type="checkbox" @checked(in_array($permission, $roles[$roleName] ?? [], true)) disabled aria-label="{{ $roleName }} {{ $permission }}">
                                             </td>
                                         @endforeach
                                     </tr>
@@ -191,7 +190,6 @@
                                 </tbody>
                             </table></div>
                         </section>
-                    </form>
                 @endif
 
                 @if($activeSection['id'] === 'health')
@@ -219,17 +217,17 @@
                 @if($activeSection['id'] === 'danger')
                     @php
                         $dangerActions = [
-                            ['rotate', 'Rotate all agent tokens', 'Existing agents will stop authenticating until configured with their new one-time token.', 'ROTATE'],
+                            ['rotate', 'Rotate active agent tokens', 'Active agents will stop authenticating until configured with their new one-time token. Revoked agents remain revoked.', 'ROTATE'],
                             ['purge', 'Purge expired sessions now', 'Deletes expired session history older than the configured retention period.', 'PURGE'],
                             ['freeze', 'Suspend all payouts', 'Blocks new operator payout requests and payout approvals until resumed.', 'FREEZE'],
                             ['resume', 'Resume payouts', 'Allows new operator payout requests and payout approvals.', 'RESUME'],
-                            ['reset', 'Reset settings to defaults', 'Reverts configurable values to their seeded defaults. Credentials are retained.', 'RESET'],
+                            ['reset', 'Reset settings to defaults', 'Reverts configurable values to their seeded defaults. Credentials and any active payout freeze are retained.', 'RESET'],
                         ];
                     @endphp
                     <section class="control-card" style="border-color:var(--bad)">
                         <header><div><h2 style="color:var(--bad)">Dangerous actions</h2><p>Each action is audited. Type the confirmation word and give a reason.</p></div></header>
                         @foreach($dangerActions as [$action, $label, $description, $word])
-                            @if(($action !== 'freeze' || !($settings['payouts.paused'] ?? false)) && ($action !== 'resume' || ($settings['payouts.paused'] ?? false)))
+                            @if(($action !== 'freeze' || !$payoutsPaused) && ($action !== 'resume' || $payoutsPaused))
                             <div class="control-danger-row">
                                 <div><b>{{ $label }}</b><div class="control-help">{{ $description }}</div></div>
                                 <form method="POST" action="{{ route('platform.configuration.control.action', $action) }}">

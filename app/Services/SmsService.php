@@ -38,14 +38,13 @@ class SmsService
 
             return self::sendViaAfricasTalking($normalizedPhone, $message);
         } catch (Throwable $e) {
-            Log::error('SMS Dispatch Exception: '.$e->getMessage(), [
-                'to' => $normalizedPhone,
+            Log::error('SMS dispatch failed.', [
                 'provider' => $provider,
             ]);
 
             return [
                 'success' => false,
-                'message' => 'SMS Gateway Exception: '.$e->getMessage(),
+                'message' => 'SMS gateway request failed. Check the gateway configuration and provider.',
             ];
         }
     }
@@ -56,7 +55,7 @@ class SmsService
     public static function sendViaAfricasTalking(string $to, string $message): array
     {
         $username = PlatformSetting::get('sms_username', 'sandbox');
-        $apiKey = PlatformSetting::getSecret('sms_api_key') ?: PlatformSetting::get('sms_api_key');
+        $apiKey = SmsConfiguration::credentialFor('africastalking');
         $environment = PlatformSetting::get('sms_environment', 'sandbox');
         $senderId = PlatformSetting::get('sms_sender_id');
 
@@ -102,28 +101,20 @@ class SmsService
                 if (in_array(strtolower($status), ['success', 'sent'])) {
                     return [
                         'success' => true,
-                        'message' => "SMS dispatched successfully to {$to} (Status: {$status}, Cost: ".($firstRecipient['cost'] ?? 'N/A').')',
-                        'data' => $json,
+                        'message' => "SMS dispatched successfully to {$to}.",
                     ];
                 }
 
                 return [
                     'success' => false,
-                    'message' => "Africa's Talking error: Recipient status '{$status}'. ".($firstRecipient['message'] ?? ''),
-                    'data' => $json,
+                    'message' => "Africa's Talking did not accept the recipient.",
                 ];
             }
         }
 
-        $errorMessage = $json['SMSMessageData']['Message']
-            ?? $json['errorMessage']
-            ?? $response->body()
-            ?? "HTTP Error {$response->status()}";
-
         return [
             'success' => false,
-            'message' => "Africa's Talking API failed ({$response->status()}): {$errorMessage}",
-            'data' => $json,
+            'message' => "Africa's Talking API failed (HTTP {$response->status()}).",
         ];
     }
 
@@ -133,7 +124,7 @@ class SmsService
     public static function sendViaTwilio(string $to, string $message): array
     {
         $accountSid = PlatformSetting::get('sms_username'); // Account SID
-        $authToken = PlatformSetting::getSecret('sms_api_key') ?: PlatformSetting::get('sms_api_key'); // Auth Token
+        $authToken = SmsConfiguration::credentialFor('twilio'); // Auth Token
         $fromNumber = PlatformSetting::get('sms_sender_id');
 
         if (empty($accountSid) || empty($authToken)) {
@@ -166,17 +157,13 @@ class SmsService
         if ($response->successful() && isset($json['sid'])) {
             return [
                 'success' => true,
-                'message' => "Twilio SMS queued successfully (SID: {$json['sid']}, Status: {$json['status']})",
-                'data' => $json,
+                'message' => 'Twilio SMS queued successfully.',
             ];
         }
 
-        $err = $json['message'] ?? $response->body();
-
         return [
             'success' => false,
-            'message' => "Twilio API error ({$response->status()}): {$err}",
-            'data' => $json,
+            'message' => "Twilio API failed (HTTP {$response->status()}).",
         ];
     }
 

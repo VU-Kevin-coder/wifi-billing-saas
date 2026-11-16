@@ -34,8 +34,8 @@ class SitesAndHotspotsTest extends TestCase
             Role::create(['name' => $name, 'guard_name' => 'web']);
         }
 
-        $this->acme = Tenant::create(['name' => 'Acme Wi-Fi', 'slug' => 'acme', 'status' => 'active']);
-        $this->beta = Tenant::create(['name' => 'Beta Wi-Fi', 'slug' => 'beta', 'status' => 'active']);
+        $this->acme = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme Wi-Fi', 'slug' => 'acme', 'status' => 'active']);
+        $this->beta = Tenant::create(['kyc_status' => 'verified', 'name' => 'Beta Wi-Fi', 'slug' => 'beta', 'status' => 'active']);
         $this->admin = User::factory()->create(['tenant_id' => $this->acme->id]);
         $this->admin->assignRole('operator_admin');
 

@@ -39,6 +39,7 @@ class MfaEnforcementTest extends TestCase
         Role::create(['name' => 'operator_finance', 'guard_name' => 'web']);
 
         $this->tenant = Tenant::create([
+            'kyc_status' => 'verified',
             'name' => 'Acme Wi-Fi',
             'slug' => 'acme',
             'status' => 'active',

@@ -126,6 +126,7 @@ class RefundFlowTest extends TestCase
         PlatformSetting::set('sms_provider', 'africastalking');
         PlatformSetting::set('sms_username', 'sandbox');
         PlatformSetting::setSecret('sms_api_key', 'test-sms-key');
+        PlatformSetting::set('sms_credential_provider', 'africastalking');
         PlatformSetting::set('sms_environment', 'sandbox');
         PlatformSetting::set('sms.template', 'Bought {package}; code {code}; expires {expires}; help {support_phone}');
         PlatformSetting::set('support_phone', '+256700000000');

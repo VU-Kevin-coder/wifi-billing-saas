@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PlatformSetting;
-use App\Models\PolicySetting;
 use App\Models\Session;
-use App\Models\Site;
 use App\Models\SiteAgent;
 use App\Services\Policy\Policy;
+use App\Services\Policy\PolicyDefinitions;
+use App\Services\SmsConfiguration;
 use App\Services\SystemHealthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,11 +51,13 @@ class ControlSettingsController extends Controller
         return view('platform.configuration.control-settings', [
             'catalog' => $catalog,
             'settings' => $settings,
+            'payoutsPaused' => (bool) PlatformSetting::get('payouts.paused', false),
             'roles' => $roles,
             'agents' => $agents,
             'health' => $health,
             'history' => $history,
             'section' => $request->query('section', 'general'),
+            'smsStatus' => SmsConfiguration::displayStatus(PlatformSetting::get('sms_provider', 'africastalking')),
         ]);
     }
 
@@ -65,7 +67,17 @@ class ControlSettingsController extends Controller
         $validated = $request->validate([
             'reason' => ['required', 'string', 'min:5', 'max:200'],
             'settings' => ['nullable', 'array'],
+            'policies' => ['nullable', 'array'],
         ]);
+
+        if (mb_strlen(trim($validated['reason'])) < 5) {
+            throw ValidationException::withMessages(['reason' => 'A reason of at least five non-space characters is required.']);
+        }
+        if ($request->exists('permissions') || $request->exists('permission_roles')) {
+            throw ValidationException::withMessages([
+                'permissions' => 'The permission matrix is not operative and cannot be edited here.',
+            ]);
+        }
 
         $definitions = $catalog['fields'];
         $values = $request->input('settings', []);
@@ -112,7 +124,7 @@ class ControlSettingsController extends Controller
                 ]);
             }
             $storageKey = $field['policy_key'] ?? $key;
-            $normalized = $this->validateField($key, $field, $value);
+            $normalized = PolicyDefinitions::normalize($storageKey, $value);
             $before = $this->readValue($key, $field);
             if ($before !== $normalized) {
                 $changes[] = ['key' => $storageKey, 'old' => $before, 'new' => $normalized, 'source' => 'policy'];
@@ -129,9 +141,33 @@ class ControlSettingsController extends Controller
             $roleAssignments = $this->validateRolePermissions($roleValues, $catalog);
         }
 
-        DB::transaction(function () use (&$changes, $updates, $roleAssignments, $validated, $catalog): void {
+        DB::transaction(function () use (&$changes, $updates, $roleAssignments, $validated, $catalog, $values): void {
+            $smsUpdates = array_filter($updates, fn ($update) => in_array($update[0], ['sms.provider', 'sms.username', 'sms.environment', 'sms.sender', 'sms.api_key'], true));
+            if ($smsUpdates !== []) {
+                SmsConfiguration::lock();
+                $smsProvider = $values['sms.provider'] ?? null;
+                $credentialUpdate = collect($smsUpdates)->first(fn ($update) => $update[0] === 'sms.api_key');
+                $smsCredential = $credentialUpdate[2] ?? null;
+                if (filled($smsCredential) && ! is_string($smsProvider)) {
+                    throw ValidationException::withMessages(['settings.sms.provider' => 'Select the provider when updating its credential.']);
+                }
+                SmsConfiguration::validateProviderChange($smsProvider, $smsCredential, 'settings.sms.api_key');
+                $providerUpdate = collect($smsUpdates)->first(fn ($update) => $update[0] === 'sms.provider');
+                if ($smsProvider !== null && ! $providerUpdate && $smsProvider !== PlatformSetting::get('sms_provider', 'africastalking')) {
+                    throw ValidationException::withMessages(['settings.sms.provider' => 'SMS configuration changed. Reload and try again.']);
+                }
+                if (filled($smsCredential)) {
+                    PlatformSetting::set('sms_credential_provider', $smsProvider);
+                }
+            }
             foreach ($updates as [$key, $field, $value]) {
                 $this->writeValue($key, $field, $value);
+                if (in_array($key, ['sms.provider', 'sms.username', 'sms.environment', 'sms.sender', 'sms.api_key'], true)) {
+                    PlatformSetting::set('sms_status', 'Configured (Untested)');
+                }
+                if (in_array($key, ['mail.host', 'mail.port', 'mail.username', 'mail.password', 'mail.from_address', 'mail.from_name'], true)) {
+                    PlatformSetting::set('email_status', 'Configured (Untested)');
+                }
             }
             if ($roleAssignments !== null) {
                 $this->saveRolePermissions($roleAssignments, $catalog);
@@ -172,6 +208,9 @@ class ControlSettingsController extends Controller
             'confirmation' => ['required', 'string'],
             'reason' => ['required', 'string', 'min:5', 'max:200'],
         ]);
+        if (mb_strlen(trim($validated['reason'])) < 5) {
+            throw ValidationException::withMessages(['reason' => 'A reason of at least five non-space characters is required.']);
+        }
         $words = ['rotate' => 'ROTATE', 'purge' => 'PURGE', 'freeze' => 'FREEZE', 'resume' => 'RESUME', 'reset' => 'RESET'];
         abort_unless(isset($words[$action]) && hash_equals($words[$action], $validated['confirmation']), 422);
 
@@ -413,9 +452,6 @@ class ControlSettingsController extends Controller
         foreach ($catalog['permissions'] as $roleName => $defaults) {
             $role = Role::findByName($roleName, 'web');
             $roles[$roleName] = $role->permissions->pluck('name')->all();
-            if ($roles[$roleName] === [] && Permission::query()->doesntExist()) {
-                $roles[$roleName] = $defaults;
-            }
         }
 
         return $roles;
@@ -454,12 +490,12 @@ class ControlSettingsController extends Controller
     private function rotateAgentTokens(): array
     {
         $rotated = [];
-        foreach (Site::query()->with('agent')->get() as $site) {
+        foreach (SiteAgent::query()->with(['site' => fn ($query) => $query->withoutTenancy()])->whereNull('revoked_at')->lockForUpdate()->get() as $agent) {
             $token = Str::random(64);
-            $agent = $site->agent;
-            if ($agent) {
-                $agent->update(['token_hash' => hash('sha256', $token), 'last_seen_at' => null, 'revoked_at' => null]);
-                $rotated[] = ['site' => $site->name, 'token' => $token];
+            $updated = SiteAgent::query()->whereKey($agent->id)->whereNull('revoked_at')
+                ->update(['token_hash' => hash('sha256', $token), 'last_seen_at' => null]);
+            if ($updated) {
+                $rotated[] = ['site' => $agent->site?->name ?? 'Unknown site', 'token' => $token];
             }
         }
 
@@ -487,20 +523,21 @@ class ControlSettingsController extends Controller
     private function resetSettings(): array
     {
         $catalog = $this->catalog();
+        $policyChanges = [];
         foreach ($catalog['fields'] as $key => $field) {
             if (in_array($field['type'], ['readonly', 'secret'], true)) {
                 continue;
             }
+            if (in_array($field['type'], ['policy', 'policy_select'], true)) {
+                $storageKey = $field['policy_key'] ?? $key;
+                $before = $this->readValue($key, $field);
+                if ($before !== $field['default']) {
+                    $policyChanges[$storageKey] = ['old' => $before, 'new' => $field['default']];
+                }
+            }
             $this->writeValue($key, $field, $field['default']);
         }
-        foreach (PolicySetting::query()->get() as $setting) {
-            $default = $catalog['fields'][$setting->key]['default'] ?? null;
-            if ($default !== null) {
-                Policy::set($setting->key, $default, $setting->description);
-            }
-        }
-        PlatformSetting::set('payouts.paused', false);
 
-        return ['reset' => true];
+        return ['reset' => true, 'policy_changes' => $policyChanges];
     }
 }

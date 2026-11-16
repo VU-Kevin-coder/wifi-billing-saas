@@ -28,7 +28,12 @@ class AdjustmentService
             throw new \DomainException('Adjustment would make the wallet balance negative.');
         }
 
-        $decision = $this->decision($amount);
+        $settings = AdjustmentApprovalPolicy::settings();
+        if ($settings === null) {
+            return ['status' => 'blocked', 'adjustment' => null, 'transaction' => null,
+                'message' => 'Wallet adjustment policy is missing or invalid.'];
+        }
+        $decision = $this->decision($amount, $settings);
 
         if ($decision === 'blocked') {
             return ['status' => 'blocked', 'adjustment' => null, 'transaction' => null,
@@ -43,21 +48,25 @@ class AdjustmentService
         }
 
         // Manual approval required
-        $expiryHours = (int) Policy::get('approval.wallet_adjustment.expiry_hours', 24);
+        $expiryHours = $settings['expiry_hours'];
 
-        $adjustment = PendingAdjustment::create([
-            'tenant_id' => $tenant->id,
-            'requested_by' => $requester->id,
-            'amount' => round($amount, 2),
-            'reason' => $reason,
-            'status' => 'pending',
-            'expires_at' => now()->addHours($expiryHours),
-        ]);
+        $adjustment = DB::transaction(function () use ($tenant, $amount, $reason, $requester, $expiryHours) {
+            $adjustment = PendingAdjustment::create([
+                'tenant_id' => $tenant->id,
+                'requested_by' => $requester->id,
+                'amount' => round($amount, 2),
+                'reason' => $reason,
+                'status' => 'pending',
+                'expires_at' => now()->addHours($expiryHours),
+            ]);
 
-        AuditLog::record('adjustment.requested', $adjustment, [
-            'amount' => (float) $amount,
-            'reason' => $reason,
-        ], $requester, $tenant);
+            AuditLog::record('adjustment.requested', $adjustment, [
+                'amount' => (float) $amount,
+                'reason' => $reason,
+            ], $requester, $tenant);
+
+            return $adjustment;
+        });
 
         return ['status' => 'pending', 'adjustment' => $adjustment, 'transaction' => null,
             'message' => 'Adjustment submitted. A second platform admin must approve it.'];
@@ -69,14 +78,13 @@ class AdjustmentService
             return ['ok' => false, 'message' => 'This adjustment is no longer pending.'];
         }
 
-        if (! AdjustmentApprovalPolicy::canApprove($approver, $adjustment->requested_by)) {
-            return ['ok' => false, 'message' => 'You are not permitted to approve this adjustment.'];
-        }
-
         return DB::transaction(function () use ($adjustment, $approver, $note) {
             $locked = PendingAdjustment::withoutTenancy()->lockForUpdate()->findOrFail($adjustment->id);
             if (! $locked->isPending()) {
                 return ['ok' => false, 'message' => 'This adjustment is no longer pending.'];
+            }
+            if (! AdjustmentApprovalPolicy::canApprove($approver, $locked->requested_by)) {
+                return ['ok' => false, 'message' => 'You are not permitted to approve this adjustment.'];
             }
 
             $tenant = Tenant::findOrFail($locked->tenant_id);
@@ -105,18 +113,26 @@ class AdjustmentService
             return ['ok' => false, 'message' => 'This adjustment is no longer pending.'];
         }
 
-        $adjustment->update([
-            'status' => 'rejected',
-            'approved_by' => $approver->id,
-            'decided_at' => now(),
-            'decision_reason' => $note,
-        ]);
+        return DB::transaction(function () use ($adjustment, $approver, $note) {
+            // Serialize rejection with approval and expiration on the same row.
+            $locked = PendingAdjustment::withoutTenancy()->lockForUpdate()->findOrFail($adjustment->id);
+            if (! $locked->isPending()) {
+                return ['ok' => false, 'message' => 'This adjustment is no longer pending.'];
+            }
 
-        AuditLog::record('adjustment.rejected', $adjustment, [
-            'reason' => $note,
-        ], $approver);
+            $locked->update([
+                'status' => 'rejected',
+                'approved_by' => $approver->id,
+                'decided_at' => now(),
+                'decision_reason' => $note,
+            ]);
 
-        return ['ok' => true, 'message' => 'Adjustment rejected.'];
+            AuditLog::record('adjustment.rejected', $locked, [
+                'reason' => $note,
+            ], $approver);
+
+            return ['ok' => true, 'message' => 'Adjustment rejected.'];
+        });
     }
 
     public function expireStale(): int
@@ -134,20 +150,17 @@ class AdjustmentService
         return $count;
     }
 
-    private function decision(float $amount): string
+    private function decision(float $amount, array $settings): string
     {
-        if (! Policy::get('approval.wallet_adjustment.enabled', false)) {
+        if ($settings['enabled'] === false) {
             return 'auto';
         }
 
-        $mode = Policy::get('approval.wallet_adjustment.mode', 'always');
-        $threshold = (float) Policy::get('approval.wallet_adjustment.threshold', 0);
-
-        return match ($mode) {
+        return match ($settings['mode']) {
             'always' => 'pending',
-            'threshold' => abs($amount) >= $threshold ? 'pending' : 'auto',
+            'threshold' => abs($amount) >= $settings['threshold'] ? 'pending' : 'auto',
             'never' => 'auto',
-            default => 'pending',
+            default => 'blocked',
         };
     }
 

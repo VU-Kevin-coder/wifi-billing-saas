@@ -21,7 +21,7 @@ class PlatformMailService
         $port = (int) PlatformSetting::get('smtp_port', 587);
         $encryption = PlatformSetting::get('smtp_encryption', 'tls');
         $username = PlatformSetting::get('smtp_username');
-        $password = PlatformSetting::getSecret('smtp_password') ?: PlatformSetting::get('smtp_password');
+        $password = PlatformSetting::getSecret('smtp_password');
         $fromAddress = PlatformSetting::get('mail_from_address', config('mail.from.address'));
         $fromName = PlatformSetting::get('mail_from_name', config('mail.from.name', 'Hamnet Platform'));
 
@@ -73,7 +73,7 @@ class PlatformMailService
         } catch (Throwable $e) {
             return [
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => 'Email delivery failed. Check the SMTP configuration and provider.',
             ];
         }
     }

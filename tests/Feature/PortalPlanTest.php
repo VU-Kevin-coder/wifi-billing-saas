@@ -26,7 +26,7 @@ class PortalPlanTest extends TestCase
         parent::setUp();
 
         $this->freezeTime();
-        $this->tenant = Tenant::create(['name' => 'Acme WiFi', 'slug' => 'acme', 'status' => 'active']);
+        $this->tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme WiFi', 'slug' => 'acme', 'status' => 'active']);
         $this->package = $this->package($this->tenant);
     }
 
@@ -87,7 +87,7 @@ class PortalPlanTest extends TestCase
 
     public function test_a_code_from_another_business_finds_nothing(): void
     {
-        $other = Tenant::create(['name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
+        $other = Tenant::create(['kyc_status' => 'verified', 'name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
         $this->createSession($other, $this->package($other), 'BETA-0001');
 
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'BETA-0001'])->assertSessionHasErrors('voucher_code');
@@ -140,7 +140,7 @@ class PortalPlanTest extends TestCase
 
     public function test_a_link_only_works_for_the_business_it_belongs_to(): void
     {
-        $other = Tenant::create(['name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
+        $other = Tenant::create(['kyc_status' => 'verified', 'name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
         $session = $this->createSession($this->tenant, $this->package, 'ACME-0005');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0005']);
 
