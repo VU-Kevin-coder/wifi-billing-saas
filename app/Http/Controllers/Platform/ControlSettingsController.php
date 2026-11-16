@@ -57,6 +57,7 @@ class ControlSettingsController extends Controller
             'health' => $health,
             'history' => $history,
             'section' => $request->query('section', 'general'),
+            'smsStatus' => SmsConfiguration::displayStatus(PlatformSetting::get('sms_provider', 'africastalking')),
         ]);
     }
 

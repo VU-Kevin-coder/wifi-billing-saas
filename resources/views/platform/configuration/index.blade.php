@@ -795,7 +795,7 @@
                         </div>
 
                         <!-- Credentials Form -->
-                        <p class="text-xs text-gray-600">Changing provider requires a new credential for that provider. Previously saved unbound credentials require explicit re-entry before sending SMS. Otherwise, leaving the credential blank keeps it only when the provider stays the same.</p>
+                        <p class="text-xs text-gray-600">Upgrade warning: existing unbound SMS credentials cannot send messages until an administrator re-enters them for the current provider. Reactivating the same previously bound provider keeps its credential if left blank. Switching to a different provider requires a different credential. Test after saving.</p>
                         <form id="sms-settings-form" method="POST" action="{{ route('platform.configuration.sms.update') }}" class="space-y-4">
                             @csrf
                             @method('PUT')
@@ -805,6 +805,7 @@
                                 <select name="sms_provider" x-model="provider" class="block w-full rounded-xl border-gray-300 text-xs py-2 px-3 bg-white focus:ring-purple-500 focus:border-purple-500">
                                     <option value="africastalking">Africa's Talking (Uganda & East Africa Default)</option>
                                     <option value="twilio">Twilio (Global)</option>
+                                    <option value="disabled">Disabled</option>
                                 </select>
                             </div>
 

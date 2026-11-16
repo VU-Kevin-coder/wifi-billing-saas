@@ -101,6 +101,9 @@
                     </div>
                 @endif
 
+                @if($activeSection['id'] === 'sms')
+                    <div class="control-banner">SMS status: {{ $smsStatus }}. Upgrade warning: existing unbound SMS credentials cannot send messages until an administrator re-enters them for the current provider. Reactivating the same previously bound provider keeps its credential if left blank; a different provider requires a different credential. Test after saving.</div>
+                @endif
                 @if(in_array($activeSection['id'], ['general','tenants','payments','wallet','refunds','vouchers','provisioning','routers','vpn','sms','email','security','audit']))
                     <form id="settingsForm" method="POST" action="{{ route('platform.configuration.control.update') }}">
                         @csrf
@@ -155,7 +158,7 @@
                                             @elseif($field['type'] === 'textarea')
                                                 <textarea class="control-input control-textarea" data-setting-input data-reset-default="{{ $field['default'] ?? '' }}" name="{{ $fieldName }}" aria-label="{{ $field['label'] }}">{{ $value }}</textarea>
                                             @elseif($field['type'] === 'secret')
-                                                <input class="control-input" type="password" data-setting-input name="{{ $fieldName }}" value="" autocomplete="new-password" placeholder="{{ $value ? 'Saved — type to replace' : 'Not set' }}" aria-label="{{ $field['label'] }}">
+                                                <input class="control-input" type="password" data-setting-input name="{{ $fieldName }}" value="" autocomplete="new-password" placeholder="{{ $key === 'sms.api_key' ? ($value ? 'Stored — see SMS status' : 'Not set') : ($value ? 'Saved — type to replace' : 'Not set') }}" aria-label="{{ $field['label'] }}">
                                             @elseif($field['type'] === 'readonly')
                                                 <input class="control-input" type="text" value="{{ $value }}" readonly aria-label="{{ $field['label'] }}">
                                             @else

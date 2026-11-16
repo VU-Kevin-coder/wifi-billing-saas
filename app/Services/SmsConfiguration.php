@@ -26,6 +26,27 @@ class SmsConfiguration
         }
     }
 
+    /** Describe the usable credential without exposing it or hiding a failed test. */
+    public static function displayStatus(string $provider): string
+    {
+        $lastStatus = PlatformSetting::get('sms_status', 'Not Tested');
+        $failed = $lastStatus === 'Failed';
+        if ($provider === 'disabled') {
+            return $failed ? 'Disabled (last test failed)' : 'Disabled';
+        }
+        if (! in_array($provider, ['africastalking', 'twilio'], true)) {
+            return $failed ? 'Failed — unsupported provider' : 'Unsupported provider';
+        }
+        if (! self::credentialFor($provider)) {
+            $hasCredential = filled(PlatformSetting::getSecret('sms_api_key'));
+            $problem = $hasCredential ? 'Credential re-entry required' : 'Not configured';
+
+            return $failed ? 'Failed — '.$problem : $problem;
+        }
+
+        return $lastStatus;
+    }
+
     /** Serialize settings writes, including the first provider switch. */
     public static function lock(): void
     {
@@ -37,7 +58,17 @@ class SmsConfiguration
     public static function validateProviderChange(?string $provider, mixed $credential, string $errorKey): void
     {
         $current = PlatformSetting::get('sms_provider', 'africastalking');
-        if ($provider === null || $provider === $current || $provider === 'disabled') {
+        if ($provider === null) {
+            return;
+        }
+        if ($provider === 'disabled') {
+            if (filled($credential)) {
+                throw ValidationException::withMessages([$errorKey => 'Select an active SMS provider before saving a credential.']);
+            }
+
+            return;
+        }
+        if ($provider === $current || ($current === 'disabled' && PlatformSetting::get('sms_credential_provider') === $provider)) {
             return;
         }
         $old = PlatformSetting::getSecret('sms_api_key');

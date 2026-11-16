@@ -92,11 +92,10 @@ class ConfigurationController extends Controller
             // SMS Gateway
             'sms_provider' => PlatformSetting::get('sms_provider', 'africastalking'),
             'sms_username' => PlatformSetting::get('sms_username', 'sandbox'),
-            'sms_api_key_configured' => filled(PlatformSetting::getSecret('sms_api_key')),
+            'sms_api_key_configured' => filled(SmsConfiguration::credentialFor(PlatformSetting::get('sms_provider', 'africastalking'))),
             'sms_sender_id' => PlatformSetting::get('sms_sender_id', 'HAMNET'),
             'sms_environment' => PlatformSetting::get('sms_environment', 'sandbox'),
-            'sms_status' => SmsConfiguration::credentialFor(PlatformSetting::get('sms_provider', 'africastalking'))
-                ? PlatformSetting::get('sms_status', 'Not Tested') : 'Not Tested',
+            'sms_status' => SmsConfiguration::displayStatus(PlatformSetting::get('sms_provider', 'africastalking')),
         ];
 
         return view('platform.configuration.index', compact('settings'));
@@ -338,7 +337,7 @@ class ConfigurationController extends Controller
     public function updateSms(Request $request)
     {
         $validated = $request->validate([
-            'sms_provider' => 'required|in:africastalking,twilio',
+            'sms_provider' => 'required|in:africastalking,twilio,disabled',
             'sms_username' => 'nullable|string',
             'sms_api_key' => 'nullable|string',
             'sms_sender_id' => 'nullable|string',

@@ -199,9 +199,13 @@ class LegacyMessagingSettingsTest extends TestCase
         PlatformSetting::set('sms_username', 'AC123');
         PlatformSetting::set('sms_sender_id', '+12025550123');
         PlatformSetting::setSecret('sms_api_key', 'sms-secret-value');
+        PlatformSetting::set('sms_credential_provider', 'twilio');
         Http::fake(['*' => Http::response(['message' => 'sms-secret-value'], 403)]);
         $this->post(route('platform.configuration.sms.test'), ['test_phone' => '0700000000'])->assertSessionHas('error');
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($r) => $r->url() === 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json' && $r->hasHeader('Authorization', 'Basic '.base64_encode('AC123:sms-secret-value')));
         $this->assertStringNotContainsString('sms-secret-value', session('error'));
+        $this->get(route('platform.configuration.index'))->assertOk()->assertSee('Status: Failed')->assertDontSee('sms-secret-value');
         $this->assertSame('Failed', PlatformSetting::get('sms_status'));
         $this->assertSame('sms-secret-value', PlatformSetting::getSecret('sms_api_key'));
     }
