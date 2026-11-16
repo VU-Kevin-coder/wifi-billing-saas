@@ -130,7 +130,7 @@ class VoucherController extends Controller
                 return [$batch, $batchCode];
             });
         } catch (\DomainException $exception) {
-            return back()->withErrors(['quantity' => $exception->getMessage()])->withInput();
+            return back()->withErrors(['quantity' => $exception->getMessage()])->withInput($validated);
         }
 
         return redirect()->route('operator.vouchers.index', ['tenant' => $tenant->slug])
