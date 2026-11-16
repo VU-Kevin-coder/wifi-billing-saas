@@ -24,8 +24,8 @@ class VoucherIsolationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->acme = Tenant::create(['name' => 'Acme', 'slug' => 'acme']);
-        $this->beta = Tenant::create(['name' => 'Beta', 'slug' => 'beta']);
+        $this->acme = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme']);
+        $this->beta = Tenant::create(['kyc_status' => 'verified', 'name' => 'Beta', 'slug' => 'beta']);
     }
 
     public function test_vouchers_and_batches_are_isolated(): void

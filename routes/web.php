@@ -193,7 +193,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
             ->prefix('operator')
             ->name('operator.')
             ->group(function () {
-                Route::get('/dashboard', OperatorDashboard::class)->name('dashboard');
+                Route::get('/dashboard', OperatorDashboard::class)->middleware('tenant.active:dashboard')->name('dashboard');
 
                 Route::middleware('role:operator_admin|operator_support')->group(function () {
                     Route::get('/customers/export.csv', [CustomerController::class, 'export'])
@@ -251,10 +251,10 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 });
 
                 Route::get('/sessions', [LiveSessionController::class, 'index'])->name('sessions.index');
-                Route::get('/sites/export', [SiteController::class, 'export'])->name('sites.export');
-                Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
+                Route::get('/sites/export', [SiteController::class, 'export'])->middleware('tenant.active:view_reports')->name('sites.export');
+                Route::get('/sites', [SiteController::class, 'index'])->middleware('tenant.active:view_reports')->name('sites.index');
                 Route::get('/billing', [App\Http\Controllers\Operator\BillingController::class, 'index'])
-                    ->middleware('role:operator_admin|operator_finance')
+                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing'])
                     ->name('billing.index');
 
                 // Operator Wallet & Withdrawals
@@ -268,7 +268,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 // Refund requests (the platform approves and pays the customer)
                 Route::middleware('role:operator_admin|operator_finance')->group(function () {
                     // Analytics (read-only sales reporting)
-                    Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+                    Route::get('/analytics', [AnalyticsController::class, 'index'])->middleware('tenant.active:view_reports')->name('analytics');
 
                     Route::get('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
                     Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->middleware('idempotency')->name('refunds.store');

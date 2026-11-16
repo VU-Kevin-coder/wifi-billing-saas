@@ -519,6 +519,7 @@ class RadiusPolicyBoundaryTest extends TestCase
     private function createTenant(string $slug): Tenant
     {
         return Tenant::create([
+            'kyc_status' => 'verified',
             'name' => 'RADIUS Test '.Str::title($slug),
             'slug' => $slug,
             'status' => 'active',

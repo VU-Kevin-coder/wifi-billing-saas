@@ -26,7 +26,7 @@ class WalletLedgerTest extends TestCase
     {
         parent::setUp();
 
-        $this->tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active', 'commission_rate' => 5]);
+        $this->tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active', 'commission_rate' => 5]);
     }
 
     private function wallet(): WalletService

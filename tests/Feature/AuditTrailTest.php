@@ -132,6 +132,8 @@ class AuditTrailTest extends TestCase
 
     public function test_withdrawal_request_is_audited_with_destination(): void
     {
+        // Withdrawal is only available once KYC has been verified.
+        $this->tenant->update(['kyc_status' => 'verified']);
         $this->actingAs($this->finance)
             ->post(route('operator.wallet.withdraw'), [
                 'amount' => 10000,

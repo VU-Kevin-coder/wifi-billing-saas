@@ -38,7 +38,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_url_uses_the_routers_own_gateway_without_exposing_a_voucher_code(): void
     {
-        $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'A', 'slug' => 'a', 'status' => 'active']);
         $router = $this->router($tenant, ['gateway' => '192.168.88.1']);
 
         $this->assertSame('http://192.168.88.1/login', HotspotLogin::url($router));
@@ -48,7 +48,7 @@ class HotspotLoginUrlTest extends TestCase
     public function test_a_gateway_that_is_not_a_plain_ipv4_address_is_never_used(mixed $gateway): void
     {
         config(['hotspot.default_gateway' => null]);
-        $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'A', 'slug' => 'a', 'status' => 'active']);
         $router = $this->router($tenant, ['gateway' => $gateway]);
 
         $this->assertNull(HotspotLogin::url($router));
@@ -69,7 +69,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_default_gateway_is_used_only_when_the_router_has_none_and_it_is_valid(): void
     {
-        $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'A', 'slug' => 'a', 'status' => 'active']);
         $noGateway = $this->router($tenant, null);
 
         config(['hotspot.default_gateway' => '10.20.30.1']);
@@ -86,7 +86,7 @@ class HotspotLoginUrlTest extends TestCase
     public function test_the_routers_gateway_wins_over_the_platform_default(): void
     {
         config(['hotspot.default_gateway' => '10.20.30.1']);
-        $tenant = Tenant::create(['name' => 'A', 'slug' => 'a', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'A', 'slug' => 'a', 'status' => 'active']);
 
         $this->assertSame(
             'http://172.16.0.1/login',
@@ -114,8 +114,8 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_each_tenant_is_sent_to_its_own_hotspot_gateway_after_redeeming(): void
     {
-        $acme = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
-        $beta = Tenant::create(['name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
+        $acme = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $beta = Tenant::create(['kyc_status' => 'verified', 'name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
         $routerA = $this->router($acme, ['gateway' => '10.10.0.1'], 'RA');
         $routerB = $this->router($beta, ['gateway' => '192.168.50.1'], 'RB');
         $this->voucherFor($acme, 'ACME-0001');
@@ -130,7 +130,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_the_login_url_follows_the_router_the_customer_used_not_another_router_of_the_tenant(): void
     {
-        $tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
         $this->router($tenant, ['gateway' => '10.10.0.1'], 'First');
         $second = $this->router($tenant, ['gateway' => '10.99.0.1'], 'Second');
         $voucher = $this->voucherFor($tenant, 'ACME-0002');
@@ -144,7 +144,7 @@ class HotspotLoginUrlTest extends TestCase
     public function test_a_voucher_without_a_session_gets_no_link_when_there_is_no_default(): void
     {
         config(['hotspot.default_gateway' => null]);
-        $tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
 
         $this->assertNull(HotspotLogin::forVoucher($this->voucherFor($tenant, 'ACME-0003')));
     }
@@ -154,7 +154,7 @@ class HotspotLoginUrlTest extends TestCase
     public function test_operators_can_only_save_an_ipv4_gateway_for_a_router(): void
     {
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
-        $tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
         $user = User::factory()->create(['tenant_id' => $tenant->id]);
         $user->assignRole('operator_admin');
         URL::defaults(['tenant' => 'acme']);
@@ -201,7 +201,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_an_operator_can_correct_a_routers_gateway_and_it_is_audited(): void
     {
-        $tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
         $router = $this->router($tenant, ['gateway' => '10.10.0.1', 'dns' => '8.8.8.8']);
         $user = $this->operatorFor($tenant);
 
@@ -220,7 +220,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_an_invalid_gateway_is_rejected_when_editing(): void
     {
-        $tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
         $router = $this->router($tenant, ['gateway' => '10.10.0.1']);
         $user = $this->operatorFor($tenant);
 
@@ -233,8 +233,8 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_a_tenant_cannot_change_another_tenants_router_gateway(): void
     {
-        $acme = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
-        $beta = Tenant::create(['name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
+        $acme = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $beta = Tenant::create(['kyc_status' => 'verified', 'name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
         $betaRouter = $this->router($beta, ['gateway' => '10.10.0.1']);
         $user = $this->operatorFor($acme);
 
@@ -247,7 +247,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_finance_staff_cannot_change_a_gateway(): void
     {
-        $tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
         $router = $this->router($tenant, ['gateway' => '10.10.0.1']);
         $user = $this->operatorFor($tenant, 'operator_finance');
 

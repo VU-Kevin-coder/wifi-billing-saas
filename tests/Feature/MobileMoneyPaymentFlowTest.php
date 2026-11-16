@@ -654,6 +654,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
     private function createPendingPayment(): array
     {
         $tenant = Tenant::create([
+            'kyc_status' => 'verified',
             'name' => 'Test Wi-Fi',
             'slug' => 'test-wifi',
             'status' => 'active',

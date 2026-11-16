@@ -33,6 +33,7 @@ class PesapalPaymentTest extends TestCase
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
 
         $this->tenant = Tenant::create([
+            'kyc_status' => 'verified',
             'name' => 'Acme Wi-Fi',
             'slug' => 'acme',
             'status' => 'active',
