@@ -16,6 +16,7 @@ class Session extends Model
     protected $fillable = [
         'tenant_id', 'site_id', 'customer_id', 'voucher_id', 'package_id', 'router_id',
         'status', 'started_at', 'expires_at', 'ip_address', 'mac_address',
+        'access_backend_origin', 'radius_admission_session_id', 'radius_admission_mac',
         'bytes_in', 'bytes_out', 'rate_in', 'rate_out',
         'provisioning_requeues', 'provisioning_alerted_at', 'provisioned_at',
         'expiry_reminder_sent_at', 'renew_token',
