@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\WalletLedgerEntry;
 use App\Services\PaymentService;
+use App\Services\Policy\Policy;
 use App\Services\WalletService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,7 @@ class WalletLedgerTest extends TestCase
     {
         parent::setUp();
 
-        $this->tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active', 'commission_rate' => 5]);
+        $this->tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active', 'commission_rate' => 5]);
     }
 
     private function wallet(): WalletService
@@ -201,6 +202,8 @@ class WalletLedgerTest extends TestCase
 
     public function test_a_manual_adjustment_is_in_the_ledger_with_its_author(): void
     {
+        // Exercise the explicitly permitted auto-apply policy, not the safer default requiring approval.
+        Policy::set('approval.wallet_adjustment.enabled', false);
         Role::findOrCreate('platform_admin', 'web');
         $admin = User::factory()->create(['tenant_id' => null]);
         $admin->assignRole('platform_admin');
