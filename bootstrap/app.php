@@ -83,5 +83,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // The control form uses literal dotted secret keys inside settings[].
+        // Do not flash that entire nested payload on validation failures.
+        $exceptions->dontFlash([
+            'settings', 'smtp_password', 'sms_api_key', 'whatsapp_api_key', 'whatsapp_webhook_secret',
+            'api_password', 'mikrotik_password', 'pesapal_consumer_key', 'pesapal_consumer_secret',
+            'flutterwave_public_key', 'flutterwave_secret_key', 'flutterwave_encryption_key', 'flutterwave_webhook_secret',
+            'mtn_subscription_key', 'mtn_api_user', 'mtn_api_key', 'airtel_client_id', 'airtel_client_secret',
+            'token', 'code', 'email_code', 'recovery_code',
+        ]);
     })->create();
