@@ -795,6 +795,7 @@
                         </div>
 
                         <!-- Credentials Form -->
+                        <p class="text-xs text-gray-600">Changing provider requires a new credential for that provider. Previously saved unbound credentials require explicit re-entry before sending SMS. Otherwise, leaving the credential blank keeps it only when the provider stays the same.</p>
                         <form id="sms-settings-form" method="POST" action="{{ route('platform.configuration.sms.update') }}" class="space-y-4">
                             @csrf
                             @method('PUT')

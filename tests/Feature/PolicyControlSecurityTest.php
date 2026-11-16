@@ -91,8 +91,8 @@ class PolicyControlSecurityTest extends TestCase
         $dom = new \DOMDocument;
         @$dom->loadHTML($page);
         $xpath = new \DOMXPath($dom);
-        $this->assertSame(0, $xpath->query('//*[@name="policies[approval.wallet_adjustment.enabled]"]')->length);
-        $this->assertSame(0, $xpath->query('//*[@name="policies[wallet.min_withdrawal]"]')->length);
+        $this->assertSame(1, $xpath->query('//select[@name="policies[approval.wallet_adjustment.enabled]"]/option[@value="" and position()=1]')->length);
+        $this->assertSame(1, $xpath->query('//input[@name="policies[wallet.min_withdrawal]" and @value=""]')->length);
         $this->put(route('platform.policies.update'), ['reason' => 'Adjust expiry window', 'policies' => ['approval.wallet_adjustment.expiry_hours' => '25']])->assertSessionHasNoErrors();
         $this->assertSame(1, $this->stored('approval.wallet_adjustment.enabled'));
         $this->assertSame('damaged', $this->stored('wallet.min_withdrawal'));

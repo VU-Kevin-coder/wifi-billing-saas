@@ -103,7 +103,7 @@
                     </section>
 
                     <section class="policy-panel" data-panel="lifecycle" hidden>
-                        <div class="policy-banner">A tenant can be in several states at once. An action is blocked when any state blocks it. A dash means no policy exists for that pair.</div>
+                        <div class="policy-banner">A tenant can be in several states at once. An action is blocked when any state blocks it. Missing rows use the displayed catalog default; a dash means that state has no default constraint.</div>
                         <section class="policy-card">
                             <header><div><h2>What each tenant state may do</h2><p>Toggle an action to allow or block it for tenants in that state.</p></div></header>
                             <div class="policy-table-wrap"><table class="policy-table"><thead><tr><th>Action</th>@foreach($catalog['lifecycle']['states'] as $state => $label)<th>{{ $label }}</th>@endforeach</tr></thead><tbody>
@@ -115,9 +115,14 @@
                                                 @if($policy && isset($definitions[$key]) && \App\Services\Policy\PolicyDefinitions::validStored($key, $policy->value))
                                                     <label class="policy-toggle"><input type="hidden" name="policies[{{ $key }}]" value="0"><input class="policy-switch" type="checkbox" name="policies[{{ $key }}]" value="1" @checked($policy->value) aria-label="{{ $stateLabel }}: {{ $label }}"><span>{{ $policy->value ? 'Allowed' : 'Blocked' }}</span></label>
                                                 @elseif($policy)
-                                                    <span data-invalid-policy="{{ $key }}">Invalid policy value; review and repair explicitly.</span>
+                                                    <span data-invalid-policy="{{ $key }}" data-blocked="{{ $policy->value === true ? '0' : '1' }}">{{ $policy->value === true ? 'Allowed' : 'Blocked' }} by enforcement; {{ isset($definitions[$key]) ? 'invalid stored value — select a replacement to repair:' : 'no editable definition exists for this stored row.' }}</span>
+                                                    @if(isset($definitions[$key]))
+                                                        <select name="policies[{{ $key }}]" aria-label="Repair {{ $stateLabel }}: {{ $label }}"><option value="">Choose replacement</option><option value="0">Blocked</option><option value="1">Allowed</option></select>
+                                                    @endif
+                                                @elseif(isset($definitions[$key]))
+                                                    <label class="policy-toggle"><input type="hidden" name="policies[{{ $key }}]" value="0"><input class="policy-switch" type="checkbox" name="policies[{{ $key }}]" value="1" @checked($defaults[$key]) aria-label="{{ $stateLabel }}: {{ $label }}"><span>{{ $defaults[$key] ? 'Allowed' : 'Blocked' }} (default; not saved)</span></label>
                                                 @else
-                                                    <span title="No policy: always allowed">—</span>
+                                                    <span title="No default constraint for this state">—</span>
                                                 @endif
                                             </td>
                                         @endforeach
@@ -164,7 +169,18 @@
                                         </div>
                                         <div>
                                             @if(! \App\Services\Policy\PolicyDefinitions::validStored($policy->key, $policy->value))
-                                                <span>Invalid or unknown policy value; review and repair explicitly. Not submitted.</span>
+                                                <span>Invalid or unknown policy value; review and repair explicitly. Not submitted unless replaced.</span>
+                                                @if(isset($definitions[$policy->key]))
+                                                    @if(is_bool($field['default']))
+                                                        <select class="policy-input" name="policies[{{ $policy->key }}]" aria-label="Repair {{ $label }}"><option value="">Choose replacement</option><option value="0">Off</option><option value="1">On</option></select>
+                                                    @elseif(isset($field['options']))
+                                                        <select class="policy-input" name="policies[{{ $policy->key }}]" aria-label="Repair {{ $label }}"><option value="">Choose replacement</option>@foreach($field['options'] as $option)<option value="{{ $option }}">{{ $option }}</option>@endforeach</select>
+                                                    @elseif(is_numeric($field['default']))
+                                                        <input class="policy-input" type="number" name="policies[{{ $policy->key }}]" value="" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ is_float($field['default']) ? 'any' : '1' }}" aria-label="Repair {{ $label }}">
+                                                    @else
+                                                        <input class="policy-input" type="text" name="policies[{{ $policy->key }}]" value="" aria-label="Repair {{ $label }}">
+                                                    @endif
+                                                @endif
                                             @elseif(is_bool($field['default']))
                                                 <label class="policy-toggle"><input type="hidden" name="policies[{{ $policy->key }}]" value="0"><input type="checkbox" name="policies[{{ $policy->key }}]" value="1" @checked($policy->value) aria-label="{{ $label }}"><span>{{ $policy->value ? 'On' : 'Off' }}</span></label>
                                             @elseif(isset($field['options']))
@@ -172,7 +188,7 @@
                                                     @foreach($field['options'] as $option)<option value="{{ $option }}" @selected((string) $policy->value === (string) $option)>{{ $option }}</option>@endforeach
                                                 </select>
                                             @elseif(is_numeric($field['default']))
-                                                <div class="control-unit"><input class="policy-input" type="number" name="policies[{{ $policy->key }}]" value="{{ $policy->value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ $field['step'] ?? 1 }}" aria-label="{{ $label }}">@if($unit)<span>{{ $unit }}</span>@endif</div>
+                                                <div class="control-unit"><input class="policy-input" type="number" name="policies[{{ $policy->key }}]" value="{{ $policy->value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ is_float($field['default']) ? 'any' : '1' }}" aria-label="{{ $label }}">@if($unit)<span>{{ $unit }}</span>@endif</div>
                                             @else
                                                 <input class="policy-input" type="text" name="policies[{{ $policy->key }}]" value="{{ $policy->value }}" aria-label="{{ $label }}">
                                             @endif
@@ -274,6 +290,15 @@
                 document.querySelectorAll('[data-tab]').forEach(link => link.classList.toggle('active', link.dataset.tab === tab));
                 document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== tab);
             };
+            // Submit only edits, not other values from a potentially stale page.
+            form.addEventListener('submit', () => {
+                form.querySelectorAll('[name^="policies["]').forEach(input => {
+                    const checkbox = form.querySelector(`[name="${CSS.escape(input.name)}"][type="checkbox"]`);
+                    const control = checkbox || input;
+                    const value = control.type === 'checkbox' ? (control.checked ? control.value : '0') : control.value;
+                    if (value === keys.get(input.name)) input.disabled = true;
+                });
+            });
             form.addEventListener('input', changed);
             form.addEventListener('change', event => {
                 const row = event.target.closest('.policy-row');
@@ -292,7 +317,7 @@
             });
             document.querySelectorAll('.policy-reset').forEach(button => button.addEventListener('click', () => {
                 const name = `policies[${button.dataset.key}]`;
-                const control = form.querySelector(`[name="${CSS.escape(name)}"]`);
+                const control = form.querySelector(`[name="${CSS.escape(name)}"][type="checkbox"]`) || form.querySelector(`[name="${CSS.escape(name)}"]`);
                 if (!control) return;
                 if (control.type === 'checkbox') control.checked = button.dataset.value === '1';
                 else control.value = button.dataset.value;
@@ -300,7 +325,13 @@
             }));
             document.querySelectorAll('[data-sim-state]').forEach(input => input.addEventListener('change', renderLifecycle));
             form.addEventListener('change', event => {
-                if (event.target.name?.startsWith('policies[lifecycle.')) renderLifecycle();
+                if (event.target.name?.startsWith('policies[lifecycle.')) {
+                    if (event.target.type === 'checkbox') {
+                        const label = event.target.closest('label')?.querySelector('span');
+                        if (label) label.textContent = event.target.checked ? 'Allowed (unsaved)' : 'Blocked (unsaved)';
+                    }
+                    renderLifecycle();
+                }
             });
             function renderLifecycle() {
                 const selected = Array.from(document.querySelectorAll('[data-sim-state]:checked')).map(item => item.dataset.simState);
@@ -311,14 +342,17 @@
                     const blocked = selected.filter(state => {
                         const name = `policies[lifecycle.${state}.${action}]`;
                         const input = form.querySelector(`[name="${CSS.escape(name)}"][type=checkbox]`);
-                        return input && !input.checked;
+                        if (input) return !input.checked;
+                        const repair = form.querySelector(`select[name="${CSS.escape(name)}"]`);
+                        if (repair?.value) return repair.value === '0';
+                        const marker = Array.from(form.querySelectorAll('[data-invalid-policy]')).find(item => item.dataset.invalidPolicy === `lifecycle.${state}.${action}`);
+                        return marker?.dataset.blocked === '1';
                     });
-                    const unknown = selected.some(state => Array.from(form.querySelectorAll('[data-invalid-policy]')).some(item => item.dataset.invalidPolicy === `lifecycle.${state}.${action}`));
                     const item = document.createElement('div');
                     item.className = 'policy-card';
                     item.style.padding = '10px 12px';
                     item.style.margin = '0';
-                    item.innerHTML = `<b>${label}</b><div class="policy-help">${blocked.length ? 'Blocked by ' + blocked.join(', ') : (unknown ? 'Unknown: invalid policy value' : 'Allowed')}</div>`;
+                    item.innerHTML = `<b>${label}</b><div class="policy-help">${blocked.length ? 'Blocked by ' + blocked.join(', ') : 'Allowed'}</div>`;
                     output.appendChild(item);
                 });
             }

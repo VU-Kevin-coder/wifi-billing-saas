@@ -9,6 +9,7 @@ use App\Models\Session;
 use App\Models\SiteAgent;
 use App\Services\Policy\Policy;
 use App\Services\Policy\PolicyDefinitions;
+use App\Services\SmsConfiguration;
 use App\Services\SystemHealthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -139,9 +140,33 @@ class ControlSettingsController extends Controller
             $roleAssignments = $this->validateRolePermissions($roleValues, $catalog);
         }
 
-        DB::transaction(function () use (&$changes, $updates, $roleAssignments, $validated, $catalog): void {
+        DB::transaction(function () use (&$changes, $updates, $roleAssignments, $validated, $catalog, $values): void {
+            $smsUpdates = array_filter($updates, fn ($update) => in_array($update[0], ['sms.provider', 'sms.username', 'sms.environment', 'sms.sender', 'sms.api_key'], true));
+            if ($smsUpdates !== []) {
+                SmsConfiguration::lock();
+                $smsProvider = $values['sms.provider'] ?? null;
+                $credentialUpdate = collect($smsUpdates)->first(fn ($update) => $update[0] === 'sms.api_key');
+                $smsCredential = $credentialUpdate[2] ?? null;
+                if (filled($smsCredential) && ! is_string($smsProvider)) {
+                    throw ValidationException::withMessages(['settings.sms.provider' => 'Select the provider when updating its credential.']);
+                }
+                SmsConfiguration::validateProviderChange($smsProvider, $smsCredential, 'settings.sms.api_key');
+                $providerUpdate = collect($smsUpdates)->first(fn ($update) => $update[0] === 'sms.provider');
+                if ($smsProvider !== null && ! $providerUpdate && $smsProvider !== PlatformSetting::get('sms_provider', 'africastalking')) {
+                    throw ValidationException::withMessages(['settings.sms.provider' => 'SMS configuration changed. Reload and try again.']);
+                }
+                if (filled($smsCredential)) {
+                    PlatformSetting::set('sms_credential_provider', $smsProvider);
+                }
+            }
             foreach ($updates as [$key, $field, $value]) {
                 $this->writeValue($key, $field, $value);
+                if (in_array($key, ['sms.provider', 'sms.username', 'sms.environment', 'sms.sender', 'sms.api_key'], true)) {
+                    PlatformSetting::set('sms_status', 'Configured (Untested)');
+                }
+                if (in_array($key, ['mail.host', 'mail.port', 'mail.username', 'mail.password', 'mail.from_address', 'mail.from_name'], true)) {
+                    PlatformSetting::set('email_status', 'Configured (Untested)');
+                }
             }
             if ($roleAssignments !== null) {
                 $this->saveRolePermissions($roleAssignments, $catalog);

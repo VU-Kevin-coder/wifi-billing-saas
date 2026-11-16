@@ -55,7 +55,7 @@ class SmsService
     public static function sendViaAfricasTalking(string $to, string $message): array
     {
         $username = PlatformSetting::get('sms_username', 'sandbox');
-        $apiKey = PlatformSetting::getSecret('sms_api_key');
+        $apiKey = SmsConfiguration::credentialFor('africastalking');
         $environment = PlatformSetting::get('sms_environment', 'sandbox');
         $senderId = PlatformSetting::get('sms_sender_id');
 
@@ -124,7 +124,7 @@ class SmsService
     public static function sendViaTwilio(string $to, string $message): array
     {
         $accountSid = PlatformSetting::get('sms_username'); // Account SID
-        $authToken = PlatformSetting::getSecret('sms_api_key'); // Auth Token
+        $authToken = SmsConfiguration::credentialFor('twilio'); // Auth Token
         $fromNumber = PlatformSetting::get('sms_sender_id');
 
         if (empty($accountSid) || empty($authToken)) {

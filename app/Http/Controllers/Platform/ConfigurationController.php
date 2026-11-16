@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Services\PlatformMailService;
+use App\Services\SmsConfiguration;
 use App\Services\SmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -94,7 +95,8 @@ class ConfigurationController extends Controller
             'sms_api_key_configured' => filled(PlatformSetting::getSecret('sms_api_key')),
             'sms_sender_id' => PlatformSetting::get('sms_sender_id', 'HAMNET'),
             'sms_environment' => PlatformSetting::get('sms_environment', 'sandbox'),
-            'sms_status' => PlatformSetting::get('sms_status', 'Not Tested'),
+            'sms_status' => SmsConfiguration::credentialFor(PlatformSetting::get('sms_provider', 'africastalking'))
+                ? PlatformSetting::get('sms_status', 'Not Tested') : 'Not Tested',
         ];
 
         return view('platform.configuration.index', compact('settings'));
@@ -281,18 +283,21 @@ class ConfigurationController extends Controller
         ]);
 
         DB::transaction(function () use ($validated): void {
+            $changed = false;
             foreach ($validated as $key => $value) {
                 if ($key === 'smtp_password') {
                     if (filled($value)) {
+                        $changed = true;
                         PlatformSetting::setSecret($key, $value);
                     }
 
                     continue;
                 }
+                $changed = $changed || PlatformSetting::get($key) !== $value;
                 PlatformSetting::set($key, $value);
             }
 
-            if (! empty($validated['smtp_host'])) {
+            if ($changed) {
                 PlatformSetting::set('email_status', 'Configured (Untested)');
             }
 
@@ -341,18 +346,30 @@ class ConfigurationController extends Controller
         ]);
 
         DB::transaction(function () use ($validated): void {
+            SmsConfiguration::lock();
+            SmsConfiguration::validateProviderChange($validated['sms_provider'], $validated['sms_api_key'] ?? null, 'sms_api_key');
+            if (filled($validated['sms_api_key'] ?? null)) {
+                PlatformSetting::set('sms_credential_provider', $validated['sms_provider']);
+            }
+            $changed = false;
             foreach ($validated as $key => $value) {
                 if ($key === 'sms_api_key') {
                     if (filled($value)) {
+                        $changed = true;
                         PlatformSetting::setSecret($key, $value);
                     }
 
                     continue;
                 }
+                $changed = $changed || PlatformSetting::get($key, match ($key) {
+                    'sms_provider' => 'africastalking',
+                    'sms_environment' => 'sandbox',
+                    default => null,
+                }) !== $value;
                 PlatformSetting::set($key, $value);
             }
 
-            if (! empty($validated['sms_api_key'])) {
+            if ($changed) {
                 PlatformSetting::set('sms_status', 'Configured (Untested)');
             }
 

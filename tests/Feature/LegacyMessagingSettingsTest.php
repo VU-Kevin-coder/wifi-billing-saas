@@ -36,6 +36,7 @@ class LegacyMessagingSettingsTest extends TestCase
     {
         PlatformSetting::set('smtp_password', 'old-smtp-secret');
         PlatformSetting::set('sms_api_key', 'old-sms-secret');
+        PlatformSetting::set('sms_provider', 'twilio');
         $this->get(route('platform.configuration.index'))->assertOk()
             ->assertDontSee('old-smtp-secret')->assertDontSee('old-sms-secret');
 
@@ -139,6 +140,7 @@ class LegacyMessagingSettingsTest extends TestCase
         PlatformSetting::set('sms_environment', 'sandbox');
         PlatformSetting::set('sms_sender_id', 'BRAND');
         PlatformSetting::set('sms_api_key', 'legacy-key');
+        PlatformSetting::set('sms_credential_provider', 'africastalking');
         $this->assertTrue(SmsService::send('0700000000', 'hello')['success']);
         Http::assertSent(fn ($r) => $r->url() === 'https://api.sandbox.africastalking.com/version1/messaging' && $r->hasHeader('apiKey', 'legacy-key') && $r['to'] === '+256700000000' && ! isset($r['from']));
         PlatformSetting::setSecret('sms_api_key', 'encrypted-key');
@@ -148,10 +150,12 @@ class LegacyMessagingSettingsTest extends TestCase
         $this->assertSame('Connected', PlatformSetting::get('sms_status'));
 
         PlatformSetting::set('sms_provider', 'twilio');
+        PlatformSetting::set('sms_credential_provider', 'twilio');
+        PlatformSetting::setSecret('sms_api_key', 'twilio-encrypted-key');
         PlatformSetting::set('sms_username', 'AC123');
         PlatformSetting::set('sms_sender_id', '+12025550123');
         $this->assertTrue(SmsService::send('0700000000', 'hello')['success']);
-        Http::assertSent(fn ($r) => $r->url() === 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json' && $r->hasHeader('Authorization', 'Basic '.base64_encode('AC123:encrypted-key')) && $r['From'] === '+12025550123');
+        Http::assertSent(fn ($r) => $r->url() === 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json' && $r->hasHeader('Authorization', 'Basic '.base64_encode('AC123:twilio-encrypted-key')) && $r['From'] === '+12025550123');
         PlatformSetting::set('sms_api_key', 'legacy-twilio');
         $this->assertTrue(SmsService::send('0700000000', 'hello')['success']);
         Http::assertSent(fn ($r) => $r->url() === 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json' && $r->hasHeader('Authorization', 'Basic '.base64_encode('AC123:legacy-twilio')));
@@ -161,6 +165,7 @@ class LegacyMessagingSettingsTest extends TestCase
     {
         PlatformSetting::set('sms_provider', 'africastalking');
         PlatformSetting::setSecret('sms_api_key', 'secret-in-provider-response');
+        PlatformSetting::set('sms_credential_provider', 'africastalking');
         Http::fake(['*' => Http::response(['errorMessage' => 'secret-in-provider-response'], 403)]);
         $result = SmsService::send('0700000000', 'hello');
         $this->assertFalse($result['success']);

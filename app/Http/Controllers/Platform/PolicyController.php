@@ -51,16 +51,16 @@ class PolicyController extends Controller
 
         foreach ($validated['policies'] as $key => $value) {
             $setting = $known->get($key);
-            if (! $setting) {
+            if (! $setting && (! str_starts_with($key, 'lifecycle.') || ! isset(PolicyDefinitions::all()[$key]))) {
                 throw ValidationException::withMessages(['policies' => 'The submitted form contains an unknown policy.']);
             }
             $normalized = PolicyDefinitions::normalize($key, $value);
 
-            if ($normalized !== $setting->value) {
+            if (! $setting || $normalized !== $setting->value) {
                 $changes[explode('.', $key)[0]][$key] = [
-                    'old' => $setting->value,
+                    'old' => $setting?->value,
                     'new' => $normalized,
-                    'description' => $setting->description,
+                    'description' => $setting?->description,
                 ];
             }
         }

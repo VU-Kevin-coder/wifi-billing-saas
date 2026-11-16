@@ -147,7 +147,7 @@
                                                 </select>
                                             @elseif($field['type'] === 'number' || ($field['type'] === 'policy' && is_numeric($field['default'])))
                                                 <div class="control-unit">
-                                                    <input class="control-input" type="number" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" value="{{ $value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ $field['step'] ?? 1 }}" aria-label="{{ $field['label'] }}">
+                                                    <input class="control-input" type="number" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" value="{{ $value }}" @isset($field['min']) min="{{ $field['min'] }}" @endisset @isset($field['max']) max="{{ $field['max'] }}" @endisset step="{{ $isPolicy ? (is_float($field['default']) ? 'any' : '1') : ($field['step'] ?? 1) }}" aria-label="{{ $field['label'] }}">
                                                     @if(!empty($field['unit']))<span>{{ $field['unit'] }}</span>@endif
                                                 </div>
                                             @elseif($field['type'] === 'tags')
