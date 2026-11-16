@@ -6,10 +6,12 @@ use App\Http\Controllers\Concerns\PortalPaymentActions;
 use App\Http\Controllers\Concerns\PortalPurchaseActions;
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Services\PaymentService;
+use App\Services\RadiusAccountingService;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
@@ -84,10 +86,21 @@ class PortalController extends Controller
             return back()->withErrors(['voucher_code' => 'This voucher has already been used or voided.']);
         }
 
-        $activationService->activate($tenantModel, $voucher, $request, 'Walk-in');
+        $session = $activationService->activate($tenantModel, $voucher, $request, 'Walk-in');
         $mikrotikUrl = HotspotLogin::forVoucher($voucher);
+        $router = $session->router_id ? Router::withoutTenancy()->where('tenant_id', $tenantModel->id)->find($session->router_id) : null;
+        $radiusReady = $session->status === 'provisioning' && $router?->access_backend === 'radius';
+        if ($radiusReady && app(RadiusAccountingService::class)->authorize(
+            (string) $router->radius_nas_identifier, 'readiness-'.bin2hex(random_bytes(16)), $voucher->code
+        )['decision'] !== 'accept') {
+            return back()->withErrors(['voucher_code' => 'Access cannot be confirmed. Contact the operator; do not redeem again.']);
+        }
+        // A previous purchase may belong to another tenant or customer.
+        $request->session()->forget('payment_token');
 
-        return redirect()->route('portal.success', ['tenant' => $tenantModel->slug])
+        return redirect()->to($this->portalUrl($request, 'success', $tenantModel))
+            ->with('voucher_tenant_id', $tenantModel->id)
+            ->with('radius_ready', (bool) $radiusReady)
             ->with('mikrotik_url', $mikrotikUrl)
             ->with('voucher_code', $voucher->code);
     }
@@ -160,15 +173,25 @@ class PortalController extends Controller
 
         $voucherCode = session('voucher_code');
         $paymentToken = session('payment_token');
+        if ($paymentToken && ! Transaction::withoutTenancy()->where('tenant_id', $tenantModel->id)
+            ->where('type', 'voucher_sale')->where('payment_token_hash', hash('sha256', $paymentToken))->exists()) {
+            $request->session()->forget('payment_token');
+            $paymentToken = null;
+        }
+        if ((string) session('voucher_tenant_id') !== (string) $tenantModel->id) {
+            $voucherCode = null;
+            $mikrotikUrl = null;
+        }
 
         if (! $mikrotikUrl && ! $paymentToken && ! $voucherCode) {
             return redirect()->route('portal.index', ['tenant' => $tenantModel->slug]);
         }
 
-        return view('portal.success', [
+        return response()->view('portal.success', [
             'tenant' => $tenantModel,
-            'mikrotikUrl' => $mikrotikUrl,
-            'voucherCode' => $voucherCode,
+            'mikrotikUrl' => $paymentToken ? null : $mikrotikUrl,
+            'voucherCode' => $paymentToken ? null : $voucherCode,
+            'radiusReady' => ! $paymentToken && (bool) session('radius_ready'),
             'paymentToken' => $paymentToken,
             'paymentStatusUrl' => $paymentToken
                 ? route('api.payments.status', [], false)
@@ -176,7 +199,7 @@ class PortalController extends Controller
             'paymentActivationUrl' => $paymentToken
                 ? route('api.payments.activate', [], false)
                 : null,
-        ]);
+        ])->header('Cache-Control', 'no-store');
     }
 
     /** The bearer token comes from the header only; a query-string or path token is ignored on purpose. */
