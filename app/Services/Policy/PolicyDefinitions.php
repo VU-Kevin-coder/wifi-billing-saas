@@ -3,6 +3,7 @@
 namespace App\Services\Policy;
 
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /** The trusted policy schema is independent of values already in the database. */
@@ -37,7 +38,7 @@ class PolicyDefinitions
         $default = $field['default'];
         $rules = match (true) {
             is_bool($default) => ['required', 'boolean'],
-            isset($field['options']) => ['required', 'string', \Illuminate\Validation\Rule::in($field['options'])],
+            isset($field['options']) => ['required', 'string', Rule::in($field['options'])],
             is_int($default) => array_filter(['required', 'integer', isset($field['min']) ? 'min:'.$field['min'] : null, isset($field['max']) ? 'max:'.$field['max'] : null]),
             is_float($default) => array_filter(['required', 'numeric', isset($field['min']) ? 'min:'.$field['min'] : null, isset($field['max']) ? 'max:'.$field['max'] : null]),
             default => ['required', 'string', 'max:255'],
@@ -56,14 +57,25 @@ class PolicyDefinitions
     public static function validStored(string $key, mixed $value): bool
     {
         $field = self::all()[$key] ?? null;
-        if (! $field) return false;
+        if (! $field) {
+            return false;
+        }
         $default = $field['default'];
-        if (is_bool($default) && ! is_bool($value)) return false;
-        if (is_int($default) && ! is_int($value)) return false;
-        if (is_float($default) && ! is_float($value) && ! is_int($value)) return false;
-        if (is_string($default) && ! is_string($value)) return false;
+        if (is_bool($default) && ! is_bool($value)) {
+            return false;
+        }
+        if (is_int($default) && ! is_int($value)) {
+            return false;
+        }
+        if (is_float($default) && ! is_float($value) && ! is_int($value)) {
+            return false;
+        }
+        if (is_string($default) && ! is_string($value)) {
+            return false;
+        }
         try {
             self::normalize($key, $value);
+
             return true;
         } catch (ValidationException) {
             return false;

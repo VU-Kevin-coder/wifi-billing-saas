@@ -150,10 +150,12 @@ class LifecyclePolicyEnforcementTest extends TestCase
         $platform->assignRole('platform_admin');
         $this->withoutMiddleware(RequireRecentMfa::class);
         $this->actingAs($platform)->put(route('platform.policies.lifecycle.update'), [
+            'reason' => 'Review policy',
             'policies' => ['security.step_up_enabled' => '0'],
         ])->assertSessionHasErrors('policies');
         $this->assertTrue(Policy::get('security.step_up_enabled'));
         $this->actingAs($platform)->put(route('platform.policies.category.update', 'security'), [
+            'reason' => 'Review policy',
             'policies' => ['security.step_up_enabled' => '0'],
         ])->assertSessionHasNoErrors();
         $log = AuditLog::where('action', 'policy.security.updated')->sole();

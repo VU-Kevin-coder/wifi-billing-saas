@@ -96,6 +96,7 @@ class PolicyController extends Controller
                 throw ValidationException::withMessages(['policies' => 'Unknown lifecycle policy.']);
             }
         }
+
         return $this->updateAll($request);
     }
 
@@ -111,6 +112,7 @@ class PolicyController extends Controller
                 throw ValidationException::withMessages(['policies' => 'Unknown policy or wrong category.']);
             }
         }
+
         return $this->updateAll($request);
     }
 
@@ -129,6 +131,7 @@ class PolicyController extends Controller
             $policies['approval.wallet_adjustment.'.$key] = $value;
         }
         $request->merge(['policies' => $policies]);
+
         return $this->updateAll($request);
     }
 }

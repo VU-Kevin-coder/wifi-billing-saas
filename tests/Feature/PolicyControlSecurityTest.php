@@ -41,7 +41,7 @@ class PolicyControlSecurityTest extends TestCase
     public function test_controls_are_typed_and_full_section_submission_preserves_unchanged_values(): void
     {
         $page = $this->get(route('platform.configuration.control', ['section' => 'wallet']))->assertOk()->getContent();
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         @$dom->loadHTML($page);
         $xpath = new \DOMXPath($dom);
         $this->assertSame(1, $xpath->query('//input[@type="number" and @name="policies[wallet.min_withdrawal]"]')->length);
@@ -88,7 +88,9 @@ class PolicyControlSecurityTest extends TestCase
         Policy::set('approval.wallet_adjustment.enabled', 1);
         Policy::set('wallet.min_withdrawal', 'damaged');
         $page = $this->get(route('platform.policies.index'))->assertOk()->assertSee('Invalid or unknown policy value')->getContent();
-        $dom = new \DOMDocument(); @$dom->loadHTML($page); $xpath = new \DOMXPath($dom);
+        $dom = new \DOMDocument;
+        @$dom->loadHTML($page);
+        $xpath = new \DOMXPath($dom);
         $this->assertSame(0, $xpath->query('//*[@name="policies[approval.wallet_adjustment.enabled]"]')->length);
         $this->assertSame(0, $xpath->query('//*[@name="policies[wallet.min_withdrawal]"]')->length);
         $this->put(route('platform.policies.update'), ['reason' => 'Adjust expiry window', 'policies' => ['approval.wallet_adjustment.expiry_hours' => '25']])->assertSessionHasNoErrors();
@@ -191,7 +193,9 @@ class PolicyControlSecurityTest extends TestCase
     {
         Policy::set('approval.wallet_adjustment.enabled', 'damaged');
         $page = $this->get(route('platform.configuration.control', ['section' => 'wallet']))->assertOk()->assertSee('Invalid stored policy value')->getContent();
-        $dom = new \DOMDocument(); @$dom->loadHTML($page); $xpath = new \DOMXPath($dom);
+        $dom = new \DOMDocument;
+        @$dom->loadHTML($page);
+        $xpath = new \DOMXPath($dom);
         $this->assertSame(0, $xpath->query('//*[@name="policies[approval.wallet_adjustment.enabled]"]')->length);
         $this->put(route('platform.configuration.control.update'), ['reason' => 'Change wallet limit', 'policies' => ['wallet.min_withdrawal' => 12000]])->assertSessionHasNoErrors();
         $this->assertSame('damaged', $this->stored('approval.wallet_adjustment.enabled'));

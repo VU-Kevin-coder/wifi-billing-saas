@@ -81,7 +81,7 @@ class SafeControlUiTest extends TestCase
     public function test_role_matrix_is_read_only_and_forged_submissions_are_rejected(): void
     {
         $response = $this->get(route('platform.configuration.control', ['section' => 'roles']))->assertOk()->assertSee('Permission matrix (not operative)')->assertSee('these assignments do not control application access');
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         @$dom->loadHTML($response->getContent());
         $xpath = new \DOMXPath($dom);
         $boxes = $xpath->query('//table[contains(@class,"control-table")]//input[@type="checkbox"]');
@@ -100,7 +100,7 @@ class SafeControlUiTest extends TestCase
         Policy::set('approval.wallet_adjustment.min_admins', 3, 'Minimum admins required for approval');
         foreach ([route('platform.configuration.control', ['section' => 'wallet']), route('platform.policies.index')] as $url) {
             $response = $this->get($url)->assertOk()->assertSee('Minimum platform admins in the system')->assertSee('Only one approval is required per adjustment.')->assertDontSee('Approvals needed');
-            $dom = new \DOMDocument();
+            $dom = new \DOMDocument;
             @$dom->loadHTML($response->getContent());
             $xpath = new \DOMXPath($dom);
             $inputs = $xpath->query('//input[@name="policies[approval.wallet_adjustment.min_admins]"]');

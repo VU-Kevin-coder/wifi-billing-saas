@@ -511,6 +511,7 @@ class ControlSettingsController extends Controller
             }
             $this->writeValue($key, $field, $field['default']);
         }
+
         return ['reset' => true, 'policy_changes' => $policyChanges];
     }
 }
