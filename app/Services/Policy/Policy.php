@@ -56,31 +56,22 @@ class Policy
         $actions = array_keys($catalog['actions'] ?? []);
         $index = array_search($action, $actions, true);
 
-        try {
-            // Do not use the general-purpose cache/get() here: it swallows storage
-            // errors and would turn an unavailable policy store into permission.
-            $keys = array_map(fn ($state) => "lifecycle.{$state}.{$action}", $states);
-            $settings = PolicySetting::whereIn('key', $keys)->get()->keyBy('key');
-            foreach ($states as $state) {
-                $key = "lifecycle.{$state}.{$action}";
-                $setting = $settings->get($key);
-                if ($setting) {
-                    // Malformed values are not an affirmative authorization.
-                    if ($setting->value !== true) {
-                        return true;
-                    }
-                } elseif ($index !== false && ($catalog['defaults'][$state][$index] ?? null) === false) {
-                    // Seeded defaults are optional; enforce the advertised default
-                    // even on installations where this row was never seeded.
+        // Do not use the general-purpose cache/get() for authorization.
+        $keys = array_map(fn ($state) => "lifecycle.{$state}.{$action}", $states);
+        [$ok, $settings] = PolicyRead::run(fn () => PolicySetting::whereIn('key', $keys)->get()->keyBy('key'));
+        if (! $ok) {
+            return true;
+        }
+        foreach ($states as $state) {
+            $key = "lifecycle.{$state}.{$action}";
+            $setting = $settings->get($key);
+            if ($setting) {
+                if ($setting->value !== true) {
                     return true;
                 }
-                // A null catalog default means this state does not constrain the
-                // action unless an explicit policy row exists.
+            } elseif ($index !== false && ($catalog['defaults'][$state][$index] ?? null) === false) {
+                return true;
             }
-        } catch (\Throwable $e) {
-            report($e);
-
-            return true;
         }
 
         return false;

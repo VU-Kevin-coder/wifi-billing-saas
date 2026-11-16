@@ -11,10 +11,12 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Policy\AdjustmentService;
 use App\Services\Policy\Policy;
+use App\Services\Policy\PolicyRead;
 use Database\Seeders\PolicySeeder;
+use Illuminate\Database\DeadlockException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -108,11 +110,112 @@ class CriticalFinancialSecurityRegressionTest extends TestCase
     public function test_unavailable_policy_store_blocks_request_and_approval(): void
     {
         $pending = $this->requestAdjustment()['adjustment'];
-        Schema::drop('policy_settings');
+        $level = DB::transactionLevel();
+        $counts = [Transaction::withoutTenancy()->count(), AuditLog::count()];
+        $faults = 0;
+        $lastState = null;
+        DB::connection()->beforeExecuting(function (string $query) use (&$faults, &$lastState): void {
+            if (preg_match('/^select\b.*\bfrom\s+[`"]?policy_settings[`"]?/i', $query)) {
+                $faults++;
+                try {
+                    DB::select('select * from __toqi_missing_policy_store_test');
+                } catch (QueryException $e) {
+                    $lastState = $e->errorInfo[0] ?? null;
+                    throw $e;
+                }
+            }
+        });
         $this->assertSame('blocked', $this->requestAdjustment()['status']);
-        $this->assertFalse(app(AdjustmentService::class)->approve($pending, $this->first)['ok']);
         $this->assertFalse(app(AdjustmentService::class)->approve($pending, $this->second)['ok']);
+        $this->assertGreaterThanOrEqual(2, $faults);
+        if (DB::getDriverName() === 'pgsql') {
+            $this->assertSame('42P01', $lastState); // actual PostgreSQL server error
+        }
+        $this->assertSame($level, DB::transactionLevel());
+        $this->assertSame(1, (int) DB::selectOne('select 1 as value')->value);
+        $this->assertSame('pending', $pending->fresh()->status);
         $this->assertSame(10000, (int) $this->tenant->fresh()->wallet_balance);
+        $this->assertSame($counts, [Transaction::withoutTenancy()->count(), AuditLog::count()]);
+        $this->tenant->update(['name' => 'Outer transaction remains writable']);
+    }
+
+    public function test_unavailable_admin_count_denies_without_poisoning_outer_transaction(): void
+    {
+        $pending = $this->requestAdjustment()['adjustment'];
+        $level = DB::transactionLevel();
+        $faults = 0;
+        DB::connection()->beforeExecuting(function (string $query) use (&$faults): void {
+            if (str_contains($query, 'model_has_roles') && str_starts_with(strtolower($query), 'select')) {
+                $faults++;
+                DB::select('select * from __toqi_missing_roles_test');
+            }
+        });
+        $this->assertFalse(app(AdjustmentService::class)->approve($pending, $this->second)['ok']);
+        $this->assertSame(1, $faults);
+        $this->assertSame($level, DB::transactionLevel());
+        $this->assertSame(1, (int) DB::selectOne('select 1 as value')->value);
+        $this->assertSame('pending', $pending->fresh()->status);
+        $this->assertSame(10000, (int) $this->tenant->fresh()->wallet_balance);
+        $this->tenant->update(['name' => 'Still writable']);
+    }
+
+    public function test_fresh_maximum_applies_to_requests_but_does_not_recheck_existing_approvals(): void
+    {
+        Policy::set('wallet.max_adjustment', 1000000);
+        $this->assertSame(1000000, Policy::get('wallet.max_adjustment'));
+        $pending = $this->requestAdjustment()['adjustment'];
+        DB::table('policy_settings')->where('key', 'wallet.max_adjustment')->update(['value' => json_encode(50)]);
+        $this->assertSame('blocked', $this->requestAdjustment()['status']);
+        // Current approval semantics do not re-evaluate the maximum after a request.
+        $this->assertTrue(app(AdjustmentService::class)->approve($pending, $this->second)['ok']);
+        $this->assertSame(10100, (int) $this->tenant->fresh()->wallet_balance);
+    }
+
+    public function test_policy_read_propagates_dangerous_database_errors(): void
+    {
+        foreach (['40001', '40P01', '08006', '25P02', 'XX000'] as $state) {
+            $pdoError = new \PDOException('simulated '.$state);
+            $pdoError->errorInfo = [$state, 0, 'simulated'];
+            $error = new QueryException(DB::connection()->getName(), 'select 1', [], $pdoError);
+            try {
+                PolicyRead::run(fn () => throw $error);
+                $this->fail('Must propagate '.$state);
+            } catch (QueryException $caught) {
+                $this->assertSame($error, $caught);
+            }
+            $this->assertSame(1, (int) DB::selectOne('select 1 as value')->value);
+        }
+        try {
+            PolicyRead::run(fn () => throw new \RuntimeException('deadlock detected'));
+            $this->fail('Nested deadlock must escape');
+        } catch (DeadlockException $e) {
+            $this->assertStringContainsString('deadlock detected', $e->getMessage());
+        }
+    }
+
+    public function test_failed_savepoint_rollback_is_propagated(): void
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('PostgreSQL-specific rollback failure test.');
+        }
+        $base = DB::transactionLevel();
+        DB::beginTransaction();
+        try {
+            try {
+                PolicyRead::run(function () {
+                    $inner = DB::transactionLevel();
+                    DB::statement('RELEASE SAVEPOINT trans'.$inner);
+                    DB::select('select * from __toqi_missing_rollback_test');
+                });
+                $this->fail('A failed rollback must escape.');
+            } catch (\PDOException $e) {
+                $this->assertNotSame('42P01', $e->errorInfo[0] ?? null);
+            }
+        } finally {
+            DB::rollBack($base);
+        }
+        $this->assertSame($base, DB::transactionLevel());
+        $this->assertSame(1, (int) DB::selectOne('select 1 as value')->value);
     }
 
     public function test_mandatory_events_bypass_disabled_optional_audit(): void

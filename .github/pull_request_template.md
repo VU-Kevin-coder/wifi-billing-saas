@@ -1,7 +1,7 @@
 ## What and why
 
 ## Checklist
-- [ ] `php artisan test` passes locally, and CI is green (SQLite, MySQL and PostgreSQL)
+- [ ] `vendor/bin/phpunit` passes locally, and CI is green (SQLite, MySQL and PostgreSQL)
 - [ ] New behaviour has tests; a bug fix has a test that fails without the fix
 - [ ] No secrets, keys or real customer data in the diff or the tests
 - [ ] Migrations: reviewed for existing data and tested on PostgreSQL; rollback considered

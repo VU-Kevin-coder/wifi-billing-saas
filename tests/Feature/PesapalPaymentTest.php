@@ -177,6 +177,7 @@ class PesapalPaymentTest extends TestCase
             'status' => 'pending',
             'reference' => 'ONL-CALLBACK-1',
             'provider_reference' => 'trk-callback-1',
+            'payment_token_hash' => hash('sha256', 'callback-token'),
             'phone' => '0771234567',
             'meta' => [
                 'package_id' => $this->package->id,
@@ -196,14 +197,15 @@ class PesapalPaymentTest extends TestCase
             ]),
         ]);
 
-        $response = $this->get(route('portal.direct.pesapal.callback', [
+        $response = $this->withSession(['payment_token' => 'callback-token'])->get(route('portal.direct.pesapal.callback', [
             'tenant' => $this->tenant->slug,
             'OrderTrackingId' => 'trk-callback-1',
             'OrderMerchantReference' => 'ONL-CALLBACK-1',
         ]));
 
         $response->assertRedirect(route('portal.direct.success', ['tenant' => $this->tenant->slug]));
-        $this->assertTrue(session()->has('voucher_code'));
+        $response->assertSessionMissing('voucher_code');
+        $this->assertSame('callback-token', session('payment_token'));
 
         $transaction->refresh();
         $this->assertSame('completed', $transaction->status);

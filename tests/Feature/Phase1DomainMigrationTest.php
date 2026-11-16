@@ -21,11 +21,8 @@ class Phase1DomainMigrationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_phase_one_migrations_are_repeatable_and_keep_legacy_defaults_on_sqlite_memory(): void
+    public function test_phase_one_migrations_are_repeatable_and_keep_legacy_defaults(): void
     {
-        $this->assertSame('sqlite', DB::connection()->getDriverName());
-        $this->assertSame(':memory:', DB::connection()->getDatabaseName());
-
         $routerAndSaleMigration = $this->loadMigration('2026_11_16_000001_add_radius_router_and_sale_links.php');
         $accountingMigration = $this->loadMigration('2026_11_16_000002_create_radius_accounting_tables.php');
 
@@ -59,7 +56,8 @@ class Phase1DomainMigrationTest extends TestCase
         $firstVoucher->update(['sale_transaction_id' => $transaction->id]);
 
         try {
-            $secondVoucher->update(['sale_transaction_id' => $transaction->id]);
+            // Roll back the failed statement to a savepoint before checking persisted state.
+            DB::transaction(fn () => $secondVoucher->update(['sale_transaction_id' => $transaction->id]));
             $this->fail('A sale transaction was linked to more than one voucher.');
         } catch (QueryException) {
             $this->assertSame($transaction->id, $firstVoucher->fresh()->sale_transaction_id);
@@ -82,7 +80,8 @@ class Phase1DomainMigrationTest extends TestCase
         $voucher = $this->createVoucher($otherTenant);
 
         try {
-            $voucher->update(['sale_transaction_id' => $transaction->id]);
+            // PostgreSQL requires a savepoint rollback before another query can run.
+            DB::transaction(fn () => $voucher->update(['sale_transaction_id' => $transaction->id]));
             $this->fail('A voucher accepted a sale transaction belonging to another tenant.');
         } catch (QueryException) {
             $this->assertNull($voucher->fresh()->sale_transaction_id);
