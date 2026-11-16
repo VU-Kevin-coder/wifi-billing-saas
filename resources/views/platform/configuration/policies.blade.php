@@ -157,7 +157,8 @@
                                     <span class="text-sm text-gray-700">Requester can self-approve</span>
                                 </label>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Minimum admins</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Minimum platform admins in the system</label>
+                                    <p class="text-xs text-gray-500 mb-1">Approvals are blocked unless at least this many platform admins exist. Only one approval is required per adjustment.</p>
                                     <input type="number" name="min_admins" min="1" max="10"
                                            value="{{ $approval['approval.wallet_adjustment.min_admins']->value ?? 2 }}"
                                            class="block w-full rounded-md border-gray-300 shadow-sm">

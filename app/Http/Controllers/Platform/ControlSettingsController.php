@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Models\Session;
-use App\Models\Site;
 use App\Models\SiteAgent;
 use App\Services\Policy\Policy;
 use App\Services\Policy\PolicyDefinitions;
@@ -51,6 +50,7 @@ class ControlSettingsController extends Controller
         return view('platform.configuration.control-settings', [
             'catalog' => $catalog,
             'settings' => $settings,
+            'payoutsPaused' => (bool) PlatformSetting::get('payouts.paused', false),
             'roles' => $roles,
             'agents' => $agents,
             'health' => $health,
@@ -71,6 +71,12 @@ class ControlSettingsController extends Controller
         if (mb_strlen(trim($validated['reason'])) < 5) {
             throw ValidationException::withMessages(['reason' => 'A reason of at least five non-space characters is required.']);
         }
+        if ($request->exists('permissions') || $request->exists('permission_roles')) {
+            throw ValidationException::withMessages([
+                'permissions' => 'The permission matrix is not operative and cannot be edited here.',
+            ]);
+        }
+
         $definitions = $catalog['fields'];
         $values = $request->input('settings', []);
         $unknown = array_diff(array_keys($values), array_keys($definitions));
@@ -420,9 +426,6 @@ class ControlSettingsController extends Controller
         foreach ($catalog['permissions'] as $roleName => $defaults) {
             $role = Role::findByName($roleName, 'web');
             $roles[$roleName] = $role->permissions->pluck('name')->all();
-            if ($roles[$roleName] === [] && Permission::query()->doesntExist()) {
-                $roles[$roleName] = $defaults;
-            }
         }
 
         return $roles;
@@ -461,12 +464,12 @@ class ControlSettingsController extends Controller
     private function rotateAgentTokens(): array
     {
         $rotated = [];
-        foreach (Site::query()->with('agent')->get() as $site) {
+        foreach (SiteAgent::query()->with(['site' => fn ($query) => $query->withoutTenancy()])->whereNull('revoked_at')->lockForUpdate()->get() as $agent) {
             $token = Str::random(64);
-            $agent = $site->agent;
-            if ($agent) {
-                $agent->update(['token_hash' => hash('sha256', $token), 'last_seen_at' => null, 'revoked_at' => null]);
-                $rotated[] = ['site' => $site->name, 'token' => $token];
+            $updated = SiteAgent::query()->whereKey($agent->id)->whereNull('revoked_at')
+                ->update(['token_hash' => hash('sha256', $token), 'last_seen_at' => null]);
+            if ($updated) {
+                $rotated[] = ['site' => $agent->site?->name ?? 'Unknown site', 'token' => $token];
             }
         }
 
@@ -508,8 +511,6 @@ class ControlSettingsController extends Controller
             }
             $this->writeValue($key, $field, $field['default']);
         }
-        PlatformSetting::set('payouts.paused', false);
-
         return ['reset' => true, 'policy_changes' => $policyChanges];
     }
 }

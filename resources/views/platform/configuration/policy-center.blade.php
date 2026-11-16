@@ -155,7 +155,7 @@
                                     @endphp
                                     <div class="policy-row" data-policy-row data-search="{{ strtolower($label.' '.$policy->key.' '.$policy->description) }}">
                                         <div><div class="policy-label">{{ $label }} <span class="policy-key">{{ $policy->key }}</span></div>
-                                            <div class="policy-help">{{ $policy->description }}</div>
+                                            <div class="policy-help">{{ $policy->key === 'approval.wallet_adjustment.min_admins' ? $field['help'] : $policy->description }}</div>
                                             @if(array_key_exists($policy->key, $defaults))
                                                 <div class="policy-default">Default: {{ is_bool($default) ? ($default ? 'Allowed' : 'Blocked') : $default }}
                                                     @if($policy->value !== $default && \App\Services\Policy\PolicyDefinitions::validStored($policy->key, $policy->value))<button type="button" class="policy-reset" data-key="{{ $policy->key }}" data-value="{{ is_bool($default) ? (int) $default : $default }}">Restore default</button>@endif
