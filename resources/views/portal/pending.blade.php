@@ -92,6 +92,10 @@
                     return;
                 }
 
+                if (result.status === 'fulfillment_pending') {
+                    statusElement.textContent = 'Payment confirmed. Access may require operator assistance. Please do not pay again; contact the operator if it does not arrive.';
+                }
+
                 if (result.status === 'provisioning' || result.status === 'activation_pending') {
                     statusElement.textContent = 'Payment confirmed. Waiting for the site router to activate your access…';
                 }
