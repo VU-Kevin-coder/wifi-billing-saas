@@ -168,14 +168,17 @@ trait PortalPaymentActions
     private function radiusPaymentResponse(Transaction $sale, Voucher $voucher, Session $session, bool $activation = false): ?JsonResponse
     {
         if (! $session->router_id) {
-            return null;
+            return response()->json(['status' => 'activation_unavailable', 'message' => 'Access cannot be confirmed. Contact the operator; please do not pay again.'], 202)->header('Cache-Control', 'no-store');
         }
         $router = Router::withoutTenancy()->where('tenant_id', $sale->tenant_id)->find($session->router_id);
         if (! $router) {
             return response()->json(['status' => 'activation_pending'], 202)->header('Cache-Control', 'no-store');
         }
-        if ($router->access_backend !== 'radius') {
+        if ($router->access_backend === 'site_agent') {
             return null;
+        }
+        if ($router->access_backend !== 'radius') {
+            return response()->json(['status' => 'activation_unavailable', 'message' => 'Access cannot be confirmed. Contact the operator; please do not pay again.'], 202)->header('Cache-Control', 'no-store');
         }
 
         $eligible = (int) $voucher->sale_transaction_id === (int) $sale->id

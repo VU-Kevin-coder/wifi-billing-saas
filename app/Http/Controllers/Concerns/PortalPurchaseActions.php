@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Concerns;
 
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\PaymentService;
 use App\Services\PesapalOrderVerifier;
+use App\Services\RadiusReadiness;
 use App\Services\Policy\Policy;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
@@ -51,6 +53,21 @@ trait PortalPurchaseActions
         $package = Package::withoutTenancy()
             ->where('tenant_id', $tenantModel->id)
             ->findOrFail($request->integer('package_id'));
+
+        // The submitted router is only a hint, not proof of where access will
+        // be used. All of this tenant's possible backends must be supported.
+        $backends = Router::withoutGlobalScopes()
+            ->where('tenant_id', $tenantModel->id)
+            ->distinct()->pluck('access_backend');
+        if ($backends->isEmpty() || $backends->contains(fn ($backend) =>
+            ! in_array($backend, ['site_agent', 'radius'], true)
+            || ($backend === 'radius' && ! RadiusReadiness::available())
+        )) {
+            return back()->withErrors([
+                'error' => 'Wi-Fi access is temporarily unavailable. No payment was requested. Please contact the operator.',
+            ]);
+        }
+
         $phone = $request->input('phone');
         $canonicalPhone = $paymentService->normalizePurchasePhone($phone)
             ?? (string) preg_replace('/\D+/', '', $phone);
