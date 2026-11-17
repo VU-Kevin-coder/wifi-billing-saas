@@ -133,9 +133,7 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr>
-                                    <td colspan="4" class="px-6 py-8 text-center text-gray-500 text-sm">No operators registered yet.</td>
-                                </tr>
+                                <x-ui.empty-table-row colspan="4" title="No operators registered yet" message="Operator revenue and withdrawal activity will appear here." />
                             @endforelse
                         </tbody>
                     </table>
@@ -207,12 +205,14 @@
                                             <div class="pt-2 flex gap-3 border-t border-gray-200">
                                                 <form method="POST" action="{{ route('platform.revenue.withdrawals.reject', $pendingTx->id) }}" class="flex-1" data-confirm-action="Reject this withdrawal and refund funds to the operator?">
                                                     @csrf
+                                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Reject this withdrawal and refund funds to the operator?'])
                                                     <button type="submit" class="w-full bg-white border border-red-300 text-red-600 py-2 rounded-xl text-xs font-bold hover:bg-red-50 transition-colors">
                                                         Reject &amp; Refund
                                                     </button>
                                                 </form>
                                                 <form method="POST" action="{{ route('platform.revenue.withdrawals.approve', $pendingTx->id) }}" class="flex-1" data-confirm-action="{{ ($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer' ? 'Confirm you have completed this bank transfer and approve the withdrawal?' : 'Approve and release funds for this withdrawal?' }}">
                                                     @csrf
+                                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => (($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer' ? 'Confirm you have completed this bank transfer and approve the withdrawal?' : 'Approve and release funds for this withdrawal?')])
                                                     @if(($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer')
                                                         <input type="text" name="payout_reference" required minlength="3" maxlength="100" placeholder="Bank transfer reference" class="mb-2 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs">
                                                     @endif
