@@ -78,8 +78,13 @@ class PolicyController extends Controller
             }
         });
 
-        return redirect()->route('platform.policies.index')
-            ->with('status', $changes === [] ? 'No policies changed.' : 'Saved '.array_sum(array_map('count', $changes)).' policy change(s).');
+        $status = $changes === [] ? 'No policies changed.' : 'Saved '.array_sum(array_map('count', $changes)).' policy change(s).';
+        if ($request->header('X-Settings-Async') === '1' && $request->expectsJson()) {
+            $request->session()->flash('status', $status);
+            return response()->json(['saved' => true, 'redirect' => route('platform.policies.index'), 'message' => $status]);
+        }
+
+        return redirect()->route('platform.policies.index')->with('status', $status);
     }
 
     public function export()
