@@ -13,6 +13,8 @@ use App\Models\Voucher;
 use App\Services\PaymentService;
 use App\Services\Policy\Policy;
 use App\Services\RadiusAccountingService;
+use App\Services\RadiusReadiness;
+use App\Services\RadiusUnavailableException;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
 use App\Support\HotspotLogin;
@@ -86,7 +88,11 @@ class PortalController extends Controller
             return back()->withErrors(['voucher_code' => 'This voucher has already been used or voided.']);
         }
 
-        $session = $activationService->activate($tenantModel, $voucher, $request, 'Walk-in');
+        try {
+            $session = $activationService->activate($tenantModel, $voucher, $request, 'Walk-in');
+        } catch (RadiusUnavailableException $exception) {
+            return back()->withErrors(['voucher_code' => $exception->getMessage()]);
+        }
         $mikrotikUrl = HotspotLogin::forVoucher($voucher);
         $router = $session->router_id ? Router::withoutTenancy()->where('tenant_id', $tenantModel->id)->find($session->router_id) : null;
         $radiusReady = $session->status === 'provisioning' && $router?->access_backend === 'radius';
@@ -175,8 +181,12 @@ class PortalController extends Controller
         $paymentToken = session('payment_token');
         if ($paymentToken && ! Transaction::withoutTenancy()->where('tenant_id', $tenantModel->id)
             ->where('type', 'voucher_sale')->where('payment_token_hash', hash('sha256', $paymentToken))->exists()) {
-            $request->session()->forget('payment_token');
-            $paymentToken = null;
+            $request->session()->forget(['payment_token', 'voucher_code', 'voucher_tenant_id', 'mikrotik_url', 'radius_ready']);
+            return redirect()->route('portal.index', ['tenant' => $tenantModel->slug]);
+        }
+        if (! $paymentToken && session('radius_ready') && ! RadiusReadiness::available()) {
+            return redirect()->route('portal.index', ['tenant' => $tenantModel->slug])
+                ->withErrors(['voucher_code' => 'RADIUS access is temporarily unavailable. Contact the operator; please do not pay again.']);
         }
         if ((string) session('voucher_tenant_id') !== (string) $tenantModel->id) {
             $voucherCode = null;
