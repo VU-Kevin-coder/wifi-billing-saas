@@ -1,3 +1,7 @@
+# REMOTE SNAPSHOT INCOMPLETE
+
+The integration code and test fixes are not yet published to this remote branch. Do not deploy or merge it. The complete reviewed work remains local.
+
 # Integration status
 
 - Local integration baseline: `5bbe5542a87a70e23e6a6b3113a665fe07ebf80f` (PR 54 head). A GitHub check previously found that main at `cddf65d6` matched the baseline's root content, despite the different commit SHAs; exact Git tree modes were not verified. This does not establish the current state of main or any external deployment.
