@@ -5,14 +5,20 @@
         </h2>
     </x-slot>
 
-    <div class="py-8" x-data="{
+    <div class="py-8"
+         data-voucher-prefix="{{ $voucherSettings['voucher_prefix'] }}"
+         data-voucher-length="{{ $voucherSettings['voucher_length'] }}"
+         data-voucher-format="{{ $voucherSettings['voucher_format'] ?? 'alphanumeric' }}"
+         data-voucher-charset="{{ $voucherCharset }}"
+         x-init="voucherPrefix = $el.dataset.voucherPrefix; voucherLength = Number($el.dataset.voucherLength); voucherFormat = $el.dataset.voucherFormat; voucherCharset = $el.dataset.voucherCharset"
+         x-data="{
         showOverlay: false,
         activeTab: 'all',
         form: { package_id: '', quantity: 50 },
-        voucherPrefix: @js($voucherSettings['voucher_prefix']),
-        voucherLength: @js($voucherSettings['voucher_length']),
-        voucherFormat: @js($voucherSettings['voucher_format'] ?? 'alphanumeric'),
-        voucherCharset: @js($voucherCharset),
+        voucherPrefix: '',
+        voucherLength: 0,
+        voucherFormat: '',
+        voucherCharset: '',
         voucherFormatPreview() {
             const characters = this.voucherFormat === 'numeric' || this.voucherCharset === 'numeric'
                 ? '0'.repeat(this.voucherLength)
@@ -209,7 +215,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         @forelse($vouchers as $voucher)
-                            <tr class="hover:bg-gray-50 transition-colors group" x-show="activeTab === 'all' || activeTab === '{{ $voucher->status }}'">
+                            <tr class="hover:bg-gray-50 transition-colors group" data-voucher-status="{{ $voucher->status }}" x-show="activeTab === 'all' || activeTab === $el.dataset.voucherStatus">
                                 <td class="px-5 py-4">
                                     <input type="checkbox" class="rounded border-gray-300 text-blue-600">
                                 </td>
@@ -264,7 +270,8 @@
                                          class="absolute right-4 mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 text-left"
                                          x-cloak>
                                         <button type="button" 
-                                                @click="navigator.clipboard.writeText('{{ $voucher->code }}'); copied = true; setTimeout(() => { copied = false; open = false; }, 800)" 
+                                                data-voucher-code="{{ $voucher->code }}"
+                                                @click="navigator.clipboard.writeText($el.dataset.voucherCode); copied = true; setTimeout(() => { copied = false; open = false; }, 800)"
                                                 class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
                                             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
                                             <span x-text="copied ? 'Copied code!' : 'Copy voucher code'"></span>
@@ -279,6 +286,7 @@
                                             <form method="POST" action="{{ route('operator.vouchers.void', ['tenant' => request()->route('tenant'), 'voucher' => $voucher->id]) }}"
                                                   data-confirm-action="Void this voucher? It can no longer be used, and a connected customer will be disconnected.">
                                                 @csrf
+                                                @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Void this voucher? It can no longer be used, and a connected customer will be disconnected.'])
                                                 <button type="submit" class="w-full text-left px-3.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
                                                     Void voucher
                                                 </button>
