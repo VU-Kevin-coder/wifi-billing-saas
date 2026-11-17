@@ -84,29 +84,6 @@
         .help-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; margin-top: 14px; padding: 10px 0 0; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--muted); font-size: .8rem; text-align: left; cursor: pointer; }
         .help-copy { padding-top: 8px; color: var(--muted); font-size: .78rem; line-height: 1.55; }
         .portal-foot { margin: 17px 0 0; color: var(--muted); font-size: .7rem; text-align: center; }
-        .voucher-checking { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 24px 16px; background: color-mix(in srgb, var(--paper), transparent 4%); }
-        .voucher-checking[hidden] { display: none; }
-        .checking-card { position: relative; width: min(100%, 550px); padding: 62px 38px 28px; border: 1px solid var(--line); border-radius: 22px; background: var(--panel); box-shadow: 0 22px 55px -28px rgba(48,38,24,.4); }
-        .checking-progress { position: absolute; inset: 0 0 auto; height: 4px; overflow: hidden; border-radius: 22px 22px 0 0; background: var(--line); }
-        .checking-progress::after { display: block; width: 38%; height: 100%; background: var(--accent); content: ""; animation: checking-progress 1.5s ease-in-out infinite alternate; }
-        @keyframes checking-progress { from { transform: translateX(-8%); } to { transform: translateX(175%); } }
-        .checking-icon { display: block; width: 60px; height: 60px; margin: 0 auto 24px; color: var(--accent); }
-        .checking-icon .arc { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
-        .checking-icon .dot { fill: currentColor; }
-        .checking-card h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.8rem; font-weight: 500; text-align: center; }
-        .checking-subtitle { margin: 8px 0 0; color: var(--muted); font-size: .93rem; text-align: center; }
-        .checking-steps { display: grid; gap: 13px; margin: 52px 0 0; padding: 0; list-style: none; }
-        .checking-steps li { display: flex; min-height: 26px; align-items: center; gap: 14px; color: var(--muted); font-size: .92rem; }
-        .checking-step-icon { display: grid; width: 27px; height: 27px; flex: 0 0 27px; place-items: center; border: 1px solid var(--line); border-radius: 50%; }
-        .checking-step-icon svg { width: 14px; height: 14px; fill: none; stroke: white; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-        .checking-steps li.is-done { color: var(--ink); }
-        .checking-steps li.is-done .checking-step-icon { border-color: var(--accent); background: var(--accent); }
-        .checking-steps li.is-current .checking-step-icon { border-color: var(--accent); border-right-color: transparent; animation: checking-spin .8s linear infinite; }
-        @keyframes checking-spin { to { transform: rotate(360deg); } }
-        @media (max-width: 480px) {
-            .checking-card { padding: 52px 24px 26px; }
-            .checking-steps { margin-top: 40px; }
-        }
         @media (max-width: 480px) {
             .portal-content { padding: 20px 18px 18px; }
             .portal-hero { padding: 23px 18px 21px; }
@@ -174,7 +151,8 @@
                         </svg>
                         <input id="voucher_code" class="portal-field" name="voucher_code" type="text" required maxlength="64" autocomplete="off" autocapitalize="characters" value="{{ old('voucher_code') }}" placeholder="Enter your voucher code" aria-label="Voucher code">
                     </div>
-                    <button class="portal-button full" type="submit">Connect to Wi-Fi</button>
+                    <button class="portal-button full" type="submit" data-loading-text="Checking voucher…">Connect to Wi-Fi</button>
+                    <p id="voucher-status" role="status" aria-live="polite" aria-atomic="true"></p>
                 </form>
             </section>
 
@@ -210,14 +188,14 @@
                                         <input id="email-{{ $pkg->id }}" class="portal-field" type="email" name="email" autocomplete="email" value="{{ old('email') }}" placeholder="you@example.com">
                                         <p class="purchase-note">A payment prompt will be sent to this number. Your Wi-Fi access is issued after payment is confirmed.</p>
                                         <div style="display:flex;gap:8px;margin-top:12px">
-                                            <button class="portal-button" type="submit" style="flex:1">Pay {{ $pkg->currency ?: $currency }} {{ number_format((float) $pkg->price, 0) }}</button>
+                                            <button class="portal-button" type="submit" data-loading-text="Submitting payment…" style="flex:1">Pay {{ $pkg->currency ?: $currency }} {{ number_format((float) $pkg->price, 0) }}</button>
                                             <button class="portal-button small" type="button" @click="buyingPackageId = null" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line)">Cancel</button>
                                         </div>
                                     </form>
                                 </div>
                             </article>
                         @empty
-                            <p class="empty-plans">No packages are currently available.</p>
+                            <p class="empty-plans">No packages are currently available. If you have a voucher, enter it above; otherwise contact the network operator for help.</p>
                         @endforelse
                     </div>
                 </section>
@@ -244,46 +222,21 @@
         </div>
     </section>
 </main>
-<section id="voucher-checking" class="voucher-checking" role="dialog" aria-modal="true" aria-labelledby="checking-title" aria-describedby="checking-subtitle" hidden>
-    <div class="checking-card">
-        <div class="checking-progress" aria-hidden="true"></div>
-        <svg class="checking-icon" viewBox="0 0 48 48" aria-hidden="true">
-            <path class="arc" d="M6 17.5a26 26 0 0 1 36 0M11.5 23.5a18 18 0 0 1 25 0M17 29.5a10 10 0 0 1 14 0"/>
-            <circle class="dot" cx="24" cy="36" r="2.8"/>
-        </svg>
-        <h2 id="checking-title" tabindex="-1">Checking voucher</h2>
-        <p id="checking-subtitle" class="checking-subtitle">Looking up your code.</p>
-        <ol class="checking-steps" aria-live="polite">
-            <li class="is-done">
-                <span class="checking-step-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3.2 3.2L13 4.5"/></svg></span>
-                <span>Code received</span>
-            </li>
-            <li class="is-current" aria-current="step">
-                <span class="checking-step-icon" aria-hidden="true"></span>
-                <span>Searching voucher records</span>
-            </li>
-            <li>
-                <span class="checking-step-icon" aria-hidden="true"></span>
-                <span>Voucher found, activating</span>
-            </li>
-            <li>
-                <span class="checking-step-icon" aria-hidden="true"></span>
-                <span>Preparing your access</span>
-            </li>
-        </ol>
-    </div>
-</section>
 <script>
-    document.getElementById('voucher-form').addEventListener('submit', event => {
-        if (!event.currentTarget.reportValidity()) {
-            return;
-        }
-
-        const overlay = document.getElementById('voucher-checking');
-        overlay.hidden = false;
-        document.body.style.overflow = 'hidden';
-        document.getElementById('checking-title').focus();
-    });
+    (() => {
+        const form = document.getElementById('voucher-form');
+        const status = document.getElementById('voucher-status');
+        const clearStatus = () => { status.textContent = ''; };
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) return;
+            // Wait until every submit handler has had a chance to cancel navigation.
+            queueMicrotask(() => {
+                if (!event.defaultPrevented) status.textContent = 'Checking voucher…';
+            });
+        });
+        form.addEventListener('ui:form-restored', clearStatus);
+        window.addEventListener('pageshow', clearStatus);
+    })();
 </script>
 @include('partials.swal-flash')
 <x-ui.toast :show-initial="false" />
