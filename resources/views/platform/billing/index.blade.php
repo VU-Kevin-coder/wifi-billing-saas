@@ -73,7 +73,7 @@
             <div class="flex justify-between items-center">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">Platform billing & plans</h1>
-                    <p class="text-gray-500 text-sm mt-1">Manage operator subscription tiers, track recurring revenue, and oversee operator billing status.</p>
+                    <p class="text-gray-500 text-sm mt-1">Manage subscription plans and review recorded tenant subscription status.</p>
                 </div>
                 <div class="flex gap-2.5">
                     <button @click="openCreatePlan()" type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center gap-2 transition-colors">
@@ -83,32 +83,34 @@
                 </div>
             </div>
 
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">Subscription checkout and invoices are not connected. Subscription status is not proof of payment. Configured fees are not receipts or collected revenue.</div>
+
             <!-- KPI Cards -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Monthly recurring revenue</p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Configured fees: active status</p>
                     <p class="text-2xl font-bold text-gray-900 mt-2">UGX {{ number_format($monthlyRecurring) }}</p>
-                    <p class="text-xs text-green-600 mt-1 font-medium">{{ $activeCount }} paid active {{ Str::plural('operator', $activeCount) }}</p>
+                    <p class="text-xs text-green-600 mt-1 font-medium">{{ $activeCount }} {{ Str::plural('operator', $activeCount) }} with active status</p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Trial pipeline</p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Configured fees: trial status</p>
                     <p class="text-2xl font-bold text-gray-900 mt-2">UGX {{ number_format($trialPipelineValue) }}</p>
-                    <p class="text-xs text-blue-600 mt-1 font-medium">{{ $trialCount }} in 14-day free trial</p>
+                    <p class="text-xs text-blue-600 mt-1 font-medium">{{ $trialCount }} with trial status</p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Overdue fees</p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Configured fees: past due status</p>
                     <p class="text-2xl font-bold {{ $overdueFees > 0 ? 'text-red-600' : 'text-gray-900' }} mt-2">UGX {{ number_format($overdueFees) }}</p>
                     <p class="text-xs text-gray-500 mt-1">
                         @if($overdueCount > 0)
-                            <span class="text-red-500 font-medium">{{ $overdueCount }} {{ Str::plural('operator', $overdueCount) }} past due</span>
+                            <span class="text-red-500 font-medium">{{ $overdueCount }} {{ Str::plural('operator', $overdueCount) }} with past due status</span>
                         @else
-                            All accounts up to date
+                            No tenants marked past due
                         @endif
                     </p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Platform plans</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-2">{{ $plans->count() }} active tiers</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-2">{{ $plans->count() }} configured tiers</p>
                     <p class="text-xs text-gray-500 mt-1">{{ $invoices->total() }} total {{ Str::plural('tenant', $invoices->total()) }} enrolled</p>
                 </div>
             </div>
@@ -118,7 +120,7 @@
             <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
                 <svg class="w-5 h-5 text-orange-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                 <div class="flex-1">
-                    <p class="text-sm font-semibold text-orange-900">{{ $overdueCount }} operator {{ Str::plural('invoice', $overdueCount) }} are overdue (UGX {{ number_format($overdueFees) }} total)</p>
+                    <p class="text-sm font-semibold text-orange-900">{{ $overdueCount }} {{ Str::plural('tenant', $overdueCount) }} marked past due (UGX {{ number_format($overdueFees) }} in configured fees, not verified debt)</p>
                     <div class="text-xs text-orange-700 mt-1 space-x-2">
                         @foreach($pastDueTenants as $pdt)
                             <span class="font-medium">• {{ $pdt->name }} (UGX {{ number_format($pdt->plan_fee) }})</span>
@@ -148,7 +150,7 @@
                                 <div class="flex justify-between items-start mb-2">
                                     <div>
                                         <h3 class="font-bold text-gray-900 text-base">{{ $plan->name }}</h3>
-                                        <p class="text-[11px] text-gray-500">{{ $plan->trial_days }}-day free trial included</p>
+                                        <p class="text-[11px] text-gray-500">Configured trial: {{ $plan->trial_days }} days</p>
                                     </div>
                                     <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60">
                                         {{ $plan->tenants_count }} {{ Str::plural('operator', $plan->tenants_count) }}
@@ -197,8 +199,9 @@
                                     Edit plan
                                 </button>
 
-                                <form action="{{ route('platform.plans.destroy', $plan) }}" method="POST" data-confirm-action="Delete plan '{{ addslashes($plan->name) }}'? {{ $plan->tenants_count > 0 ? 'This will unlink ' . $plan->tenants_count . ' operator tenant(s) from this plan.' : '' }}">
+                                <form action="{{ route('platform.plans.destroy', $plan) }}" method="POST" data-confirm-action="Delete plan '{{ $plan->name }}'? {{ $plan->tenants_count > 0 ? 'This will unlink ' . $plan->tenants_count . ' operator tenant(s) from this plan.' : '' }}">
                                     @csrf
+                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Delete plan \'' . ($plan->name) . '\'? ' . ($plan->tenants_count > 0 ? 'This will unlink ' . $plan->tenants_count . ' operator tenant(s) from this plan.' : '')])
                                     @method('DELETE')
                                     <button type="submit" 
                                             class="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 px-2.5 py-1.5 rounded-lg transition-colors"
@@ -217,12 +220,12 @@
                 </div>
             </div>
 
-            <!-- ─── SECTION 2: OPERATOR INVOICES & SUBSCRIPTION STATUS ─── -->
+            <!-- ─── SECTION 2: OPERATOR SUBSCRIPTION STATUS ─── -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                     <div>
-                        <h2 class="text-sm font-bold text-gray-900">Operator Subscriptions & Invoices</h2>
-                        <p class="text-xs text-gray-500 mt-0.5">Platform subscription status for active operator organizations.</p>
+                        <h2 class="text-sm font-bold text-gray-900">Operator subscriptions</h2>
+                        <p class="text-xs text-gray-500 mt-0.5">Recorded subscription status for operator organizations.</p>
                     </div>
                     <span class="text-xs text-gray-500">{{ $invoices->total() }} total operator {{ Str::plural('record', $invoices->total()) }}</span>
                 </div>
@@ -230,11 +233,11 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-white">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Invoice Ref</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tenant ID</th>
                             <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Operator Tenant</th>
                             <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Plan</th>
                             <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Plan Fee</th>
-                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Next Renewal / Expiry</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Recorded dates</th>
                             <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Subscription Status</th>
                             <th class="relative px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
                         </tr>
@@ -243,8 +246,8 @@
                         @forelse($invoices as $tenant)
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-xs font-bold text-gray-900 font-mono">INV-{{ date('Y') }}-{{ str_pad($tenant->id, 4, '0', STR_PAD_LEFT) }}</div>
-                                    <div class="text-[11px] text-gray-400">{{ $tenant->created_at->format('M Y') }} enrollment</div>
+                                    <div class="text-xs font-bold text-gray-900 font-mono">{{ $tenant->id }}</div>
+                                    <div class="text-[11px] text-gray-400">Created {{ $tenant->created_at->format('d M Y') }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <a href="{{ route('platform.tenants.show', $tenant) }}" class="text-sm font-bold text-blue-600 hover:underline block">
@@ -258,35 +261,35 @@
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                                    UGX {{ number_format((float) ($tenant->plan?->price ?? $tenant->plan_fee ?? 0)) }}
+                                    UGX {{ number_format((float) ($tenant->plan_fee ?? 0)) }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-700">
                                     @if($tenant->subscription_ends_at)
-                                        <div>{{ $tenant->subscription_ends_at->format('d M Y') }}</div>
-                                        <div class="text-[11px] text-gray-400">{{ $tenant->subscription_ends_at->diffForHumans() }}</div>
-                                    @elseif($tenant->trial_ends_at)
-                                        <div>{{ $tenant->trial_ends_at->format('d M Y') }}</div>
-                                        <div class="text-[11px] text-blue-600 font-medium">Trial ends {{ $tenant->trial_ends_at->diffForHumans() }}</div>
-                                    @else
-                                        <span class="text-gray-400">Ongoing</span>
+                                        <div>Subscription ends: {{ $tenant->subscription_ends_at->format('d M Y') }}</div>
+                                    @endif
+                                    @if($tenant->trial_ends_at)
+                                        <div>Trial ends: {{ $tenant->trial_ends_at->format('d M Y') }}</div>
+                                    @endif
+                                    @if(!$tenant->subscription_ends_at && !$tenant->trial_ends_at)
+                                        <span class="text-gray-400">No dates recorded</span>
                                     @endif
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     @if($tenant->subscription_status === 'active')
                                         <span class="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-green-600"></span> Active (Paid)
+                                            <span class="w-1.5 h-1.5 rounded-full bg-green-600"></span> Active
                                         </span>
                                     @elseif($tenant->subscription_status === 'trial')
                                         <span class="inline-flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span> 14-Day Trial
+                                            <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span> Trial
                                         </span>
                                     @elseif($tenant->subscription_status === 'past_due')
                                         <span class="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-red-600"></span> Overdue
+                                            <span class="w-1.5 h-1.5 rounded-full bg-red-600"></span> Past due
                                         </span>
                                     @else
                                         <span class="inline-flex items-center gap-1 text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span> Suspended
+                                            <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span> {{ $tenant->subscription_status ?: 'Unknown' }}
                                         </span>
                                     @endif
                                 </td>
