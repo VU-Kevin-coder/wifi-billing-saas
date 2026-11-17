@@ -1,15 +1,24 @@
 <x-app-layout>
-    <div class="py-8 bg-gray-50 min-h-screen" x-data="{ 
+    <div class="py-8 bg-gray-50 min-h-screen"
+         data-phone="{{ $defaultPhone }}"
+         data-method="{{ $payoutMethods[0] ?? '' }}"
+         data-currency="{{ $currency }}"
+         data-min-withdrawal="{{ (float) $minWithdrawal }}"
+         data-balance="{{ (float) ($tenant->wallet_balance ?? 0) }}"
+         x-init="phone = $el.dataset.phone; method = $el.dataset.method; currency = $el.dataset.currency; minWithdrawal = Number($el.dataset.minWithdrawal); balance = Number($el.dataset.balance)"
+         x-data="{
         showWithdraw: false, 
         step: 1,
         amount: '',
-        phone: @js($defaultPhone),
-        method: @js($payoutMethods[0] ?? ''),
+        phone: '',
+        method: '',
+        currency: '',
+        balance: 0,
         bankName: '',
         accountName: '',
         accountNumber: '',
         password: '',
-        minWithdrawal: {{ $minWithdrawal }},
+        minWithdrawal: 0,
         validDestination() { return this.method === 'bank_transfer' ? this.bankName.trim().length > 0 && this.accountName.trim().length > 0 && this.accountNumber.trim().length > 0 : this.phone.length >= 9; },
         resetForm() { this.step = 1; this.amount = ''; this.password = ''; this.showWithdraw = false; }
     }">
@@ -58,7 +67,7 @@
                     </div>
                     
                     <div class="mt-8">
-                        <button type="button" @click="showWithdraw = true; amount = {{ (float) ($tenant->wallet_balance ?? 0) }}" @disabled(empty($payoutMethods)) class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50">
+                        <button type="button" @click="showWithdraw = true; amount = balance" @disabled(empty($payoutMethods)) class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
                             Request payout
                         </button>
@@ -178,17 +187,7 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr>
-                                    <td colspan="6" class="px-6 py-12 text-center text-gray-500 text-sm">
-                                        <div class="flex flex-col items-center justify-center">
-                                            <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3 text-gray-400">
-                                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                            </div>
-                                            <p class="font-medium text-gray-700">No transactions recorded yet</p>
-                                            <p class="text-xs text-gray-400 mt-1">Transactions will appear as customers purchase vouchers or request payouts.</p>
-                                        </div>
-                                    </td>
-                                </tr>
+                                <x-ui.empty-table-row colspan="6" title="No transactions recorded yet" message="Transactions will appear as customers purchase vouchers or request payouts." />
                             @endforelse
                         </tbody>
                     </table>
@@ -275,7 +274,7 @@
                                     <div class="pt-8 flex gap-3">
                                         <button type="button" @click="resetForm()" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors">Cancel</button>
                                         <button type="button" 
-                                                @click="if (amount >= minWithdrawal && validDestination()) { step = 2; } else { window.toast.error('Enter at least {{ $currency }} ' + minWithdrawal.toLocaleString() + ' and complete the payout details.'); }"
+                                                @click="if (amount >= minWithdrawal && validDestination()) { step = 2; } else { window.toast.error('Enter at least ' + currency + ' ' + minWithdrawal.toLocaleString() + ' and complete the payout details.'); }"
                                                 class="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
                                             Next Step &rarr;
                                         </button>
