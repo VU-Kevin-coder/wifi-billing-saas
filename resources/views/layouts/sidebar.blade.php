@@ -33,10 +33,10 @@
             </div>
 
             <!-- Top Collapse / Expand Toggle Button -->
-            <button @click="sidebarCollapsed = !sidebarCollapsed" 
+            <button @click="sidebarCollapsed = !sidebarCollapsed"
                     type="button"
-                    :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-                    class="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:outline-none shrink-0">
+                    :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                    class="js-navigation-control js-desktop-navigation-control p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
                 <svg x-show="!sidebarCollapsed" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
                 </svg>
@@ -75,7 +75,7 @@
                 <p x-show="!sidebarCollapsed" class="text-[10px] font-bold text-gray-400 tracking-wider uppercase px-3 mb-1.5">Platform</p>
                 <div class="space-y-0.5">
                     <!-- Platform Dashboard -->
-                    <a href="{{ route('platform.dashboard') }}"
+                    <a aria-label="Dashboard" title="Dashboard" href="{{ route('platform.dashboard') }}"
                        class="{{ request()->routeIs('platform.dashboard') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.dashboard') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
@@ -84,7 +84,7 @@
                     </a>
 
                     <!-- Operator tenants -->
-                    <a href="{{ route('platform.tenants.index') }}" 
+                    <a aria-label="Operator tenants" title="Operator tenants" href="{{ route('platform.tenants.index') }}"
                        class="{{ request()->routeIs('platform.tenants.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.tenants.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
@@ -92,14 +92,14 @@
                         <span x-show="!sidebarCollapsed">Operator tenants</span>
                     </a>
 
-                    <a href="{{ route('platform.vpn-peers.index') }}"
+                    <a aria-label="WireGuard peers" title="WireGuard peers" href="{{ route('platform.vpn-peers.index') }}"
                        class="{{ request()->routeIs('platform.vpn-peers.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <span class="w-4 shrink-0 text-center text-sm">VPN</span>
                         <span x-show="!sidebarCollapsed">WireGuard peers</span>
                     </a>
 
                     <!-- Platform Billing -->
-                    <a href="{{ route('platform.billing.index') }}" 
+                    <a aria-label="Platform billing" title="Platform billing" href="{{ route('platform.billing.index') }}"
                        class="{{ request()->routeIs('platform.billing.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.billing.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -108,7 +108,7 @@
                     </a>
 
                     <!-- Revenue & Payouts -->
-                    <a href="{{ route('platform.revenue.index') }}" 
+                    <a aria-label="Revenue &amp; Payouts" title="Revenue &amp; Payouts" href="{{ route('platform.revenue.index') }}"
                        class="{{ request()->routeIs('platform.revenue.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.revenue.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
@@ -117,7 +117,7 @@
                     </a>
 
                     <!-- Refund requests -->
-                    <a href="{{ route('platform.refunds.index') }}"
+                    <a aria-label="Refund requests" title="Refund requests" href="{{ route('platform.refunds.index') }}"
                        class="{{ request()->routeIs('platform.refunds.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.refunds.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 010 10H9M3 10l4-4M3 10l4 4"/>
@@ -126,7 +126,7 @@
                     </a>
 
                     <!-- Platform Configuration -->
-                    <a href="{{ route('platform.configuration.index') }}" 
+                    <a aria-label="Configuration" title="Configuration" href="{{ route('platform.configuration.index') }}"
                        class="{{ request()->routeIs('platform.configuration.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.configuration.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
@@ -134,14 +134,15 @@
                         </svg>
                         <span x-show="!sidebarCollapsed">Configuration</span>
                     </a>
-                    <a href="{{ route('platform.configuration.control') }}"
-                       class="{{ request()->routeIs('platform.configuration.control*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} ml-7 flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                    <a aria-label="Control settings" title="Control settings" href="{{ route('platform.configuration.control') }}"
+                       class="{{ request()->routeIs('platform.configuration.control*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <span x-show="sidebarCollapsed" aria-hidden="true">CS</span>
                         <span x-show="!sidebarCollapsed">Control settings</span>
                     </a>
 
                     @if($currentTenant)
                     <!-- Return to Platform -->
-                    <a href="{{ route('platform.tenants.index') }}" 
+                    <a aria-label="Platform Console" title="Platform Console" href="{{ route('platform.tenants.index') }}"
                        class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
@@ -160,7 +161,7 @@
                 <p x-show="!sidebarCollapsed" class="text-[10px] font-bold text-gray-400 tracking-wider uppercase px-3 mb-1.5">Workspace</p>
                 <div class="space-y-0.5">
                     <!-- Dashboard -->
-                    <a href="{{ route('dashboard') }}" 
+                    <a aria-label="Dashboard" title="Dashboard" href="{{ route('dashboard') }}"
                        class="{{ request()->routeIs('dashboard', 'operator.dashboard') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('dashboard', 'operator.dashboard') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
@@ -169,7 +170,7 @@
                     </a>
 
                     <!-- Customers -->
-                    <a href="{{ route('operator.customers.index') }}" 
+                    <a aria-label="Customers" title="Customers" href="{{ route('operator.customers.index') }}"
                        class="{{ request()->routeIs('operator.customers.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.customers.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
@@ -179,7 +180,7 @@
 
                     <!-- SaaS billing -->
                     @if(auth()->user()->hasAnyRole(['operator_admin', 'operator_finance']) || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
-                    <a href="{{ route('operator.billing.index') }}"
+                    <a aria-label="SaaS billing" title="SaaS billing" href="{{ route('operator.billing.index') }}"
                        class="{{ request()->routeIs('operator.billing.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -195,7 +196,7 @@
                 <p x-show="!sidebarCollapsed" class="text-[10px] font-bold text-gray-400 tracking-wider uppercase px-3 mb-1.5">Network</p>
                 <div class="space-y-0.5">
                     <!-- MikroTik routers -->
-                    <a href="{{ route('operator.routers.index') }}" 
+                    <a aria-label="MikroTik routers" title="MikroTik routers" href="{{ route('operator.routers.index') }}"
                        class="{{ request()->routeIs('operator.routers.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.routers.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
@@ -204,7 +205,7 @@
                     </a>
 
                     <!-- Sites & hotspots -->
-                    <a href="{{ route('operator.sites.index') }}"
+                    <a aria-label="Sites &amp; hotspots" title="Sites &amp; hotspots" href="{{ route('operator.sites.index') }}"
                        class="{{ request()->routeIs('operator.sites.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.sites.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
@@ -214,7 +215,7 @@
                     </a>
 
                     <!-- Live sessions -->
-                    <a href="{{ route('operator.sessions.index') }}" 
+                    <a aria-label="Live sessions" title="Live sessions" href="{{ route('operator.sessions.index') }}"
                        class="{{ request()->routeIs('operator.sessions.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.sessions.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
@@ -229,7 +230,7 @@
                 <p x-show="!sidebarCollapsed" class="text-[10px] font-bold text-gray-400 tracking-wider uppercase px-3 mb-1.5">Billing</p>
                 <div class="space-y-0.5">
                     <!-- Internet packages -->
-                    <a href="{{ route('operator.packages.index') }}" 
+                    <a aria-label="Internet packages" title="Internet packages" href="{{ route('operator.packages.index') }}"
                        class="{{ request()->routeIs('operator.packages.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.packages.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
@@ -238,7 +239,7 @@
                     </a>
 
                     <!-- Vouchers -->
-                    <a href="{{ route('operator.vouchers.index') }}" 
+                    <a aria-label="Vouchers" title="Vouchers" href="{{ route('operator.vouchers.index') }}"
                        class="{{ request()->routeIs('operator.vouchers.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.vouchers.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/>
@@ -247,7 +248,7 @@
                     </a>
 
                     <!-- Wallet & Mobile Money -->
-                    <a href="{{ route('operator.wallet.index') }}" 
+                    <a aria-label="Wallet &amp; Payouts" title="Wallet &amp; Payouts" href="{{ route('operator.wallet.index') }}"
                        class="{{ request()->routeIs('operator.wallet.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors group">
                         <div class="flex items-center gap-3">
                             <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.wallet.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -258,7 +259,7 @@
                     </a>
 
                     <!-- Refunds -->
-                    <a href="{{ route('operator.refunds.index') }}"
+                    <a aria-label="Refunds" title="Refunds" href="{{ route('operator.refunds.index') }}"
                        class="{{ request()->routeIs('operator.refunds.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors group">
                         <div class="flex items-center gap-3">
                             <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.refunds.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -269,7 +270,7 @@
                     </a>
 
                     <!-- Analytics -->
-                    <a href="{{ route('operator.analytics') }}"
+                    <a aria-label="Analytics" title="Analytics" href="{{ route('operator.analytics') }}"
                        class="{{ request()->routeIs('operator.analytics') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors group">
                         <div class="flex items-center gap-3">
                             <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.analytics') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -286,7 +287,7 @@
                 <p x-show="!sidebarCollapsed" class="text-[10px] font-bold text-gray-400 tracking-wider uppercase px-3 mb-1.5">Management</p>
                 <div class="space-y-0.5">
                     <!-- Usage analytics -->
-                    <a href="#" 
+                    <a aria-label="Usage analytics" title="Usage analytics" href="#"
                        class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -295,7 +296,7 @@
                     </a>
 
                     <!-- Reports -->
-                    <a href="#" 
+                    <a aria-label="Reports" title="Reports" href="#"
                        class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -305,7 +306,7 @@
 
                     <!-- Team -->
                     @if(auth()->user()->hasRole('operator_admin') || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))
-                    <a href="{{ route('operator.team.index') }}"
+                    <a aria-label="System users &amp; roles" title="System users &amp; roles" href="{{ route('operator.team.index') }}"
                        class="{{ request()->routeIs('operator.team.*', 'operator.staff.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.team.*', 'operator.staff.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
@@ -315,7 +316,7 @@
                     @endif
 
                     <!-- Settings -->
-                    <a href="{{ route('operator.settings.index') }}"
+                    <a aria-label="Settings" title="Settings" href="{{ route('operator.settings.index') }}"
                        class="{{ request()->routeIs('operator.settings.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('operator.settings.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
@@ -334,9 +335,9 @@
     <div class="border-t border-gray-100 p-3 bg-white">
 
         <!-- User Profile Card -->
-        <div class="relative" x-data="{ userMenuOpen: false }">
-            <div @click="userMenuOpen = !userMenuOpen" 
-                 class="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors group">
+        <div class="relative" x-data="{ userMenuOpen: false }" @keydown.escape="if (userMenuOpen) { userMenuOpen = false; $event.stopPropagation(); $el.querySelector('button').focus() }">
+            <button type="button" @click="userMenuOpen = !userMenuOpen" :aria-expanded="userMenuOpen.toString()" aria-expanded="false" aria-label="Account menu"
+                 class="js-navigation-control w-full items-center justify-between p-2 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors group">
                 <div class="flex items-center gap-2.5 min-w-0">
                     <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0">
                         {{ $userInitials }}
@@ -349,6 +350,14 @@
                 <svg x-show="!sidebarCollapsed" class="w-4 h-4 text-gray-400 group-hover:text-gray-600 shrink-0 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
+            </button>
+
+            <div class="navigation-account-fallback">
+                <a href="{{ route('profile.edit') }}">Profile Settings</a>
+                @if($user?->hasRole('platform_admin') && session()->has('impersonate_tenant'))
+                    <form method="POST" action="{{ route('platform.stop-impersonate') }}">@csrf<button type="submit">Exit Impersonation</button></form>
+                @endif
+                <form method="POST" action="{{ route('logout') }}">@csrf<button type="submit">Log Out</button></form>
             </div>
 
             <!-- Profile Dropdown Menu -->
