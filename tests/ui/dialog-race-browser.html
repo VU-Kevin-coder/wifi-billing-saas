@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RUNNING</title></head><body>
+<pre id="results"></pre><script src="../../public/js/ui-dialog.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#results');
+  function check(ok, label) { if (!ok) throw Error(label); out.textContent += 'PASS ' + label + '\n'; }
+  const current = () => document.querySelector('dialog.ui-dialog');
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  try {
+    let first = Swal.fire({title:'race'}), d = current();
+    d.remove(); document.body.append(d); d.querySelector('.ui-dialog-confirm').click();
+    check(!(await first).isConfirmed, 'remove and reinsert before click fails closed');
+    await tick();
+    first = Swal.fire({title:'reopen'}); d = current();
+    d.close(); d.showModal(); d.querySelector('.ui-dialog-confirm').click();
+    check(!(await first).isConfirmed, 'close and reopen before click fails closed');
+    await tick();
+    let nested;
+    first = Swal.fire({input:'text', showCancelButton:true, inputValidator: async () => { await Promise.resolve(); nested = await Swal.fire({title:'nested'}); return null; }});
+    current().querySelector('.ui-dialog-confirm').click(); await tick();
+    check(nested.isDismissed && current().querySelector('.ui-dialog-error').textContent.includes('Nested'), 'nested async validator fails closed');
+    current().querySelector('.ui-dialog-cancel').click();
+    check(!(await first).isConfirmed, 'validator dialog cancellation fails closed');
+    await tick();
+    first = Swal.fire({title:'next'}); current().querySelector('.ui-dialog-confirm').click();
+    check((await first).isConfirmed, 'queue remains usable');
+    document.title = 'PASS';
+  } catch (error) { out.textContent += 'FAIL ' + error.stack; document.title = 'FAIL'; }
+})();
+</script></body></html>

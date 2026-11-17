@@ -1,0 +1,132 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>BODY{font:16px sans-serif}button{margin:8px}.ui-dialog { width: min(28rem, calc(100% - 2rem)); max-height: calc(100% - 2rem); overflow: auto; box-sizing: border-box; border: 0; border-radius: 1rem; padding: 1.5rem; color: #111827; background: white; box-shadow: 0 20px 50px rgba(0,0,0,.24); font: inherit; }
+.ui-dialog::backdrop { background: rgba(15,23,42,.65); }
+.ui-dialog h2 { margin: 0 0 .75rem; font-size: 1.25rem; font-weight: 700; }
+.ui-dialog p { margin: 0 0 1rem; white-space: pre-wrap; color: #4b5563; }
+.ui-dialog label { display: block; font-weight: 600; margin: 1rem 0 .35rem; }
+.ui-dialog textarea, .ui-dialog input { width: 100%; box-sizing: border-box; border: 1px solid #9ca3af; border-radius: .5rem; padding: .65rem; font: inherit; }
+.ui-dialog textarea { min-height: 6rem; resize: vertical; }
+.ui-dialog .ui-dialog-error { color: #b91c1c; margin: .35rem 0 0; }
+.ui-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; margin-top: 1.25rem; }
+.ui-dialog-actions button { border: 0; border-radius: .5rem; padding: .65rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
+.ui-dialog-cancel { background: #e5e7eb; color: #111827; }
+.ui-dialog-confirm { background: #2563eb; color: white; }
+.ui-dialog-confirm.ui-dialog-danger { background: #b91c1c; }
+.ui-dialog :focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+.ui-dialog button:disabled { opacity: .6; cursor: wait; }
+</style></head><body><button id="basic">Basic</button><button id="input">Input</button><button id="queued">Queue</button><output id="result">none</output><script>/* A small local, text-only SweetAlert-style dialog API. Never interpret messages as HTML. */
+(() => {
+    const queue = [];
+    let active = false;
+
+    function next() {
+        if (active || queue.length === 0) return;
+        active = true;
+        const { options, resolve } = queue.shift();
+        let previous, dialog;
+        let finished = false;
+        function finish(result) {
+            if (finished) return;
+            finished = true;
+            try { if (dialog?.open) dialog.close(); } catch (_) {}
+            try { dialog?.remove(); } catch (_) {}
+            try { if (previous?.isConnected && typeof previous.focus === 'function') previous.focus(); } catch (_) {}
+            active = false;
+            resolve(result);
+            queueMicrotask(next);
+        }
+        try {
+        previous = document.activeElement;
+        dialog = document.createElement('dialog');
+        dialog.className = 'ui-dialog';
+        dialog.setAttribute('aria-labelledby', 'ui-dialog-title');
+        dialog.setAttribute('aria-describedby', 'ui-dialog-message');
+        const title = document.createElement('h2');
+        title.id = 'ui-dialog-title';
+        title.textContent = String(options.title || 'Information');
+        const message = document.createElement('p');
+        message.id = 'ui-dialog-message';
+        message.textContent = String(options.text || '');
+        dialog.append(title, message);
+
+        let input;
+        let error;
+        if (options.input === 'textarea' || options.input === 'text') {
+            const label = document.createElement('label');
+            label.textContent = String(options.inputLabel || 'Response');
+            input = document.createElement(options.input === 'textarea' ? 'textarea' : 'input');
+            input.placeholder = String(options.inputPlaceholder || '');
+            input.id = 'ui-dialog-input';
+            label.htmlFor = input.id;
+            const maxLength = Number(options.inputAttributes?.maxlength);
+            if (Number.isInteger(maxLength) && maxLength > 0) input.maxLength = maxLength;
+            error = document.createElement('p');
+            error.className = 'ui-dialog-error';
+            error.id = 'ui-dialog-error';
+            error.setAttribute('role', 'alert');
+            input.setAttribute('aria-describedby', error.id);
+            dialog.append(label, input, error);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'ui-dialog-actions';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'ui-dialog-cancel';
+        cancel.textContent = String(options.cancelButtonText || 'Cancel');
+        const confirm = document.createElement('button');
+        confirm.type = 'button';
+        confirm.className = 'ui-dialog-confirm';
+        if (options.icon === 'warning' || options.icon === 'error') confirm.classList.add('ui-dialog-danger');
+        confirm.textContent = String(options.confirmButtonText || 'OK');
+        if (options.showCancelButton) actions.append(cancel);
+        actions.append(confirm);
+        dialog.append(actions);
+        cancel.addEventListener('click', () => finish({ isConfirmed: false, isDismissed: true }));
+        dialog.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            finish({ isConfirmed: false, isDismissed: true });
+        });
+        dialog.addEventListener('close', () => finish({ isConfirmed: false, isDismissed: true }));
+        confirm.addEventListener('click', async () => {
+            confirm.disabled = true;
+            try {
+                const value = input?.value;
+                const validation = input && options.inputValidator ? await options.inputValidator(value) : null;
+                if (finished) return;
+                if (validation) {
+                    error.textContent = String(validation);
+                    input.setAttribute('aria-invalid', 'true');
+                    input.focus();
+                    return;
+                }
+                finish({ isConfirmed: true, isDismissed: false, value });
+            } catch (_) {
+                if (error) error.textContent = 'Unable to validate the response. Please try again.';
+            } finally {
+                confirm.disabled = false;
+            }
+        });
+            document.body.append(dialog);
+            if (typeof dialog.showModal !== 'function') throw new Error('Modal dialogs unavailable');
+            dialog.showModal();
+            (options.showCancelButton && options.focusCancel ? cancel : (input || confirm)).focus();
+        } catch (_) {
+            finish({ isConfirmed: false, isDismissed: true });
+            try { window.dispatchEvent(new CustomEvent('ui-toast', { detail: { type: 'error', message: 'Dialog unavailable. Your action was not confirmed.' } })); } catch (_) {}
+        }
+    }
+
+    window.Swal = {
+        fire(options = {}) {
+            return new Promise((resolve) => {
+                queue.push({ options, resolve });
+                next();
+            });
+        },
+    };
+})();
+</script><script>
+const out=document.querySelector('#result');
+document.querySelector('#basic').onclick=async()=>{out.textContent=JSON.stringify(await Swal.fire({title:'Confirm action',text:'Safe <b>text</b>',showCancelButton:true,focusCancel:true}));};
+document.querySelector('#input').onclick=async()=>{out.textContent=JSON.stringify(await Swal.fire({title:'Enter response',text:'Validation test',input:'text',inputLabel:'Response',showCancelButton:true,inputAttributes:{maxlength:5},inputValidator:v=>v?null:'Required'}));};
+document.querySelector('#queued').onclick=async()=>{let a=Swal.fire({title:'First',showCancelButton:true});let b=Swal.fire({title:'Second',showCancelButton:true});out.textContent=JSON.stringify([await a,await b]);};
+</script></body></html>
