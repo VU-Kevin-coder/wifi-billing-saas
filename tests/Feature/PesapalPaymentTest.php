@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -28,6 +29,7 @@ class PesapalPaymentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Http::preventStrayRequests();
 
         Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
@@ -40,6 +42,10 @@ class PesapalPaymentTest extends TestCase
             'commission_rate' => 10,
             'wallet_balance' => 0,
         ]);
+
+        // Exercise payment verification with a supported, non-RADIUS test router.
+        Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Synthetic site-agent router'])
+            ->forceFill(['access_backend' => 'site_agent'])->save();
 
         $this->platformAdmin = User::factory()->create(['tenant_id' => null]);
         $this->platformAdmin->assignRole('platform_admin');
@@ -298,6 +304,7 @@ class PesapalPaymentTest extends TestCase
 
         $response->assertRedirect()
             ->assertSessionHasErrors('error');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/Transactions/GetTransactionStatus?orderTrackingId=trk-pesapal-regression-1'));
         $this->assertPesapalOrdersRemainPending($transactions);
     }
 
@@ -343,6 +350,7 @@ class PesapalPaymentTest extends TestCase
             ]);
         }
 
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/Transactions/GetTransactionStatus?orderTrackingId=trk-pesapal-regression-1'));
         $this->assertPesapalOrdersRemainPending($transactions);
     }
 
@@ -510,6 +518,8 @@ class PesapalPaymentTest extends TestCase
         }
 
         $this->assertDatabaseCount('vouchers', 0);
+        $this->assertDatabaseCount('sale_fulfillment_work', 0);
+        $this->assertDatabaseCount('wallet_ledger_entries', 0);
         $this->assertSame(0.0, (float) $this->tenant->fresh()->wallet_balance);
     }
 }

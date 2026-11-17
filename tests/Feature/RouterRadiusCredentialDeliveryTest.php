@@ -7,10 +7,10 @@ use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Policy\Policy;
+use App\Services\RadiusRouterCredentialService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -28,55 +28,65 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         Role::firstOrCreate(['name' => 'operator_network', 'guard_name' => 'web']);
     }
 
-    public function test_authorized_operator_receives_encrypted_router_secret_once_without_cache_or_audit_disclosure(): void
+    public function test_authorized_operator_is_denied_new_secret_without_cache_or_audit_disclosure(): void
     {
         $tenant = $this->tenant('radius-owner');
         $router = $this->router($tenant);
         $operator = $this->operator($tenant);
         $serviceSecret = 'separate-radius-service-credential-for-test';
         config(['radius_policy.service_secret' => $serviceSecret]);
+        $before = DB::table('routers')->where('id', $router->id)->first();
 
-        $response = $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
-            'nas_identifier' => 'nas-radius-owner-01',
-            'confirm_radius_mode' => '1',
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $response = $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
+                'nas_identifier' => 'nas-radius-owner-01', 'confirm_radius_mode' => '1',
+            ]);
+            $response->assertStatus(503)
+                ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store, private')
+                ->assertHeader('Pragma', 'no-cache')
+                ->assertHeader('Referrer-Policy', 'no-referrer')
+                ->assertSee(RadiusRouterCredentialService::UNAVAILABLE_MESSAGE)
+                ->assertDontSee($serviceSecret)
+                ->assertDontSee('radius-shared-secret');
+            $this->assertEquals($before, DB::table('routers')->where('id', $router->id)->first());
+            $this->assertUnconfigured($router);
+        }
+        $this->assertArrayNotHasKey('radius_shared_secret', $router->fresh()->toArray());
+        $this->assertSame(0, AuditLog::query()->where('action', 'router.radius_credential_provisioned')->count());
+    }
+
+    public function test_existing_synthetic_secret_stays_encrypted_hidden_and_unchanged_when_opt_in_is_denied(): void
+    {
+        $tenant = $this->tenant('existing-radius-secret');
+        $router = $this->router($tenant);
+        $secret = str_repeat('a', 64);
+        $router->forceFill(['access_backend' => 'radius', 'radius_nas_identifier' => 'existing-nas', 'radius_shared_secret' => $secret])->save();
+        $before = DB::table('routers')->where('id', $router->id)->first();
+        $this->assertNotSame($secret, $before->radius_shared_secret);
+        $this->assertSame($secret, Crypt::decryptString($before->radius_shared_secret));
+        $this->assertArrayNotHasKey('radius_shared_secret', $router->fresh()->toArray());
+        $response = $this->actingAs($this->operator($tenant))->post($this->provisionUrl($tenant, $router), [
+            'nas_identifier' => 'existing-nas', 'confirm_radius_mode' => '1',
         ]);
-
-        $response->assertOk()
-            ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store, private')
-            ->assertHeader('Pragma', 'no-cache')
-            ->assertHeader('Referrer-Policy', 'no-referrer')
-            ->assertSee('This secret is shown once.')
-            ->assertDontSee($serviceSecret);
-
-        $matches = [];
-        $this->assertSame(
-            1,
-            preg_match('/<code id="radius-shared-secret"[^>]*>([a-f0-9]{64})<\/code>/', $response->getContent(), $matches),
-            'The protected one-time page should contain exactly one generated router secret.'
-        );
-        $secret = $matches[1];
-        $this->assertSame(1, substr_count($response->getContent(), $secret));
-
-        $ciphertext = DB::table('routers')->where('id', $router->id)->value('radius_shared_secret');
-        $this->assertNotSame($secret, $ciphertext);
-        $this->assertSame($secret, Crypt::decryptString($ciphertext));
-
-        $freshRouter = $router->fresh();
-        $this->assertSame('radius', $freshRouter->access_backend);
-        $this->assertSame('nas-radius-owner-01', $freshRouter->radius_nas_identifier);
-        $this->assertArrayNotHasKey('radius_shared_secret', $freshRouter->toArray());
-
-        $audit = AuditLog::query()->where('action', 'router.radius_credential_provisioned')->firstOrFail();
-        $this->assertStringNotContainsString($secret, json_encode($audit->meta, JSON_THROW_ON_ERROR));
-
-        $repeat = $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
-            'nas_identifier' => 'nas-radius-owner-01',
-            'confirm_radius_mode' => '1',
-        ]);
-        $repeat->assertStatus(409)
+        $response->assertStatus(503)->assertSee(RadiusRouterCredentialService::UNAVAILABLE_MESSAGE)
             ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store, private')
             ->assertDontSee($secret);
-        $this->assertSame($ciphertext, DB::table('routers')->where('id', $router->id)->value('radius_shared_secret'));
+        $this->assertEquals($before, DB::table('routers')->where('id', $router->id)->first());
+        $this->assertSame(0, AuditLog::query()->where('action', 'router.radius_credential_provisioned')->count());
+    }
+
+    public function test_synthetic_one_time_view_renders_secret_exactly_once(): void
+    {
+        $tenant = $this->tenant('synthetic-view');
+        $router = $this->router($tenant);
+        $secret = str_repeat('b', 64);
+        $this->actingAs($this->operator($tenant));
+        view()->share('errors', new \Illuminate\Support\ViewErrorBag);
+        $html = view('operator.routers.radius-credential', compact('tenant', 'router', 'secret'))->render();
+        $this->assertStringContainsString('This secret is shown once.', $html);
+        $this->assertSame(1, preg_match('/<code id="radius-shared-secret"[^>]*>([a-f0-9]{64})<\/code>/', $html, $matches));
+        $this->assertSame($secret, $matches[1]);
+        $this->assertSame(1, substr_count($html, $secret));
     }
 
     public function test_non_admin_operator_cannot_provision_a_radius_secret(): void
@@ -112,32 +122,26 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         $this->assertUnconfigured($router);
     }
 
-    public function test_failed_persistence_rolls_back_mode_and_never_returns_a_secret(): void
+    public function test_shutdown_rejects_before_persistence_and_never_returns_a_secret(): void
     {
         $tenant = $this->tenant('radius-rollback');
         $router = $this->router($tenant);
         $operator = $this->operator($tenant);
-
-        Router::getEventDispatcher()->listen('eloquent.saving: '.Router::class, function (Router $savingRouter) use ($router): ?bool {
-            if ($savingRouter->is($router) && $savingRouter->access_backend === 'radius') {
+        $before = DB::table('routers')->where('id', $router->id)->first();
+        $saveAttempted = false;
+        Router::getEventDispatcher()->listen('eloquent.saving: '.Router::class, function (Router $savingRouter) use ($router, &$saveAttempted): ?bool {
+            if ($savingRouter->is($router)) {
+                $saveAttempted = true;
                 return false;
             }
-
             return null;
         });
-
-        $this->withoutExceptionHandling();
-
-        try {
-            $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
-                'nas_identifier' => 'nas-radius-rollback',
-                'confirm_radius_mode' => '1',
-            ]);
-            $this->fail('A cancelled persistence attempt must not produce a response containing the secret.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame('The RADIUS credential could not be persisted.', $exception->getMessage());
-        }
-
+        $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
+            'nas_identifier' => 'nas-radius-rollback', 'confirm_radius_mode' => '1',
+        ])->assertStatus(503)->assertSee(RadiusRouterCredentialService::UNAVAILABLE_MESSAGE)
+            ->assertDontSee('radius-shared-secret');
+        $this->assertFalse($saveAttempted, 'The disabled path must not even attempt persistence.');
+        $this->assertEquals($before, DB::table('routers')->where('id', $router->id)->first());
         $this->assertUnconfigured($router);
         $this->assertSame(0, AuditLog::query()->where('action', 'router.radius_credential_provisioned')->count());
     }

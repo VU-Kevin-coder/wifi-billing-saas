@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
+use App\Models\Site;
+use App\Models\SiteAgent;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -15,6 +18,16 @@ use Tests\TestCase;
 class FlutterwaveConfigurationTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function createSyntheticAgentRouter(Tenant $tenant): void
+    {
+        // Synthetic only: fulfillment remains provisioning until an agent confirms it.
+        config(['site_agent.required' => true]);
+        $site = Site::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site']);
+        $router = Router::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic router', 'status' => 'online']);
+        $router->forceFill(['access_backend' => 'site_agent'])->save();
+        SiteAgent::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic agent', 'token_hash' => hash('sha256', 'synthetic-unused-token')]);
+    }
 
     protected function setUp(): void
     {
@@ -94,6 +107,7 @@ class FlutterwaveConfigurationTest extends TestCase
             'status' => 'active',
             'commission_rate' => 5,
         ]);
+        $this->createSyntheticAgentRouter($tenant);
         $package = Package::create([
             'tenant_id' => $tenant->id,
             'name' => 'One hour',
@@ -142,6 +156,8 @@ class FlutterwaveConfigurationTest extends TestCase
         $this->assertSame('completed', $transaction->fresh()->status);
         $this->assertDatabaseCount('vouchers', 1);
         $this->assertDatabaseCount('sessions_log', 1);
+        $this->assertDatabaseHas('sessions_log', ['tenant_id' => $tenant->id, 'status' => 'provisioning']);
+        $this->assertDatabaseHas('site_agent_commands', ['tenant_id' => $tenant->id, 'operation' => 'provision_user', 'status' => 'pending']);
         Http::assertSentCount(1);
     }
 

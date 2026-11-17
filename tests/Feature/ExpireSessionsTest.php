@@ -44,8 +44,12 @@ class ExpireSessionsTest extends TestCase
             $mock->shouldReceive('disconnectUser')
                 ->once()
                 ->withArgs(fn (Router $target, string $code): bool => $target->is($router) && $code === $voucher->code)
-                ->andThrow(new \RuntimeException('Router unavailable'));
+                ->andThrow(new \RuntimeException('synthetic-secret synthetic-user private-data'));
         });
+        \Illuminate\Support\Facades\Log::shouldReceive('error')->once()->with(
+            'Unable to disconnect expired MikroTik session; it will be retried.',
+            ['session_id' => $session->id, 'router_id' => $router->id, 'voucher_id' => $voucher->id],
+        );
 
         $this->artisan('sessions:expire')->assertExitCode(1);
 

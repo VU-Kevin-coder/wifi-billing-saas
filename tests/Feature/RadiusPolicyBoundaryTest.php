@@ -7,6 +7,7 @@ use App\Models\PlatformSetting;
 use App\Models\RadiusAccountingEvent;
 use App\Models\RadiusAccountingSession;
 use App\Models\RadiusDisconnectCommand;
+use App\Models\RadiusNasSessionIdentity;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Tenant;
@@ -16,6 +17,7 @@ use App\Models\VoucherBatch;
 use App\Services\PaymentService;
 use App\Services\RadiusAccountingService;
 use App\Services\RadiusRouterCredentialService;
+use App\Services\RadiusUnavailableException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -36,11 +38,20 @@ class RadiusPolicyBoundaryTest extends TestCase
             'name' => 'Secret Test Router',
         ]);
 
-        $secret = app(RadiusRouterCredentialService::class)->optIn($router, 'nas-secret-test');
+        // Legacy synthetic credential: opt-in remains blocked, but encrypted storage
+        // and serialization must continue to protect already-configured routers.
+        $secret = str_repeat('a', 64);
+        $router->forceFill(['access_backend' => 'radius', 'radius_nas_identifier' => 'nas-secret-test', 'radius_shared_secret' => $secret])->save();
+        $before = DB::table('routers')->where('id', $router->id)->first();
+        try {
+            app(RadiusRouterCredentialService::class)->optIn($router, 'nas-secret-test');
+            $this->fail('RADIUS opt-in must be blocked');
+        } catch (RadiusUnavailableException $e) {
+            $this->assertSame(RadiusRouterCredentialService::UNAVAILABLE_MESSAGE, $e->getMessage());
+        }
+        $this->assertEquals($before, DB::table('routers')->where('id', $router->id)->first());
         $router->refresh();
         $stored = DB::table('routers')->where('id', $router->id)->value('radius_shared_secret');
-
-        $this->assertSame(64, strlen($secret));
         $this->assertNotSame($secret, $stored);
         $this->assertSame($secret, Crypt::decryptString($stored));
         $this->assertSame('radius', $router->access_backend);
@@ -80,7 +91,7 @@ class RadiusPolicyBoundaryTest extends TestCase
             $server,
             $body,
         );
-        $first->assertOk()->assertExactJson(['decision' => 'reject']);
+        $first->assertStatus(503)->assertExactJson(['message' => 'RADIUS policy unavailable.']);
 
         $replay = $this->call(
             'POST',
@@ -122,7 +133,7 @@ class RadiusPolicyBoundaryTest extends TestCase
                 'voucher_code' => 'NOT-A-VOUCHER',
             ],
             '10.41.2.9',
-        )->assertOk()->assertExactJson(['decision' => 'reject']);
+        )->assertStatus(503)->assertExactJson(['message' => 'RADIUS policy unavailable.']);
     }
 
     public function test_private_policy_route_rejects_a_non_allowlisted_peer_even_with_forwarded_ip_header(): void
@@ -173,8 +184,8 @@ class RadiusPolicyBoundaryTest extends TestCase
                 null,
                 $nonce,
             );
-            $this->assertSame(200, $response->status(), $response->getContent());
-            $response->assertExactJson(['decision' => 'reject']);
+            $this->assertSame(503, $response->status(), $response->getContent());
+            $response->assertExactJson(['message' => 'RADIUS policy unavailable.']);
 
             $this->signedCall(
                 'POST',
@@ -221,62 +232,53 @@ class RadiusPolicyBoundaryTest extends TestCase
         });
     }
 
-    public function test_all_private_policy_endpoints_return_expected_runtime_responses(): void
+    public function test_signed_adapter_claims_cannot_select_a_router_or_mutate_policy_state(): void
     {
         config([
             'radius_policy.service_secret' => self::SERVICE_SECRET,
             'radius_policy.nonce_cache_store' => null,
         ]);
-        [$tenant, $router, $voucher, $session] = $this->createRadiusAccess();
-        $eventTime = now()->subSeconds(30)->startOfSecond();
+        [, $routerA, $voucherA, $sessionA] = $this->createRadiusAccess();
+        [, $routerB, $voucherB, $sessionB] = $this->createRadiusAccess();
 
-        $this->signedCall('POST', '/internal/radius/v1/authorize', [
-            'nas_identifier' => $router->radius_nas_identifier,
-            'nas_session_id' => 'api-runtime-session',
-            'voucher_code' => $voucher->code,
-        ])->assertOk()->assertJsonPath('decision', 'accept');
+        // A valid adapter signature and a packet-supplied NAS are not proof
+        // that either router originated the packet, even with matching voucher.
+        foreach ([[$routerA, $voucherA], [$routerB, $voucherB], [$routerB, $voucherA]] as [$claimedRouter, $voucher]) {
+            $payload = [
+                'nas_identifier' => $claimedRouter->radius_nas_identifier,
+                'nas_session_id' => 'attacker-session',
+                'voucher_code' => $voucher->code,
+                'authenticated_router_id' => $routerA->id,
+                'authenticated_nas_identifier' => $routerA->radius_nas_identifier,
+            ];
+            $this->signedCall('POST', '/internal/radius/v1/authorize', $payload)
+                ->assertStatus(503)->assertExactJson(['message' => 'RADIUS policy unavailable.'])
+                ->assertHeader('Cache-Control', 'no-store, private');
+            $this->signedCall('POST', '/internal/radius/v1/accounting-events', $payload + [
+                'status_type' => 'Start',
+                'event_time' => now()->toIso8601String(),
+            ])->assertStatus(503);
+        }
 
-        $this->signedCall('POST', '/internal/radius/v1/accounting-events', [
-            'nas_identifier' => $router->radius_nas_identifier,
-            'nas_session_id' => 'api-runtime-session',
-            'status_type' => 'Start',
-            'event_time' => $eventTime->toIso8601String(),
-            'input_octets' => 1,
-            'output_octets' => 2,
-            'voucher_code' => $voucher->code,
-        ])->assertOk()->assertJsonPath('accepted', true);
-
-        $this->assertSame('active', $session->fresh()->status);
-        $this->assertTrue(app(RadiusAccountingService::class)->requestDisconnect(
-            $session,
-            'revocation:'.$session->id.':disconnected',
-        ));
-
-        $commands = $this->signedCall('GET', '/internal/radius/v1/disconnect-commands')
-            ->assertOk()
-            ->assertJsonCount(1, 'commands')
-            ->json('commands');
-        $this->signedCall(
-            'POST',
-            '/internal/radius/v1/disconnect-commands/'.$commands[0]['command_id'].'/ack',
-            ['result' => 'delivered'],
-        )->assertOk()->assertJsonPath('delivery_state', 'delivery_acknowledged');
-
-        $this->assertSame('disconnecting', $session->fresh()->status);
-        $this->assertSame((int) $tenant->id, (int) $router->fresh()->tenant_id);
+        $this->assertSame('provisioning', $sessionA->fresh()->status);
+        $this->assertSame('provisioning', $sessionB->fresh()->status);
+        $this->assertSame(0, RadiusAccountingSession::query()->count());
+        $this->assertSame(0, RadiusAccountingEvent::query()->count());
+        $this->signedCall('GET', '/internal/radius/v1/disconnect-commands')->assertStatus(503);
+        $this->signedCall('POST', '/internal/radius/v1/disconnect-commands/'.Str::uuid().'/ack', [
+            'result' => 'delivered',
+        ])->assertStatus(503);
+        $this->assertSame(0, RadiusDisconnectCommand::query()->count());
     }
 
-    public function test_authorization_is_router_tenant_and_entitlement_scoped(): void
+    public function test_authorization_rejects_even_matching_router_tenant_and_entitlement_while_unavailable(): void
     {
         [$tenant, $router, $voucher, $session, $package] = $this->createRadiusAccess();
         $service = app(RadiusAccountingService::class);
 
         $decision = $service->authorize('nas-radius-'.$tenant->slug, 'nas-auth-session', $voucher->code);
 
-        $this->assertSame('accept', $decision['decision']);
-        $this->assertSame(10, $decision['policy']['rate_limit_mbps']);
-        $this->assertSame(2, $decision['policy']['device_limit']);
-        $this->assertSame(5368709120, $decision['policy']['data_limit_bytes']);
+        $this->assertSame(['decision' => 'reject'], $decision);
         $this->assertSame('provisioning', $session->fresh()->status);
 
         $otherTenant = $this->createTenant('radius-other');
@@ -324,59 +326,25 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertSame(0, RadiusAccountingSession::query()->count());
     }
 
-    public function test_accounting_is_idempotent_monotonic_and_terminal_stop_closes_session(): void
+    public function test_accounting_replays_updates_and_stops_fail_closed_without_mutation(): void
     {
         [$tenant, $router, $voucher, $session] = $this->createRadiusAccess();
         $service = app(RadiusAccountingService::class);
         $startTime = now()->subSeconds(30)->startOfSecond();
-        $start = [
-            'nas_identifier' => $router->radius_nas_identifier,
-            'nas_session_id' => 'reused-nas-session',
-            'status_type' => 'Start',
-            'nas_session_id' => 'reused-nas-session',
-            'event_time' => $startTime->toIso8601String(),
-            'input_octets' => 100,
-            'output_octets' => 200,
-            'voucher_code' => $voucher->code,
-        ];
-
-        $this->assertTrue($service->ingestAccountingEvent($start)['accepted']);
-        $duplicate = $service->ingestAccountingEvent($start);
-        $this->assertTrue($duplicate['duplicate']);
-        $this->assertSame(1, RadiusAccountingEvent::query()->count());
-        $this->assertSame('active', $session->fresh()->status);
-
-        $interim = array_merge($start, [
-            'status_type' => 'Interim-Update',
-            'event_time' => $startTime->addMinute()->toIso8601String(),
-            'input_octets' => 500,
-            'output_octets' => 700,
-        ]);
-        $this->assertTrue($service->ingestAccountingEvent($interim)['accepted']);
-
-        $stale = array_merge($interim, [
-            'event_time' => $startTime->addSeconds(30)->toIso8601String(),
-            'input_octets' => 300,
-        ]);
-        $this->assertTrue($service->ingestAccountingEvent($stale)['quarantined']);
-        $this->assertSame(500, $session->fresh()->bytes_in);
-        $this->assertSame(700, $session->fresh()->bytes_out);
-
-        $stop = array_merge($interim, [
-            'status_type' => 'Stop',
-            'event_time' => $startTime->addMinutes(2)->toIso8601String(),
-            'input_octets' => 800,
-            'output_octets' => 900,
-            'termination_cause' => 'User-Request',
-        ]);
-        $this->assertTrue($service->ingestAccountingEvent($stop)['accepted']);
-        $this->assertSame('disconnected', $session->fresh()->status);
-        $this->assertSame('stopped', RadiusAccountingSession::query()->sole()->state);
-
-        $replayedStop = $service->ingestAccountingEvent($stop);
-        $this->assertTrue($replayedStop['duplicate']);
-        $this->assertSame(4, RadiusAccountingEvent::query()->count());
-
+        $start = ['nas_identifier' => $router->radius_nas_identifier, 'nas_session_id' => 'reused-nas-session',
+            'status_type' => 'Start', 'event_time' => $startTime->toIso8601String(),
+            'input_octets' => 100, 'output_octets' => 200, 'voucher_code' => $voucher->code];
+        $interim = array_merge($start, ['status_type' => 'Interim-Update', 'event_time' => $startTime->addMinute()->toIso8601String(), 'input_octets' => 500, 'output_octets' => 700]);
+        $stale = array_merge($interim, ['event_time' => $startTime->addSeconds(30)->toIso8601String(), 'input_octets' => 300]);
+        $stop = array_merge($interim, ['status_type' => 'Stop', 'event_time' => $startTime->addMinutes(2)->toIso8601String(), 'input_octets' => 800, 'output_octets' => 900]);
+        $before = $session->fresh()->getAttributes();
+        foreach ([$start, $start, $interim, $stale, $stop, $stop] as $event) {
+            $this->assertSame(['accepted' => false, 'quarantined' => true, 'reason' => 'radius_unavailable'], $service->ingestAccountingEvent($event));
+            $this->assertSame($before, $session->fresh()->getAttributes());
+        }
+        $this->assertSame(0, RadiusNasSessionIdentity::query()->count());
+        $this->assertSame(0, RadiusAccountingSession::query()->count());
+        $this->assertSame(0, RadiusAccountingEvent::query()->count());
         $this->assertSame((int) $tenant->id, (int) $router->fresh()->tenant_id);
     }
 
@@ -386,16 +354,14 @@ class RadiusPolicyBoundaryTest extends TestCase
         $service = app(RadiusAccountingService::class);
         $eventTime = now()->subSeconds(30)->startOfSecond();
 
-        $service->ingestAccountingEvent([
-            'nas_identifier' => $router->radius_nas_identifier,
-            'nas_session_id' => 'disconnect-target-session',
-            'status_type' => 'Start',
-            'nas_session_id' => 'disconnect-target-session',
-            'event_time' => $eventTime->toIso8601String(),
-            'input_octets' => 10,
-            'output_octets' => 20,
-            'voucher_code' => $voucher->code,
-        ]);
+        // Legacy open accounting evidence is seeded directly; new events cannot enter.
+        $identity = RadiusNasSessionIdentity::create(['tenant_id' => $tenant->id, 'router_id' => $router->id,
+            'nas_session_id' => 'disconnect-target-session', 'last_generation' => 1]);
+        $accounting = RadiusAccountingSession::create(['identity_id' => $identity->id, 'generation' => 1,
+            'tenant_id' => $tenant->id, 'router_id' => $router->id, 'session_id' => $session->id,
+            'state' => 'open', 'started_at' => $eventTime]);
+        $identity->update(['current_generation_id' => $accounting->id]);
+        $session->update(['status' => 'active']);
 
         $this->assertTrue($service->requestDisconnect($session, 'revocation:'.$session->id.':disconnected'));
         $this->assertTrue($service->requestDisconnect($session, 'revocation:'.$session->id.':disconnected'));
@@ -418,7 +384,7 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertSame($commands[0]['command_id'], $retryCommands[0]['command_id']);
         $service->acknowledgeDisconnectCommand($retryCommands[0]['command_id'], 'delivered');
 
-        $service->ingestAccountingEvent([
+        $stop = $service->ingestAccountingEvent([
             'nas_identifier' => $router->radius_nas_identifier,
             'nas_session_id' => 'disconnect-target-session',
             'status_type' => 'Stop',
@@ -427,7 +393,10 @@ class RadiusPolicyBoundaryTest extends TestCase
             'output_octets' => 20,
             'voucher_code' => $voucher->code,
         ]);
-        $this->assertSame('disconnected', $session->fresh()->status);
+        $this->assertSame(['accepted' => false, 'quarantined' => true, 'reason' => 'radius_unavailable'], $stop);
+        $this->assertSame('disconnecting', $session->fresh()->status);
+        $this->assertSame('open', $accounting->fresh()->state);
+        $this->assertSame(0, RadiusAccountingEvent::query()->count());
         $this->assertSame((int) $tenant->id, (int) $router->fresh()->tenant_id);
     }
 
@@ -436,6 +405,7 @@ class RadiusPolicyBoundaryTest extends TestCase
         config(['site_agent.required' => false]);
         PlatformSetting::set('sms.voucher_receipt', false);
         $tenant = $this->createTenant('radius-sale');
+        Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site agent router']);
         $package = Package::create([
             'tenant_id' => $tenant->id,
             'name' => 'Sale package',
@@ -472,7 +442,9 @@ class RadiusPolicyBoundaryTest extends TestCase
             'tenant_id' => $tenant->id,
             'name' => 'RADIUS Router',
         ]);
-        app(RadiusRouterCredentialService::class)->optIn($router, 'nas-radius-'.$tenant->slug);
+        // Synthetic legacy configuration; never bypass the disabled opt-in service.
+        $router->forceFill(['access_backend' => 'radius', 'radius_nas_identifier' => 'nas-radius-'.$tenant->slug,
+            'radius_shared_secret' => str_repeat('a', 64)])->save();
         $router->refresh();
 
         $package = Package::create([

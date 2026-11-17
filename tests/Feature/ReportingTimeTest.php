@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
@@ -164,8 +165,10 @@ class ReportingTimeTest extends TestCase
             'package_id' => $this->package->id, 'code' => 'SNAP-1', 'status' => 'unused',
         ]);
 
-        app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
-            ->activate($this->tenant, $voucher, Request::create('/'), '0771234567'));
+        $router = Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Price snapshot router', 'access_backend' => 'site_agent']);
+        $session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
+            ->activate($this->tenant, $voucher, Request::create('/', 'POST', ['router_id' => $router->id]), '0771234567'));
+        $this->assertSame($router->id, $session->router_id);
         $this->package->update(['price' => 5000]);
 
         $this->assertEquals(1000, (float) $voucher->fresh()->redeemed_price);

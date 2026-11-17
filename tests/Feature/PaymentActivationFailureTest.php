@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\PaymentService;
@@ -166,6 +167,9 @@ class PaymentActivationFailureTest extends TestCase
             'wallet_balance' => 0,
             'commission_rate' => 5,
         ]);
+        // Use a synthetic site-agent router; RADIUS remains deliberately unavailable.
+        Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site-agent router'])
+            ->forceFill(['access_backend' => 'site_agent'])->save();
         $package = Package::create([
             'tenant_id' => $tenant->id,
             'name' => 'One hour',

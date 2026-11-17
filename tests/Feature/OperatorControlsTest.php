@@ -79,6 +79,7 @@ class OperatorControlsTest extends TestCase
 
     public function test_an_unused_voucher_can_be_voided_and_can_no_longer_be_redeemed(): void
     {
+        $this->tenant->update(['kyc_status' => 'verified']);
         $voucher = $this->voucher();
 
         $this->actingAs($this->admin)->post(route('operator.vouchers.void', $voucher->id))->assertSessionHasNoErrors();
@@ -86,16 +87,27 @@ class OperatorControlsTest extends TestCase
         $this->assertSame('voided', $voucher->fresh()->status);
         $this->assertSame(1, AuditLog::where('action', 'voucher.voided')->count());
 
-        $this->post('http://acme.localhost/portal/redeem', ['voucher_code' => 'VOID-001'])->assertSessionHasErrors();
+        $router = Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Voucher router', 'access_backend' => 'site_agent']);
+        $this->post('http://acme.localhost/portal/redeem', [
+            'voucher_code' => 'VOID-001', 'router_id' => $router->id,
+        ])->assertSessionHasErrors('voucher_code');
         $this->assertSame(0, Session::withoutTenancy()->count());
     }
 
     public function test_voiding_a_redeemed_voucher_without_a_router_does_not_claim_disconnection(): void
     {
-        $voucher = $this->voucher('unused', 'VOID-002');
-        $session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
-            ->activate($this->tenant, $voucher, Request::create('/'), '0771234567'));
-        $this->assertSame('active', $session->status);
+        // Legacy sessions can lack a router even though new activations require one.
+        $voucher = $this->voucher('redeemed', 'VOID-002');
+        $session = Session::create([
+            'tenant_id' => $this->tenant->id,
+            'voucher_id' => $voucher->id,
+            'package_id' => $this->package->id,
+            'router_id' => null,
+            'status' => 'active',
+            'started_at' => now(),
+            'expires_at' => now()->addDay(),
+        ]);
+        $this->assertNull($session->router_id);
 
         $this->actingAs($this->admin)->post(route('operator.vouchers.void', $voucher->id))->assertSessionHasNoErrors();
 
