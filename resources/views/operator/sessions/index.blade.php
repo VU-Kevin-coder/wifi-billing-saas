@@ -8,12 +8,15 @@
              refreshLoading: false,
              panelOpen: false,
              session: null,
+             selectionVersion: 0,
 
              openPanel(s) {
+                 this.selectionVersion++;
                  this.session = s;
                  this.panelOpen = true;
              },
              closePanel() {
+                 this.selectionVersion++;
                  this.panelOpen = false;
                  this.session = null;
              },
@@ -77,6 +80,10 @@
                     </button>
                 </form>
             </div>
+        </div>
+
+        <div x-show="refreshLoading" x-cloak class="rounded-xl border border-gray-200 bg-white p-4">
+            <x-ui.skeleton :rows="2" :columns="3" />
         </div>
 
         {{-- ══════════════════════════════════
@@ -490,14 +497,14 @@
                                     message: '',
                                     agentOnline: true,
                                     async unblockDevice() {
-                                        const reason = await window.confirmWithReason(
-                                            'Remove this MAC block from the router? The device will be allowed to connect again.',
-                                            { title: 'Unban device', inputLabel: 'Reason for unblocking this MAC' }
-                                        );
-                                        if (reason === null) return;
-
+                                        if (this.loading || this.pending) return;
                                         this.loading = true;
                                         try {
+                                            const reason = await window.confirmWithReason(
+                                                'Remove this MAC block from the router? The device will be allowed to connect again.',
+                                                { title: 'Unban device', inputLabel: 'Reason for unblocking this MAC' }
+                                            );
+                                            if (reason === null) return;
                                             const result = await window.apiFetch('{{ route('operator.blocked-devices.unban', $device->id) }}', {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
@@ -750,27 +757,32 @@
 
             {{-- Void voucher and disconnect --}}
             <div x-data="{
-                sessionId: null,
+                selectionSeen: null,
+                operationToken: 0,
                 loading: false,
                 pending: false,
                 message: '',
                 async revokeAccess() {
-                    const requestSessionId = session?.id;
-                    const reason = await window.confirmWithReason(
-                        'This permanently voids voucher ' + (session?.voucher ?? '') + ' and asks the router to disable its user and kick the active session.',
-                        { title: 'Void voucher & disconnect', inputLabel: 'Reason for revocation', confirmButtonText: 'Void voucher & disconnect' }
-                    );
-                    if (reason === null || session?.id !== requestSessionId) return;
-
+                    if (this.loading || this.pending) return;
+                    if (!session) return;
+                    const requestSessionId = session.id;
+                    const requestSelection = selectionVersion;
+                    const token = ++this.operationToken;
+                    const isCurrent = () => this.operationToken === token && selectionVersion === requestSelection && session?.id === requestSessionId;
                     this.loading = true;
                     try {
+                        const reason = await window.confirmWithReason(
+                            'This permanently voids voucher ' + (session?.voucher ?? '') + ' and asks the router to disable its user and kick the active session.',
+                            { title: 'Void voucher & disconnect', inputLabel: 'Reason for revocation', confirmButtonText: 'Void voucher & disconnect' }
+                        );
+                        if (reason === null || !isCurrent()) return;
                         const result = await window.apiFetch(session.disconnectUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ reason }),
                             feedback: false,
                         });
-                        if (session?.id !== requestSessionId) return;
+                        if (!isCurrent()) return;
                         if (!result.success) {
                             window.toast.error(result.message || 'Failed to disconnect.');
                             return;
@@ -783,13 +795,13 @@
                         session.disconnecting = true;
                         window.toast[result.site_agent_online ? 'info' : 'warning'](result.message);
                     } catch (error) {
-                        window.toast.error(error.message || 'Network error.');
+                        if (isCurrent()) window.toast.error(error.message || 'Network error.');
                     } finally {
-                        this.loading = false;
+                        if (this.operationToken === token) this.loading = false;
                     }
                 },
             }"
-            x-effect="if (sessionId !== session?.id) { sessionId = session?.id; loading = false; pending = false; message = ''; }">
+            x-effect="if (selectionSeen !== selectionVersion) { selectionSeen = selectionVersion; pending = false; message = ''; }">
                 <template x-if="session?.pendingRevocation">
                     <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                         <span x-text="session?.pendingRevocationStatus === 'expired' ? 'Session time has expired; waiting for the router to enforce disconnection.' : 'Voucher revoked in the app; waiting for the router to disable the user and disconnect the session.'"></span>
@@ -825,27 +837,32 @@
 
             {{-- Ban the router-verified MAC without voiding the voucher --}}
             <div x-data="{
-                sessionId: null,
+                selectionSeen: null,
+                operationToken: 0,
                 loading: false,
                 pending: false,
                 message: '',
                 async banDevice() {
-                    const requestSessionId = session?.id;
-                    const reason = await window.confirmWithReason(
-                        'The site agent will block the router-reported MAC on this router and disconnect it. This does not void the voucher; another device may still use it. MAC addresses can be spoofed.',
-                        { title: 'Ban device (MAC)', inputLabel: 'Reason for device ban', confirmButtonText: 'Ban device' }
-                    );
-                    if (reason === null || session?.id !== requestSessionId) return;
-
+                    if (this.loading || this.pending) return;
+                    if (!session) return;
+                    const requestSessionId = session.id;
+                    const requestSelection = selectionVersion;
+                    const token = ++this.operationToken;
+                    const isCurrent = () => this.operationToken === token && selectionVersion === requestSelection && session?.id === requestSessionId;
                     this.loading = true;
                     try {
+                        const reason = await window.confirmWithReason(
+                            'The site agent will block the router-reported MAC on this router and disconnect it. This does not void the voucher; another device may still use it. MAC addresses can be spoofed.',
+                            { title: 'Ban device (MAC)', inputLabel: 'Reason for device ban', confirmButtonText: 'Ban device' }
+                        );
+                        if (reason === null || !isCurrent()) return;
                         const result = await window.apiFetch(session.banUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ reason }),
                             feedback: false,
                         });
-                        if (session?.id !== requestSessionId) return;
+                        if (!isCurrent()) return;
                         if (!result.success) {
                             window.toast.error(result.message || 'Device ban was not queued.');
                             return;
@@ -858,13 +875,13 @@
                         session.disconnecting = true;
                         window.toast[result.site_agent_online ? 'info' : 'warning'](result.message);
                     } catch (error) {
-                        window.toast.error(error.message || 'Network error.');
+                        if (isCurrent()) window.toast.error(error.message || 'Network error.');
                     } finally {
-                        this.loading = false;
+                        if (this.operationToken === token) this.loading = false;
                     }
                 },
             }"
-            x-effect="if (sessionId !== session?.id) { sessionId = session?.id; loading = false; pending = false; message = ''; }">
+            x-effect="if (selectionSeen !== selectionVersion) { selectionSeen = selectionVersion; pending = false; message = ''; }">
                 <template x-if="session?.pendingDeviceBan">
                     <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                         Device ban pending router confirmation.
