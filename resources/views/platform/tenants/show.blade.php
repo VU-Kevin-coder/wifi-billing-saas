@@ -64,12 +64,14 @@
                         <form method="POST" action="{{ route('platform.tenants.suspend', $tenant) }}"
                               data-confirm-action="Suspend {{ $tenant->name }}? The operator will lose access to their workspace.">
                             @csrf
+                            @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Suspend ' . ($tenant->name) . '? The operator will lose access to their workspace.'])
                             <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">Suspend</button>
                         </form>
                     @else
                         <form method="POST" action="{{ route('platform.tenants.reactivate', $tenant) }}"
                               data-confirm-action="Reactivate {{ $tenant->name }} and restore workspace access?">
                             @csrf
+                            @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Reactivate ' . ($tenant->name) . ' and restore workspace access?'])
                             <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
                                 Reactivate
                             </button>
@@ -78,6 +80,7 @@
                     <form method="POST" action="{{ route('platform.impersonate', $tenant) }}"
                           data-confirm-action="Open {{ $tenant->name }}'s workspace as a platform administrator? This action is audited.">
                         @csrf
+                        @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Open ' . ($tenant->name) . '\'s workspace as a platform administrator? This action is audited.'])
                         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center gap-2 transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                             Switch into workspace
@@ -201,6 +204,7 @@
                                 <form method="POST" action="{{ route('platform.tenants.verify-kyc', $tenant) }}"
                                       data-confirm-action="Verify KYC for {{ $tenant->name }}?">
                                     @csrf
+                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Verify KYC for ' . ($tenant->name) . '?'])
                                     <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-xs font-medium">Verify KYC</button>
                                 </form>
                             @endif
@@ -208,6 +212,7 @@
                                 <form method="POST" action="{{ route('platform.tenants.reject-kyc', $tenant) }}"
                                       data-confirm-action="Reject KYC for {{ $tenant->name }}?">
                                     @csrf
+                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Reject KYC for ' . ($tenant->name) . '?'])
                                     <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-xs font-medium">Reject KYC</button>
                                 </form>
                             @endif
@@ -283,6 +288,7 @@
                         <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="inline"
                               data-confirm-action="Open {{ $tenant->name }}'s routers in an audited platform-admin workspace?">
                             @csrf
+                            @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Open ' . ($tenant->name) . '\'s routers in an audited platform-admin workspace?'])
                             <button type="submit" class="text-blue-600 text-sm font-medium hover:underline">View routers</button>
                         </form>
                     </div>
@@ -358,6 +364,7 @@
                     <form method="POST" action="{{ route('platform.impersonate', $tenant) }}" class="inline"
                           data-confirm-action="Open {{ $tenant->name }}'s sessions in an audited platform-admin workspace?">
                         @csrf
+                        @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Open ' . ($tenant->name) . '\'s sessions in an audited platform-admin workspace?'])
                         <button type="submit" class="text-blue-600 text-sm font-medium hover:underline">View all sessions &rarr;</button>
                     </form>
                 </div>
