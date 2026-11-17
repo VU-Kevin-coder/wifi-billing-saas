@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Router;
+use App\Services\RadiusReadiness;
 use App\Services\RadiusRouterCredentialService;
+use App\Services\RadiusUnavailableException;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,12 +44,20 @@ class RadiusRouterCredentialController extends Controller
                 ->lockForUpdate()
                 ->findOrFail($router);
 
+            if (! RadiusReadiness::available()) {
+                return ['status' => Response::HTTP_SERVICE_UNAVAILABLE, 'content' => RadiusRouterCredentialService::UNAVAILABLE_MESSAGE];
+            }
+
             if ($routerModel->getRawOriginal('radius_shared_secret') !== null) {
                 return ['status' => Response::HTTP_CONFLICT, 'content' => null];
             }
 
             $nasIdentifier = $validator->validated()['nas_identifier'];
-            $secret = $credentials->optIn($routerModel, $nasIdentifier);
+            try {
+                $secret = $credentials->optIn($routerModel, $nasIdentifier);
+            } catch (RadiusUnavailableException $exception) {
+                return ['status' => Response::HTTP_SERVICE_UNAVAILABLE, 'content' => RadiusRouterCredentialService::UNAVAILABLE_MESSAGE];
+            }
 
             AuditLog::record('router.radius_credential_provisioned', $routerModel, [
                 'nas_identifier' => $routerModel->radius_nas_identifier,
