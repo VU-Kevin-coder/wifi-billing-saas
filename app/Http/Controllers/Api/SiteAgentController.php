@@ -103,15 +103,17 @@ class SiteAgentController extends Controller
             abort_unless($job->status === 'claimed', 409, 'Command is not currently claimed by this agent.');
 
             if (! $validated['success']) {
+                // Older agents may send raw router errors; do not persist them.
+                $failureReason = 'Router command failed.';
                 $job->update([
                     'status' => $job->attempts >= 5 ? 'failed' : 'pending',
                     'claimed_at' => null,
-                    'failure_reason' => $validated['message'] ?? 'Agent reported command failure.',
+                    'failure_reason' => $failureReason,
                 ]);
                 if (in_array($job->operation, ['telemetry', 'test_connection'], true) && $job->attempts >= 5) {
                     $this->markRouterOffline($agent, $job);
                 } elseif (in_array($job->operation, ['ban_mac', 'unban_mac'], true) && $job->attempts >= 5) {
-                    $this->markDeviceActionFailed($job, $validated['message'] ?? 'Site agent exhausted its command attempts.');
+                    $this->markDeviceActionFailed($job, $failureReason);
                 }
 
                 return ['duplicate' => false, 'status' => $job->status];
