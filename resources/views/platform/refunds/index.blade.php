@@ -42,14 +42,16 @@
                                     <td class="px-4 py-3">{{ $currency }} {{ number_format($refund->amount, 0) }}<br><span class="text-xs text-gray-500">of {{ number_format($refund->transaction?->amount ?? 0, 0) }}{{ $refund->revoke_access ? ', remove access' : '' }}</span></td>
                                     <td class="px-4 py-3">{{ $refund->reason }}</td>
                                     <td class="px-4 py-3">
-                                        <form method="POST" action="{{ route('platform.refunds.approve', $refund->id) }}" class="mb-2 flex items-center gap-2" data-confirm-action="Approve this refund and issue the recorded payout?">
+                                        <form method="POST" action="{{ route('platform.refunds.approve', $refund->id) }}" class="mb-2 flex flex-wrap items-center gap-2" data-confirm-action="Approve this refund and issue the recorded payout?">
                                             @csrf
+                                            @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Approve this refund and issue the recorded payout?'])
                                             <label class="sr-only" for="payout-{{ $refund->id }}">Payout reference</label>
                                             <input id="payout-{{ $refund->id }}" name="payout_reference" type="text" required minlength="3" maxlength="100" placeholder="Provider payout reference" class="w-52 rounded-lg border border-gray-300 px-2 py-1 text-sm">
                                             <button type="submit" class="rounded-lg bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700">Approve</button>
                                         </form>
-                                        <form method="POST" action="{{ route('platform.refunds.reject', $refund->id) }}" class="flex items-center gap-2" data-confirm-action="Reject this refund request?">
+                                        <form method="POST" action="{{ route('platform.refunds.reject', $refund->id) }}" class="flex flex-wrap items-center gap-2" data-confirm-action="Reject this refund request?">
                                             @csrf
+                                            @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Reject this refund request?'])
                                             <label class="sr-only" for="note-{{ $refund->id }}">Note</label>
                                             <input id="note-{{ $refund->id }}" name="note" type="text" maxlength="500" placeholder="Reason for rejecting (optional)" class="w-52 rounded-lg border border-gray-300 px-2 py-1 text-sm">
                                             <button type="submit" class="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700">Reject</button>
@@ -57,7 +59,7 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Nothing is waiting.</td></tr>
+                                <x-ui.empty-table-row colspan="5" title="No refund requests awaiting a decision" message="New requests will appear here for review." />
                             @endforelse
                         </tbody>
                     </table>
@@ -81,7 +83,7 @@
                                     <td class="px-4 py-3 font-mono text-xs">{{ $refund->payout_reference }}</td>
                                 </tr>
                             @empty
-                                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">No decisions yet.</td></tr>
+                                <x-ui.empty-table-row colspan="5" title="No refund decisions yet" message="Approved and rejected requests will appear here." />
                             @endforelse
                         </tbody>
                     </table>
