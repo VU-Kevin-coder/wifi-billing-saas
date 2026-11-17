@@ -60,7 +60,7 @@
 
         <div class="policy-content">
             @if(session('status'))<div class="policy-banner">{{ session('status') }}</div>@endif
-            @if($errors->any())<div class="policy-banner bad">{{ $errors->first() }}</div>@endif
+            @if($errors->any())<div class="policy-banner bad">{{ $errors->first() }} Your submitted changes and reason are not restored after a validation error. Review the current policies and re-enter your changes.</div>@endif
             <div class="policy-head">
                 <div><h1>Platform policies</h1><p>Runtime rules stored in the database. Changes apply immediately and are audited with the reason provided.</p></div>
             </div>
@@ -70,7 +70,8 @@
                 @endforeach
             </nav>
 
-            <form id="policyForm" method="POST" action="{{ route('platform.policies.update') }}">
+            <noscript><p role="alert">JavaScript is required to safely save policies on this page. Changes cannot be saved here without it.</p></noscript>
+            <form id="policyForm" method="POST" action="{{ route('platform.policies.update') }}" data-ui-async-settings>
                 @csrf
                 @method('PUT')
                 <div id="policyMain">
@@ -223,6 +224,8 @@
 
             <div class="policy-savebar" id="policySaveBar" role="region" aria-label="Unsaved policy changes">
                 <b id="policyChangeCount">0 unsaved changes</b>
+                <span data-ui-save-message role="alert" hidden></span>
+                <span id="policySaveError" role="alert" hidden>This browser cannot safely submit only changed policies. Use a supported browser.</span>
                 <input id="policyReason" form="policyForm" type="text" name="reason" placeholder="Reason for this change (required)" minlength="5" maxlength="200" required aria-label="Reason for change">
                 <button class="policy-btn" type="button" id="policyDiscard">Discard</button>
                 <button class="policy-btn primary" type="submit" form="policyForm" id="policySave" disabled>Save policies</button>
@@ -240,6 +243,7 @@
             const save = document.getElementById('policySave');
             const q = document.getElementById('policySearch');
             const keys = new Map();
+            let submission = null;
             form.querySelectorAll('[name^="policies["]').forEach(input => {
                 if (input.type === 'hidden' && form.querySelector(`[name="${CSS.escape(input.name)}"][type="checkbox"]`)) return;
                 keys.set(input.name, input.type === 'checkbox' ? (input.checked ? input.value : '0') : input.value);
@@ -258,7 +262,7 @@
                 });
                 bar.classList.toggle('show', unique.size > 0);
                 count.textContent = unique.size + ' unsaved change' + (unique.size === 1 ? '' : 's');
-                save.disabled = unique.size === 0 || reason.value.trim().length < 5;
+                save.disabled = !!submission || form.dataset.uiSubmitting === 'true' || form.dataset.uiSaveUncertain === 'true' || unique.size === 0 || reason.value.trim().length < 5;
                 renderRisk();
             };
             const policyCheckbox = key => Array.from(form.querySelectorAll('input[type="checkbox"][name^="policies["]'))
@@ -290,15 +294,38 @@
                 document.querySelectorAll('[data-tab]').forEach(link => link.classList.toggle('active', link.dataset.tab === tab));
                 document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== tab);
             };
-            // Submit only edits, not other values from a potentially stale page.
-            form.addEventListener('submit', () => {
+            // Filter the submission, not the controls: cancellation/back must leave the form editable.
+            form.addEventListener('formdata', event => {
                 form.querySelectorAll('[name^="policies["]').forEach(input => {
                     const checkbox = form.querySelector(`[name="${CSS.escape(input.name)}"][type="checkbox"]`);
                     const control = checkbox || input;
                     const value = control.type === 'checkbox' ? (control.checked ? control.value : '0') : control.value;
-                    if (value === keys.get(input.name)) input.disabled = true;
+                    if (value === keys.get(input.name)) event.formData.delete(input.name);
                 });
             });
+            form.addEventListener('submit', event => {
+                if (event.defaultPrevented) return;
+                if (typeof window.FormDataEvent !== 'function') {
+                    event.preventDefault();
+                    document.getElementById('policySaveError').hidden = false;
+                    return;
+                }
+                submission = event;
+                queueMicrotask(() => {
+                    if (submission === event && event.defaultPrevented) { submission = null; changed(); }
+                });
+            });
+            form.addEventListener('ui:form-saved', () => {
+                form.querySelectorAll('[name^="policies["]').forEach(input => {
+                    if (input.type === 'hidden' && form.querySelector(`[name="${CSS.escape(input.name)}"][type="checkbox"]`)) return;
+                    keys.set(input.name, input.type === 'checkbox' ? (input.checked ? input.value : '0') : input.value);
+                });
+                reason.value = '';
+                submission = null;
+                changed();
+            });
+            form.addEventListener('ui:form-restored', () => { submission = null; changed(); });
+            window.addEventListener('pageshow', () => { submission = null; changed(); });
             form.addEventListener('input', changed);
             form.addEventListener('change', event => {
                 const row = event.target.closest('.policy-row');
@@ -307,8 +334,10 @@
             });
             reason.addEventListener('input', changed);
             document.getElementById('policyDiscard').addEventListener('click', () => location.reload());
+            // A submit does not prove which navigation will unload first; warn on both.
             window.addEventListener('beforeunload', event => {
-                if (bar.classList.contains('show')) { event.preventDefault(); event.returnValue = ''; }
+                if (!bar.classList.contains('show')) return;
+                event.preventDefault(); event.returnValue = '';
             });
             window.addEventListener('hashchange', showTab);
             q.addEventListener('input', () => {
@@ -366,7 +395,7 @@
             });
             showTab();
             renderLifecycle();
-            renderRisk();
+            changed();
         })();
     </script>
 </x-app-layout>

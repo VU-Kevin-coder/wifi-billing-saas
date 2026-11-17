@@ -73,7 +73,7 @@
                     <div class="control-banner">{{ session('status') }}</div>
                 @endif
                 @if($errors->any())
-                    <div class="control-banner bad">{{ $errors->first() }}</div>
+                    <div class="control-banner bad">{{ $errors->first() }} Your submitted changes and reason are not restored after a validation error. Review the current settings and re-enter your changes, including any secrets.</div>
                 @endif
                 <div class="control-head">
                     <div>
@@ -105,7 +105,8 @@
                     <div class="control-banner">SMS status: {{ $smsStatus }}. Upgrade warning: existing unbound SMS credentials cannot send messages until an administrator re-enters them for the current provider. Reactivating the same previously bound provider keeps its credential if left blank; a different provider requires a different credential. Test after saving.</div>
                 @endif
                 @if(in_array($activeSection['id'], ['general','tenants','payments','wallet','refunds','vouchers','provisioning','routers','vpn','sms','email','security','audit']))
-                    <form id="settingsForm" method="POST" action="{{ route('platform.configuration.control.update') }}">
+                    <noscript><p role="alert">JavaScript is required to safely save settings on this page. Changes cannot be saved here without it.</p></noscript>
+                    <form id="settingsForm" method="POST" action="{{ route('platform.configuration.control.update') }}" data-ui-async-settings>
                         @csrf
                         @method('PUT')
                         <input type="hidden" name="section" value="{{ $activeSection['id'] }}">
@@ -272,6 +273,7 @@
 
         <div class="control-savebar" id="saveBar" role="region" aria-label="Unsaved changes">
             <b id="dirtyLabel">Unsaved changes</b>
+            <span data-ui-save-message role="alert" hidden></span>
             <input id="auditReason" form="settingsForm" type="text" name="reason" placeholder="Reason for this change (required)" minlength="5" maxlength="200" required aria-label="Reason for change">
             <button type="button" class="control-btn" id="discardChanges">Discard</button>
             <button type="submit" class="control-btn primary" id="saveChanges" form="settingsForm" disabled>Save changes</button>
@@ -287,18 +289,60 @@
             const save = document.getElementById('saveChanges');
             const reason = document.getElementById('auditReason');
             let dirty = false;
+            let submission = null;
             const controls = form ? [...form.querySelectorAll('[data-setting-input]')] : [];
             const valueOf = control => control.type === 'checkbox' ? (control.checked ? '1' : '0') : control.value;
             controls.forEach(control => { control.dataset.initialValue = valueOf(control); });
+            // Remove drafts from the former implementation without reading their contents.
+            // Storage may be blocked, so this cleanup is best-effort.
+            try {
+                for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                    const key = sessionStorage.key(i);
+                    if (key && key.startsWith('control-settings-draft:')) sessionStorage.removeItem(key);
+                }
+            } catch (_) { /* Cleanup is unavailable in this browser. */ }
             const updateBar = () => {
                 dirty = controls.some(control => control.dataset.initialValue !== valueOf(control));
                 document.querySelectorAll('[data-setting-row]').forEach(row => {
                     row.classList.toggle('changed', [...row.querySelectorAll('[data-setting-input]')].some(control => control.dataset.initialValue !== valueOf(control)));
                 });
                 bar.classList.toggle('show', dirty);
-                save.disabled = !dirty || reason.value.trim().length < 5;
+                save.disabled = !!submission || form?.dataset.uiSubmitting === 'true' || form?.dataset.uiSaveUncertain === 'true' || !dirty || reason.value.trim().length < 5;
             };
             if (form) {
+                form.addEventListener('formdata', event => {
+                    const credential = controls.find(control => control.name === 'settings[sms.api_key]');
+                    controls.forEach(control => {
+                        // The server needs the selected provider to bind a new SMS credential.
+                        if (control.name === 'settings[sms.provider]' && credential && valueOf(credential) !== credential.dataset.initialValue) return;
+                        if (valueOf(control) === control.dataset.initialValue) event.formData.delete(control.name);
+                    });
+                });
+                form.addEventListener('ui:form-saved', () => {
+                    controls.forEach(control => {
+                        if (control.type === 'password') control.value = '';
+                        control.dataset.initialValue = valueOf(control);
+                    });
+                    reason.value = '';
+                    submission = null;
+                    updateBar();
+                });
+                form.addEventListener('submit', event => {
+                    if (event.defaultPrevented) return;
+                    submission = event;
+                    queueMicrotask(() => {
+                        if (submission === event && event.defaultPrevented) {
+                            submission = null;
+                            updateBar();
+                        }
+                    });
+                });
+                const recoverForm = () => {
+                    submission = null;
+                    updateBar();
+                };
+                form.addEventListener('ui:form-restored', recoverForm);
+                window.addEventListener('pageshow', recoverForm);
                 form.addEventListener('input', updateBar);
                 form.addEventListener('change', updateBar);
                 document.getElementById('discardChanges').addEventListener('click', () => location.reload());
@@ -315,9 +359,12 @@
                     });
                 });
                 reason.addEventListener('input', updateBar);
+                // A submit does not prove which navigation will unload first; warn on both.
                 window.addEventListener('beforeunload', event => {
-                    if (dirty) { event.preventDefault(); event.returnValue = ''; }
+                    if (!dirty) return;
+                    event.preventDefault(); event.returnValue = '';
                 });
+                updateBar();
             }
             search.addEventListener('input', () => {
                 const query = search.value.trim().toLowerCase();
