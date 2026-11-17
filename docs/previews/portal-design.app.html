@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal design preview</title>
+<style>
+  .intro { margin:0; }
+  .intro + .subtitle { margin-top:-6px; }
+  .segmented { display:flex; }
+  .segmented button { flex:1; font-size:12px; padding:9px 6px; }
+  .stage { padding:0; overflow:hidden; }
+  .portal { padding:16px; }
+  .top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .identity { display:flex; gap:9px; align-items:center; min-width:0; }
+  .logo { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; background:var(--toqi-accent-soft); color:var(--toqi-accent-text); flex:none; }
+  .logo svg { width:21px; height:21px; }
+  .logo .pulse { animation:breathe 3s var(--toqi-ease) infinite; transform-origin:center; }
+  @keyframes breathe { 50% { opacity:.45; } }
+  .identity strong, .identity small { display:block; }
+  .identity strong { font-size:13px; line-height:1.1; }
+  .identity small { font-size:10px; margin-top:3px; }
+  .avatar { display:grid; place-items:center; border:1px solid var(--toqi-border); border-radius:50%; width:32px; height:32px; font-size:11px; font-weight:700; flex:none; }
+  .headline { margin:19px 0 12px; }
+  .headline small { font-size:11px; display:block; margin-bottom:4px; }
+  .headline h4 { font-size:20px; line-height:1.18; letter-spacing:-.02em; margin:0; }
+  .bill { background:var(--toqi-accent-soft); border:1px solid var(--toqi-accent-border); border-radius:15px; padding:14px; }
+  .bill-head { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .bill-head small { font-size:11px; }
+  .pill { font-size:10px; font-weight:700; padding:4px 8px; border-radius:99px; background:var(--toqi-surface); color:var(--toqi-accent-text); white-space:nowrap; }
+  .total { font-size:25px; line-height:1.1; font-weight:750; margin:9px 0 4px; font-variant-numeric:tabular-nums; }
+  .bill-foot { font-size:11px; color:var(--toqi-text-secondary); }
+  .rows { margin-top:12px; }
+  .rowline { display:flex; justify-content:space-between; align-items:center; gap:12px; min-height:30px; font-size:12px; border-bottom:1px solid var(--toqi-rule); }
+  .rowline span { color:var(--toqi-text-secondary); }
+  .rowline strong { text-align:right; font-size:12px; }
+  .notice { font-size:11px; line-height:1.45; color:var(--toqi-text-secondary); margin:12px 0 0; }
+  .portal-nav { margin:14px -2px 0; display:flex; justify-content:space-between; gap:4px; border-top:1px solid var(--toqi-rule); padding-top:10px; }
+  .portal-nav button { background:none; border:0; box-shadow:none; padding:5px 4px; min-width:0; color:var(--toqi-text-secondary); font-size:11px; font-weight:600; }
+  .portal-nav button[aria-current="page"] { color:var(--toqi-accent-text); }
+  .action { width:100%; margin-top:13px; }
+  .secondary-action { width:100%; margin-top:8px; }
+  .example { margin:11px 0 0; font-size:10px; color:var(--toqi-text-tertiary); text-align:center; }
+  .tagline { font-size:12px; color:var(--toqi-text-secondary); margin:6px 0 0; }
+  .method { border:1px solid var(--toqi-border); border-radius:12px; padding:11px 12px; margin-top:9px; font-size:12px; }
+  .method strong, .method small { display:block; }
+  .method small { font-size:10px; margin-top:3px; }
+  .view { display:none; }
+  .view.active { display:block; }
+  button:focus-visible { outline:2px solid var(--toqi-accent); outline-offset:2px; }
+  @media (prefers-reduced-motion:reduce) { .logo .pulse { animation:none; } }
+</style>
+</head>
+<body>
+<h3 class="intro">Portal design</h3>
+<p class="subtitle">A cleaner, mobile-first preview for both sides.</p>
+<div class="segmented" aria-label="Choose a portal">
+  <button type="button" id="choose-customer" aria-pressed="true">PPPoE customer</button>
+  <button type="button" id="choose-tenant" aria-pressed="false">Tenant billing</button>
+</div>
+<section class="stage" aria-label="Portal preview">
+  <div class="portal">
+    <div class="top">
+      <div class="identity">
+        <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path class="pulse" d="M4 9a12 12 0 0 1 16 0M7 12a8 8 0 0 1 10 0M10 15a3 3 0 0 1 4 0"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/></svg></div>
+        <div><strong id="brand">My internet</strong><small id="brand-sub">Customer portal</small></div>
+      </div>
+      <div class="avatar" id="avatar" aria-label="Example account">AK</div>
+    </div>
+    <div class="view active" id="home">
+      <div class="headline"><small id="welcome">Welcome back, Alex</small><h4 id="home-title">Your internet, in one place</h4></div>
+      <div class="bill">
+        <div class="bill-head"><small id="bill-label">Next payment</small><span class="pill" id="status">Service active</span></div>
+        <div class="total" id="amount">USh 85,000</div>
+        <div class="bill-foot" id="due">Due 12 December · Monthly</div>
+      </div>
+      <div class="rows">
+        <div class="rowline"><span id="row1-label">Your plan</span><strong id="row1">Home 20 Mbps</strong></div>
+        <div class="rowline"><span id="row2-label">Service account</span><strong id="row2">PPPoE · •••• 4821</strong></div>
+      </div>
+      <button type="button" class="action" id="home-action">Review payment</button>
+    </div>
+    <div class="view" id="payments">
+      <div class="headline"><small>Account activity</small><h4 id="payments-title">Your payments</h4></div>
+      <div class="bill"><div class="bill-head"><small id="invoice-label">Upcoming payment</small><span class="pill">Example</span></div><div class="total" id="invoice-amount">USh 85,000</div><div class="bill-foot" id="invoice-detail">Due 12 December · Internet service</div></div>
+      <div class="rows"><div class="rowline"><span>Previous payment</span><strong>USh 85,000</strong></div><div class="rowline"><span>Receipt</span><strong>Example receipt</strong></div></div>
+      <button type="button" class="action" id="payments-action">Review payment</button>
+    </div>
+    <div class="view" id="help">
+      <div class="headline"><small>We’re here to help</small><h4 id="help-title">Support for your service</h4></div>
+      <div class="bill"><div class="bill-head"><small id="help-label">Service requests</small><span class="pill">Preview</span></div><p class="tagline" id="help-copy">Report a connection issue, ask about your bill or follow up on a request.</p></div>
+      <div class="rows"><div class="rowline"><span id="help-row1">Connection problem</span><strong>Get help</strong></div><div class="rowline"><span id="help-row2">Billing question</span><strong>Get help</strong></div></div>
+      <p class="notice">Support requests and contact details will be configured for each business. This preview doesn’t send a request.</p>
+    </div>
+    <div class="view" id="account">
+      <div class="headline"><small>Your profile</small><h4 id="account-title">Account details</h4></div>
+      <div class="bill"><div class="bill-head"><small id="account-type">PPPoE customer</small><span class="pill">Example</span></div><p class="tagline" id="account-copy">A secure sign-in keeps your plan, payments and support requests private.</p></div>
+      <div class="rows"><div class="rowline"><span>Sign-in</span><strong>Secure account</strong></div><div class="rowline"><span>Notifications</span><strong>Billing &amp; service</strong></div></div>
+      <p class="notice">Authentication and account recovery are part of the proposed design, not live features.</p>
+    </div>
+    <div class="view" id="checkout">
+      <div class="headline"><small>Step 1 of 2 · Review</small><h4>Review your payment</h4></div>
+      <div class="bill"><div class="bill-head"><small id="checkout-label">Internet service renewal</small><span class="pill">Preview</span></div><div class="total" id="checkout-amount">USh 85,000</div><div class="bill-foot" id="checkout-period">Monthly · Due 12 December</div></div>
+      <div class="method"><strong>Choose a payment method</strong><small>Available options depend on the provider setup.</small></div>
+      <p class="notice">A verified provider confirmation is required before the account is updated. This preview does not take payments.</p>
+      <button type="button" class="secondary secondary-action" id="back">Back to overview</button>
+    </div>
+    <nav class="portal-nav" aria-label="Preview sections">
+      <button type="button" data-view="home" aria-current="page">Overview</button>
+      <button type="button" data-view="payments">Payments</button>
+      <button type="button" data-view="help">Support</button>
+      <button type="button" data-view="account">Account</button>
+    </nav>
+    <p class="example">Design preview · Example data · No real transactions</p>
+  </div>
+</section>
+<script>
+(() => {
+  const data = {
+    customer: {
+      brand:'My internet', 'brand-sub':'Customer portal', avatar:'AK', welcome:'Welcome back, Alex', 'home-title':'Your internet, in one place',
+      'bill-label':'Next payment', status:'Service active', amount:'USh 85,000', due:'Due 12 December · Monthly', 'row1-label':'Your plan', row1:'Home 20 Mbps', 'row2-label':'Service account', row2:'PPPoE · •••• 4821',
+      'payments-title':'Your payments', 'invoice-label':'Upcoming payment', 'invoice-amount':'USh 85,000', 'invoice-detail':'Due 12 December · Internet service', 'help-title':'Support for your service', 'help-label':'Service requests', 'help-copy':'Report a connection issue, ask about your bill or follow up on a request.', 'help-row1':'Connection problem', 'help-row2':'Billing question', 'account-title':'Your account', 'account-type':'PPPoE customer', 'account-copy':'A secure sign-in keeps your plan, payments and support requests private.', 'checkout-label':'Internet service renewal', 'checkout-amount':'USh 85,000', 'checkout-period':'Monthly · Due 12 December', nav:'Payments'
+    },
+    tenant: {
+      brand:'Business billing', 'brand-sub':'Tenant portal', avatar:'HB', welcome:'Hello, business admin', 'home-title':'Your subscription, made simple',
+      'bill-label':'Invoice total', status:'Payment due', amount:'USh 120,000', due:'Due 12 December · Monthly', 'row1-label':'Current plan', row1:'Business · Monthly', 'row2-label':'Invoice', row2:'INV-1042 · Example',
+      'payments-title':'Invoices & receipts', 'invoice-label':'Open invoice', 'invoice-amount':'USh 120,000', 'invoice-detail':'Due 12 December · SaaS subscription', 'help-title':'Billing support', 'help-label':'Subscription help', 'help-copy':'Ask about an invoice, a plan change or a subscription payment.', 'help-row1':'Invoice question', 'help-row2':'Plan or subscription', 'account-title':'Business account', 'account-type':'Tenant billing role', 'account-copy':'Only authorized billing users can view invoices and start a subscription payment.', 'checkout-label':'Business subscription invoice', 'checkout-amount':'USh 120,000', 'checkout-period':'INV-1042 · Due 12 December', nav:'Invoices'
+    }
+  };
+  let mode='customer', current='home';
+  const byId=id=>document.getElementById(id);
+  function render() {
+    const item=data[mode];
+    Object.entries(item).forEach(([id,value])=>{ const node=byId(id); if(node) node.textContent=value; });
+    byId('choose-customer').setAttribute('aria-pressed',String(mode==='customer'));
+    byId('choose-tenant').setAttribute('aria-pressed',String(mode==='tenant'));
+    document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id===current));
+    document.querySelectorAll('.portal-nav button').forEach(el=>{
+      if(el.dataset.view==='payments') el.textContent=item.nav;
+      if(el.dataset.view===current) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current');
+    });
+    const previous=document.querySelector('#payments .rows strong');
+    if(previous) previous.textContent=mode==='customer'?'USh 85,000':'USh 120,000';
+  }
+  byId('choose-customer').addEventListener('click',()=>{mode='customer';current='home';render();});
+  byId('choose-tenant').addEventListener('click',()=>{mode='tenant';current='home';render();});
+  document.querySelectorAll('.portal-nav button').forEach(el=>el.addEventListener('click',()=>{current=el.dataset.view;render();}));
+  byId('home-action').addEventListener('click',()=>{current='checkout';render();});
+  byId('payments-action').addEventListener('click',()=>{current='checkout';render();});
+  byId('back').addEventListener('click',()=>{current='home';render();});
+  render();
+})();
+</script>
+</body>
+</html>
