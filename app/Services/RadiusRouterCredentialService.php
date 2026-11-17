@@ -11,6 +11,8 @@ use RuntimeException;
 
 class RadiusRouterCredentialService
 {
+    public const UNAVAILABLE_MESSAGE = 'RADIUS cannot be enabled while the policy service is unavailable. No router settings or credentials were changed.';
+
     /**
      * Opt one persisted router into RADIUS and return its generated secret once.
      * The model's encrypted cast protects storage and its hidden field prevents
@@ -18,6 +20,11 @@ class RadiusRouterCredentialService
      */
     public function optIn(Router $router, string $nasIdentifier): string
     {
+        // Enforce this at the service boundary too, not just on the operator UI.
+        if (! RadiusReadiness::available()) {
+            throw new RadiusUnavailableException(self::UNAVAILABLE_MESSAGE);
+        }
+
         $nasIdentifier = trim($nasIdentifier);
 
         if (! $router->exists || ! $router->getKey()) {

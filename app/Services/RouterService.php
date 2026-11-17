@@ -73,7 +73,7 @@ class RouterService
         }
 
         if (! $this->tenant) {
-            return MikroTik::hotspot();
+            throw new RuntimeException('A tenant router with verified API-SSL is required.');
         }
 
         if (blank($this->tenant->mikrotik_host)) {
