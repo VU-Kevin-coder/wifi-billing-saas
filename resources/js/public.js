@@ -1,4 +1,5 @@
 import './api-fetch';
+import './confirm';
 import './form-guard';
 import './toast';
 
