@@ -41,6 +41,7 @@
                                         <form method="POST" action="{{ route('operator.refunds.store', ['tenant' => $tenant->slug]) }}" class="flex flex-wrap items-center gap-2"
                                               data-confirm-action="Submit this refund request? It will be reviewed by the platform before any refund is issued.">
                                             @csrf
+                                            @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Submit this refund request? It will be reviewed by the platform before any refund is issued.'])
                                             <input type="hidden" name="transaction_id" value="{{ $sale->id }}">
                                             <label class="sr-only" for="amount-{{ $sale->id }}">Amount</label>
                                             <input id="amount-{{ $sale->id }}" name="amount" type="number" step="0.01" min="0.01" max="{{ $sale->refundable }}" value="{{ $sale->refundable }}" required class="w-28 rounded-lg border border-gray-300 px-2 py-1 text-sm">
@@ -83,6 +84,7 @@
                                             <form method="POST" action="{{ route('operator.refunds.cancel', ['tenant' => $tenant->slug, 'refund' => $refund->id]) }}"
                                                   data-confirm-action="Cancel this pending refund request?">
                                                 @csrf
+                                                @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Cancel this pending refund request?'])
                                                 <button type="submit" class="text-xs font-medium text-red-600 hover:underline">Cancel</button>
                                             </form>
                                         @endif
