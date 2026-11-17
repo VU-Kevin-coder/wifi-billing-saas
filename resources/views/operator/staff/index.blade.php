@@ -38,7 +38,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                        @foreach($staff as $member)
+                        @forelse($staff as $member)
                             <tr>
                                 <td class="px-4 py-2">{{ $member->name }}</td>
                                 <td class="px-4 py-2 text-gray-500">{{ $member->email }}</td>
@@ -71,13 +71,14 @@
                                             @if($member->deactivated_at)
                                                 <form method="POST" action="{{ route('operator.staff.reactivate', ['tenant' => request()->route('tenant'), 'staff' => $member->id]) }}">
                                                     @csrf
-                                                    <button type="submit" class="text-xs font-medium text-green-700 hover:underline">Reactivate</button>
+                                                    <button type="submit" data-loading-text="Submitting…" class="text-xs font-medium text-green-700 hover:underline">Reactivate</button>
                                                 </form>
                                             @else
                                                 <form method="POST" action="{{ route('operator.staff.deactivate', ['tenant' => request()->route('tenant'), 'staff' => $member->id]) }}"
-                                                      data-confirm-action="Deactivate {{ addslashes($member->name) }}? They are signed out immediately and cannot sign in again.">
+                                                      data-confirm-action="Deactivate {{ $member->name }}? They are signed out immediately and cannot sign in again.">
                                                     @csrf
-                                                    <button type="submit" class="text-xs font-medium text-red-600 hover:underline">Deactivate</button>
+                                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Deactivate ' . ($member->name) . '? They are signed out immediately and cannot sign in again.'])
+                                                    <button type="submit" data-loading-text="Submitting…" class="text-xs font-medium text-red-600 hover:underline">Deactivate</button>
                                                 </form>
                                             @endif
                                         </div>
@@ -86,7 +87,9 @@
                                     @endif
                                 </td>
                             </tr>
-                        @endforeach
+                        @empty
+                            <x-ui.empty-table-row :colspan="5" title="No staff members found" />
+                        @endforelse
                     </tbody>
                 </table>
             </div>
