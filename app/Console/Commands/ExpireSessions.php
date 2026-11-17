@@ -68,7 +68,6 @@ class ExpireSessions extends Command
                             Log::error('Unable to queue site-agent expiry command.', [
                                 'session_id' => $session->id,
                                 'router_id' => $session->router_id,
-                                'exception' => $exception,
                             ]);
                         }
 
@@ -116,7 +115,6 @@ class ExpireSessions extends Command
                                 'session_id' => $session->id,
                                 'router_id' => $session->router_id,
                                 'voucher_id' => $session->voucher_id,
-                                'exception' => $exception,
                             ]);
 
                             continue;
