@@ -75,6 +75,31 @@
                             @error('hardware_model') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
 
+                        <fieldset class="sm:col-span-2">
+                            <legend class="text-sm font-medium text-gray-700">Access backend</legend>
+                            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                                <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
+                                    <input type="radio" name="access_backend" value="radius" required
+                                           @checked(old('access_backend', 'radius') === 'radius')
+                                           class="mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500">
+                                    <span>
+                                        <span class="block text-sm font-medium text-gray-900">RADIUS (default)</span>
+                                        <span class="mt-1 block text-xs text-gray-500">Voucher access is authorized by the private RADIUS policy service. Configure RADIUS before activating vouchers.</span>
+                                    </span>
+                                </label>
+                                <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
+                                    <input type="radio" name="access_backend" value="site_agent" required
+                                           @checked(old('access_backend') === 'site_agent')
+                                           class="mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500">
+                                    <span>
+                                        <span class="block text-sm font-medium text-gray-900">Site agent</span>
+                                        <span class="mt-1 block text-xs text-gray-500">A paired site agent provisions and removes hotspot users for routers at this site.</span>
+                                    </span>
+                                </label>
+                            </div>
+                            @error('access_backend') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </fieldset>
+
                         <div class="sm:col-span-2">
                             <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
                                 <input type="checkbox" name="has_wireless" value="1" x-model="hasWireless" @checked(old('has_wireless'))

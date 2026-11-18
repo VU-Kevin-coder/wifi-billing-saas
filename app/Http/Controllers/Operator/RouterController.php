@@ -12,10 +12,14 @@ use App\Models\SiteAgentCommand;
 use App\Services\ActivityNotifier;
 use App\Services\RouterConnectionService;
 use App\Services\RouterIdentityEnrollmentService;
+use App\Services\RouterOnboardingService;
 use App\Services\RouterProvisioningService;
 use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
+use App\Services\WireGuardService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -113,16 +117,25 @@ class RouterController extends Controller
         ];
         $apiPort = PlatformSetting::get('router.api_ssl', true) ? 8729 : config('services.mikrotik.api_port');
 
-        return view('operator.routers.create', compact(
+        $wireGuardReady = (bool) config('wireguard.enabled')
+            && filled(config('wireguard.endpoint'))
+            && str_starts_with((string) config('app.url'), 'https://');
+
+        return view('operator.routers.onboarding-create', compact(
             'tenant', 'defaultName', 'sites', 'wanInterface', 'defaultClientPorts', 'hotspotDefaults', 'apiPort',
+            'wireGuardReady',
         ));
     }
 
     /**
      * Store a newly created router in storage.
      */
-    public function store(Request $request, TenantContext $context)
-    {
+    public function store(
+        Request $request,
+        TenantContext $context,
+        WireGuardService $wireGuard,
+        RouterOnboardingService $onboardingService,
+    ) {
         $tenantId = $context->getTenantId();
         $tenant = $context->getTenant();
         abort_unless($tenant, 404, 'Tenant not found');
@@ -134,6 +147,7 @@ class RouterController extends Controller
         }
 
         $validated = $request->validate([
+            'guided_onboarding' => ['nullable', 'boolean'],
             'name' => ['required', 'string', 'max:255'],
             'site' => ['nullable', 'string', 'max:255'],
             'site_id' => [
@@ -141,6 +155,8 @@ class RouterController extends Controller
                 'integer',
                 Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
             ],
+            'hardware_model' => ['nullable', 'string', 'max:255'],
+            'access_backend' => ['sometimes', 'required', Rule::in(['radius', 'site_agent'])],
             'management_ip' => ['nullable', 'string', 'max:255'],
             'management_subnet' => [
                 'nullable',
@@ -235,6 +251,16 @@ class RouterController extends Controller
             'hotspot_domain' => ['nullable', 'string', 'max:100', 'regex:/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/'],
         ]);
 
+        $guidedOnboarding = $request->boolean('guided_onboarding');
+        if ($guidedOnboarding) {
+            try {
+                $wireGuard->assertOnboardingReady();
+                $onboardingService->assertBootstrapUrlAvailable();
+            } catch (\RuntimeException|\LogicException $exception) {
+                return back()->withInput()->withErrors(['connection' => $exception->getMessage()]);
+            }
+        }
+
         $site = isset($validated['site_id'])
             ? Site::where('tenant_id', $tenantId)->findOrFail($validated['site_id'])
             : null;
@@ -259,37 +285,68 @@ class RouterController extends Controller
             (array) config('services.mikrotik.client_ports', ['ether2', 'ether3', 'ether4', 'ether5']),
             fn (string $port): bool => $port !== $wanInterface,
         ));
-        $router = Router::create([
-            'tenant_id' => $tenantId,
-            'site_id' => $site?->id,
-            'name' => $validated['name'],
-            'wifi_ssid' => $wifiSsid,
-            'site' => $site?->name ?? ($validated['site'] ?? null),
-            'management_ip' => $validated['management_ip'] ?? null,
-            'status' => 'provisioning',
-            'cpu_usage' => 0,
-            'memory_usage' => 0,
-            'active_users' => 0,
-            'last_seen_at' => null,
-            'api_username' => $apiUsername,
-            'api_password' => $apiPassword,
-            'api_port' => $validated['api_port'] ?? (
-                PlatformSetting::get('router.api_ssl', true) ? 8729 : config('services.mikrotik.api_port')
-            ),
-            'has_wireless' => $hasWireless,
-            'enable_hotspot' => $request->boolean('enable_hotspot', true),
-            'hotspot_config' => [
-                'network' => $validated['hotspot_network'] ?? PlatformSetting::get('hotspot.default_network', config('services.mikrotik.hotspot_network')),
-                'gateway' => $validated['gateway_ip'] ?? config('services.mikrotik.gateway'),
-                'dns' => $validated['dns_servers'] ?? implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
-                'domain' => $validated['hotspot_domain'] ?? config('services.mikrotik.hotspot_domain'),
-                'management_subnet' => $validated['management_subnet'] ?? null,
-                'wan_interface' => $wanInterface,
-            ],
-            'ethernet_ports' => $request->input('ethernet_ports', $defaultClientPorts),
-        ]);
+        $router = DB::transaction(function () use ($validated, $tenantId, $site, $wifiSsid, $hasWireless, $apiUsername, $apiPassword, $defaultClientPorts, $wanInterface, $request, $guidedOnboarding): Router {
+            $router = Router::create([
+                'tenant_id' => $tenantId,
+                'site_id' => $site?->id,
+                'name' => $validated['name'],
+                'wifi_ssid' => $wifiSsid,
+                'site' => $site?->name ?? ($validated['site'] ?? null),
+                'hardware_model' => $validated['hardware_model'] ?? null,
+                'management_ip' => $validated['management_ip'] ?? null,
+                'status' => 'provisioning',
+                'cpu_usage' => 0,
+                'memory_usage' => 0,
+                'active_users' => 0,
+                'last_seen_at' => null,
+                'api_username' => $apiUsername,
+                'api_password' => $apiPassword,
+                'api_port' => $guidedOnboarding
+                    ? 8728
+                    : ($validated['api_port'] ?? (
+                        PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port')
+                    )),
+                'has_wireless' => $hasWireless,
+                'enable_hotspot' => $request->boolean('enable_hotspot', true),
+                'hotspot_config' => [
+                    'network' => $validated['hotspot_network'] ?? PlatformSetting::get('hotspot.default_network', config('services.mikrotik.hotspot_network')),
+                    'gateway' => $validated['gateway_ip'] ?? config('services.mikrotik.gateway'),
+                    'dns' => $validated['dns_servers'] ?? implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
+                    'domain' => $validated['hotspot_domain'] ?? config('services.mikrotik.hotspot_domain'),
+                    'management_subnet' => $validated['management_subnet'] ?? null,
+                    'wan_interface' => $wanInterface,
+                ],
+                'ethernet_ports' => $request->input('ethernet_ports', $defaultClientPorts),
+            ]);
+
+            $router->forceFill([
+                'access_backend' => $validated['access_backend'] ?? 'radius',
+            ])->saveOrFail();
+
+            return $router;
+        });
 
         AuditLog::record('router.created', $router, ['name' => $router->name, 'site_id' => $router->site_id]);
+
+        if ($guidedOnboarding) {
+            try {
+                $wireGuard->createPeer($router, $router->name);
+                $onboarding = $onboardingService->create($router->fresh());
+            } catch (\RuntimeException|\LogicException $exception) {
+                Log::warning('Guided router onboarding could not start.', [
+                    'router_id' => $router->id,
+                    'exception' => $exception::class,
+                ]);
+
+                return redirect()->route('operator.routers.show', $router)
+                    ->with('error', 'The router was saved, but its secure connection could not be prepared. Check the WireGuard hub settings and retry onboarding.');
+            }
+
+            return redirect()->route('operator.routers.onboarding', [
+                'tenant' => $tenant->slug,
+                'router' => $router->id,
+            ])->with('bootstrap_command', $onboarding['command']);
+        }
 
         return redirect()->route('operator.routers.show', $router)
             ->with('status', "Router '{$router->name}' added successfully.");

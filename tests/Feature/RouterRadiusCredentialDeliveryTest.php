@@ -6,11 +6,13 @@ use App\Models\AuditLog;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Models\VpnPeer;
 use App\Services\Policy\Policy;
 use App\Services\RadiusRouterCredentialService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\ViewErrorBag;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -81,12 +83,54 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         $router = $this->router($tenant);
         $secret = str_repeat('b', 64);
         $this->actingAs($this->operator($tenant));
-        view()->share('errors', new \Illuminate\Support\ViewErrorBag);
+        view()->share('errors', new ViewErrorBag);
         $html = view('operator.routers.radius-credential', compact('tenant', 'router', 'secret'))->render();
         $this->assertStringContainsString('This secret is shown once.', $html);
         $this->assertSame(1, preg_match('/<code id="radius-shared-secret"[^>]*>([a-f0-9]{64})<\/code>/', $html, $matches));
         $this->assertSame($secret, $matches[1]);
         $this->assertSame(1, substr_count($html, $secret));
+    }
+
+    public function test_enabled_local_chr_flow_delivers_the_radius_script_only_with_the_one_time_secret(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'router.lab_provisioning_enabled' => true,
+            'wireguard.enabled' => true,
+            'wireguard.server_address' => '10.8.0.1',
+        ]);
+        $tenant = $this->tenant('radius-chr-lab');
+        $router = $this->router($tenant);
+        $router->update(['hardware_model' => 'CHR']);
+        VpnPeer::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'name' => 'CHR WireGuard peer',
+            'public_key' => base64_encode(random_bytes(32)),
+            'tunnel_ip' => '10.8.1.31',
+            'enabled' => true,
+        ]);
+        $operator = $this->operator($tenant);
+
+        $response = $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
+            'nas_identifier' => 'chr-radius-lab-31',
+            'confirm_radius_mode' => '1',
+        ]);
+        $response->assertOk()
+            ->assertSee('Download one-time .rsc')
+            ->assertSee('authenticated dynamic-client lookup')
+            ->assertDontSee('RADIUS_LAB_CLIENT_IP')
+            ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store, private');
+        $secret = $router->fresh()->radius_shared_secret;
+        $this->assertIsString($secret);
+        $response->assertSee('src-address="10.8.1.31"')
+            ->assertSee('use-radius=yes radius-accounting=yes')
+            ->assertSee($secret);
+
+        $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
+            'nas_identifier' => 'chr-radius-lab-31',
+            'confirm_radius_mode' => '1',
+        ])->assertStatus(409)->assertDontSee($secret)->assertDontSee('Download one-time .rsc');
     }
 
     public function test_non_admin_operator_cannot_provision_a_radius_secret(): void
@@ -132,8 +176,10 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         Router::getEventDispatcher()->listen('eloquent.saving: '.Router::class, function (Router $savingRouter) use ($router, &$saveAttempted): ?bool {
             if ($savingRouter->is($router)) {
                 $saveAttempted = true;
+
                 return false;
             }
+
             return null;
         });
         $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [
@@ -179,7 +225,7 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
     private function assertUnconfigured(Router $router): void
     {
         $freshRouter = Router::withoutTenancy()->findOrFail($router->id);
-        $this->assertSame('site_agent', $freshRouter->access_backend);
+        $this->assertSame('radius', $freshRouter->access_backend);
         $this->assertNull($freshRouter->radius_nas_identifier);
         $this->assertNull(DB::table('routers')->where('id', $router->id)->value('radius_shared_secret'));
     }

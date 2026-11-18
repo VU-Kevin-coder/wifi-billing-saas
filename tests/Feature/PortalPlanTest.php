@@ -5,9 +5,9 @@ namespace Tests\Feature;
 use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\Router;
+use App\Models\Session;
 use App\Models\Site;
 use App\Models\SiteAgent;
-use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
@@ -195,14 +195,17 @@ class PortalPlanTest extends TestCase
 
     public function test_renewing_goes_through_the_normal_purchase_flow(): void
     {
-        PlatformSetting::setSecret('mtn_subscription_key', 'k');
-        PlatformSetting::setSecret('mtn_api_user', 'u');
-        PlatformSetting::setSecret('mtn_api_key', 'a');
+        PlatformSetting::set('payment.active_gateway', 'pawapay');
+        PlatformSetting::setSecret('payment.pawapay.api_token', 'pawa-test-token');
+        PlatformSetting::set('payment.pawapay.environment', 'sandbox');
         config(['payments.simulation_enabled' => false]);
-        Http::fake([
-            'https://sandbox.momodeveloper.mtn.com/collection/token/' => Http::response(['access_token' => 't']),
-            'https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay' => Http::response([], 202),
-        ]);
+        Http::fake(function ($request) {
+            if (str_ends_with($request->url(), '/v2/predict-provider')) {
+                return Http::response(['provider' => 'MTN_UGA', 'phoneNumber' => '256771234567']);
+            }
+
+            return Http::response(['status' => 'ACCEPTED', 'depositId' => $request['depositId']]);
+        });
         $this->createSyntheticAgentRouter($this->tenant);
         $session = $this->createSession($this->tenant, $this->package, 'ACME-0007');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0007']);

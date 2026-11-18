@@ -30,20 +30,22 @@ class SiteAgentSecretSafetyTest extends TestCase
         $router = \Mockery::mock(SiteAgentRouterService::class);
         $router->shouldReceive('execute')->once()->andThrow(new \RuntimeException('Router password='.$secret));
         $output = new BufferedOutput;
-        $worker = new class extends RunSiteAgent {
-            public function testCommand(SiteAgentRouterService $router, PendingRequest $http, BufferedOutput $output): void
+        $worker = new class extends RunSiteAgent
+        {
+            public function invokeProcessCommand(SiteAgentRouterService $router, PendingRequest $http, BufferedOutput $output): void
             {
                 $this->components = new Factory(new OutputStyle(new ArrayInput([]), $output));
                 $this->processCommand($router, $http, 'https://example.test', ['id' => 7, 'router_id' => 4, 'operation' => 'test_connection']);
             }
         };
-        $worker->testCommand($router, Http::acceptJson(), $output);
+        $worker->invokeProcessCommand($router, Http::acceptJson(), $output);
         $console = $output->fetch();
         $this->assertStringNotContainsString($secret, $console);
         $this->assertStringContainsString('Router command failed.', $console);
         Http::assertSent(function ($request) use ($secret) {
             $this->assertStringNotContainsString($secret, $request->body());
             $this->assertSame(['success' => false, 'message' => 'Router command failed.'], $request->data());
+
             return $request->url() === 'https://example.test/api/site-agent/commands/7/complete';
         });
     }

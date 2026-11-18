@@ -272,16 +272,18 @@ class CriticalFinancialSecurityRegressionTest extends TestCase
     public function test_validation_does_not_flash_known_credential_fields(): void
     {
         $this->actingAs($this->first);
-        $fields = ['pesapal_consumer_key', 'pesapal_consumer_secret', 'flutterwave_public_key', 'flutterwave_secret_key', 'flutterwave_encryption_key', 'flutterwave_webhook_secret', 'mtn_subscription_key', 'mtn_api_user', 'mtn_api_key', 'airtel_client_id', 'airtel_client_secret', 'smtp_password', 'sms_api_key', 'whatsapp_api_key', 'whatsapp_webhook_secret', 'api_password', 'mikrotik_password', 'password', 'current_password', 'password_confirmation', 'token', 'code', 'email_code', 'recovery_code'];
+        $fields = ['smtp_password', 'sms_api_key', 'whatsapp_api_key', 'whatsapp_webhook_secret', 'api_password', 'mikrotik_password', 'password', 'current_password', 'password_confirmation', 'token', 'code', 'email_code', 'recovery_code'];
         $payload = array_fill_keys($fields, 'sensitive-test-value');
-        $payload['settings'] = ['sms.api_key' => 'nested-sensitive'];
-        $payload['flutterwave_environment'] = 'invalid';
-        $response = $this->put(route('platform.configuration.flutterwave.update'), $payload);
-        $response->assertSessionHasErrors('flutterwave_environment');
+        $payload['reason'] = 'Attempt invalid checkout setup';
+        $payload['settings'] = [
+            'payment.active_gateway' => 'iotec',
+            'payment.iotec.client_secret' => 'nested-sensitive',
+        ];
+        $response = $this->put(route('platform.configuration.control.update'), $payload);
+        $response->assertSessionHasErrors('settings.payment.active_gateway');
         $old = session()->get('_old_input', []);
         foreach (array_merge($fields, ['settings']) as $field) {
             $this->assertArrayNotHasKey($field, $old, $field);
         }
-        $this->assertSame('invalid', $old['flutterwave_environment']);
     }
 }

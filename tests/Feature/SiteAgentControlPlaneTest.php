@@ -791,7 +791,7 @@ class SiteAgentControlPlaneTest extends TestCase
             'hardware_model' => 'CHR',
             'serial_number' => 'TEST-CHR-'.$tenant->id,
         ]);
-        $router->forceFill(['identity_verified_at' => now()])->saveOrFail();
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         $agent = SiteAgent::create([
             'tenant_id' => $tenant->id,
             'site_id' => $site->id,

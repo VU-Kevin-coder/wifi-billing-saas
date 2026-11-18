@@ -11,10 +11,13 @@ use App\Models\RadiusNasSessionIdentity;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\SiteAgentCommand;
+use App\Models\Subscriber;
 use App\Models\Voucher;
+use App\Models\VpnPeer;
 use App\Support\DataLimit;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -37,6 +40,292 @@ class RadiusAccountingService
             return ['decision' => 'reject'];
         }
 
+        return $this->authorizeForRouter($router, $nasSessionId, $voucherCode);
+    }
+
+    public function authorizeForPeer(
+        int $routerId,
+        string $peerIp,
+        string $nasIdentifier,
+        string $nasSessionId,
+        string $voucherCode,
+    ): array {
+        if (! RadiusReadiness::available()) {
+            return ['decision' => 'reject'];
+        }
+
+        $router = $this->routerBoundToPeer($routerId, $peerIp, $nasIdentifier);
+        if (! $router) {
+            return ['decision' => 'reject'];
+        }
+
+        return $this->authorizeForRouter($router, $nasSessionId, $voucherCode);
+    }
+
+    public function authorizePppoeForPeer(
+        int $routerId,
+        string $peerIp,
+        string $nasIdentifier,
+        string $nasSessionId,
+        string $username,
+    ): array {
+        if (! RadiusReadiness::available()) {
+            return ['decision' => 'reject'];
+        }
+
+        $router = $this->routerBoundToPeer($routerId, $peerIp, $nasIdentifier);
+        if (! $router || ! preg_match('/^[A-Za-z0-9._-]{1,64}$/', $username)) {
+            return ['decision' => 'reject'];
+        }
+
+        $subscriber = Subscriber::withoutTenancy()
+            ->where('tenant_id', $router->tenant_id)
+            ->where('username', $username)
+            ->where('status', 'active')
+            ->where('expires_at', '>', now())
+            ->first();
+        if (! $subscriber) {
+            return ['decision' => 'reject'];
+        }
+
+        $package = Package::withoutTenancy()
+            ->where('tenant_id', $router->tenant_id)
+            ->find($subscriber->package_id);
+        if (! $package || ! in_array('PPPoE', (array) $package->features, true)) {
+            return ['decision' => 'reject'];
+        }
+
+        $dataLimitBytes = null;
+        if (PlatformSetting::get('package.data_caps', true)) {
+            try {
+                $dataLimitBytes = DataLimit::bytes($package->data_limit);
+            } catch (InvalidArgumentException) {
+                return ['decision' => 'reject'];
+            }
+
+            if ($dataLimitBytes !== null && $subscriber->bytes_used >= $dataLimitBytes) {
+                return ['decision' => 'reject'];
+            }
+            if ($dataLimitBytes !== null) {
+                $dataLimitBytes -= $subscriber->bytes_used;
+            }
+        }
+
+        return [
+            'decision' => 'accept',
+            'cleartext_password' => $subscriber->password,
+            'policy' => [
+                'session_timeout_seconds' => max(1, (int) now()->diffInSeconds($subscriber->expires_at)),
+                'rate_limit_mbps' => max(1, (int) $package->speed_limit_mbps),
+                'device_limit' => max(1, (int) $package->device_limit),
+                'data_limit_bytes' => $dataLimitBytes,
+            ],
+        ];
+    }
+
+    public function recordPppoeAccountingEvent(array $input): void
+    {
+        $router = $this->routerBoundToPeer(
+            (int) ($input['authenticated_router_id'] ?? 0),
+            (string) ($input['authenticated_peer_ip'] ?? ''),
+            (string) ($input['nas_identifier'] ?? ''),
+        );
+        $username = (string) ($input['username'] ?? '');
+        $statusType = (string) ($input['status_type'] ?? '');
+        $nasSessionId = (string) ($input['nas_session_id'] ?? '');
+
+        if (! $router
+            || ! preg_match('/^[A-Za-z0-9._-]{1,64}$/', $username)
+            || ! in_array($statusType, ['Start', 'Interim-Update', 'Stop'], true)
+            || $nasSessionId === '') {
+            throw new RadiusUnavailableException('PPPoE accounting identity could not be verified.');
+        }
+
+        $inputBytes = $this->radiusCounterBytes($input['input_gigawords'] ?? 0, $input['input_octets'] ?? 0);
+        $outputBytes = $this->radiusCounterBytes($input['output_gigawords'] ?? 0, $input['output_octets'] ?? 0);
+
+        DB::transaction(function () use ($router, $username, $statusType, $nasSessionId, $inputBytes, $outputBytes): void {
+            $subscriber = Subscriber::withoutTenancy()
+                ->where('tenant_id', $router->tenant_id)
+                ->where('username', $username)
+                ->lockForUpdate()
+                ->first();
+            if (! $subscriber) {
+                throw new RadiusUnavailableException('PPPoE subscriber accounting identity was not found.');
+            }
+
+            $session = DB::table('radius_subscriber_sessions')
+                ->where('router_id', $router->id)
+                ->where('nas_session_id', $nasSessionId)
+                ->orderByDesc('generation')
+                ->lockForUpdate()
+                ->first();
+
+            if ($statusType === 'Start' && (! $session || $session->state === 'closed')) {
+                $generation = $session ? (int) $session->generation + 1 : 1;
+                $id = DB::table('radius_subscriber_sessions')->insertGetId([
+                    'tenant_id' => $router->tenant_id,
+                    'router_id' => $router->id,
+                    'subscriber_id' => $subscriber->id,
+                    'nas_session_id' => $nasSessionId,
+                    'generation' => $generation,
+                    'input_bytes' => 0,
+                    'output_bytes' => 0,
+                    'state' => 'open',
+                    'started_at' => now(),
+                    'last_seen_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $session = DB::table('radius_subscriber_sessions')->where('id', $id)->first();
+            } elseif (! $session) {
+                $id = DB::table('radius_subscriber_sessions')->insertGetId([
+                    'tenant_id' => $router->tenant_id,
+                    'router_id' => $router->id,
+                    'subscriber_id' => $subscriber->id,
+                    'nas_session_id' => $nasSessionId,
+                    'generation' => 1,
+                    'input_bytes' => 0,
+                    'output_bytes' => 0,
+                    'state' => 'open',
+                    'started_at' => now(),
+                    'last_seen_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $session = DB::table('radius_subscriber_sessions')->where('id', $id)->first();
+            } elseif ($session->state === 'closed') {
+                return;
+            } elseif ((int) $session->subscriber_id !== (int) $subscriber->id) {
+                throw new RadiusUnavailableException('PPPoE accounting session does not match the subscriber identity.');
+            }
+
+            $previousInput = (int) $session->input_bytes;
+            $previousOutput = (int) $session->output_bytes;
+            $currentInput = max($previousInput, $inputBytes);
+            $currentOutput = max($previousOutput, $outputBytes);
+            $inputDelta = $currentInput - $previousInput;
+            $outputDelta = $currentOutput - $previousOutput;
+            $delta = $outputDelta > PHP_INT_MAX - $inputDelta
+                ? PHP_INT_MAX
+                : $inputDelta + $outputDelta;
+            $currentBytesUsed = (int) $subscriber->bytes_used;
+            $subscriber->forceFill([
+                'bytes_used' => $delta > PHP_INT_MAX - $currentBytesUsed
+                    ? PHP_INT_MAX
+                    : $currentBytesUsed + $delta,
+            ])->saveOrFail();
+
+            DB::table('radius_subscriber_sessions')->where('id', $session->id)->update([
+                'input_bytes' => $currentInput,
+                'output_bytes' => $currentOutput,
+                'state' => $statusType === 'Stop' ? 'closed' : 'open',
+                'last_seen_at' => now(),
+                'stopped_at' => $statusType === 'Stop' ? now() : null,
+                'updated_at' => now(),
+            ]);
+        });
+    }
+
+    private function radiusCounterBytes(mixed $gigawords, mixed $octets): int
+    {
+        $gigawords = is_numeric($gigawords) ? max(0, (int) $gigawords) : 0;
+        $octets = is_numeric($octets) ? max(0, (int) $octets) : 0;
+        $base = 4294967296;
+
+        if ($gigawords > intdiv(PHP_INT_MAX - min($octets, $base - 1), $base)) {
+            return PHP_INT_MAX;
+        }
+
+        return $gigawords * $base + min($octets, $base - 1);
+    }
+
+    public function routerBoundToPeer(int $routerId, string $peerIp, string $nasIdentifier): ?Router
+    {
+        if (filter_var($peerIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || $nasIdentifier === '' || strlen($nasIdentifier) > 255) {
+            return null;
+        }
+
+        $router = Router::withoutTenancy()
+            ->whereKey($routerId)
+            ->where('access_backend', 'radius')
+            ->where('radius_nas_identifier', $nasIdentifier)
+            ->whereNotNull('radius_shared_secret')
+            ->first();
+
+        if (! $router || ! $router->hasUsableRadiusConfiguration()) {
+            return null;
+        }
+
+        return VpnPeer::withoutGlobalScopes()
+            ->where('tenant_id', $router->tenant_id)
+            ->where('router_id', $router->id)
+            ->where('tunnel_ip', $peerIp)
+            ->where('enabled', true)
+            ->exists()
+            ? $router
+            : null;
+    }
+
+    public function radiusRouterForPeerIp(string $peerIp): ?Router
+    {
+        if (filter_var($peerIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            return null;
+        }
+
+        $peer = VpnPeer::withoutGlobalScopes()
+            ->where('tunnel_ip', $peerIp)
+            ->where('enabled', true)
+            ->first();
+        if (! $peer) {
+            return null;
+        }
+
+        $router = Router::withoutTenancy()
+            ->whereKey($peer->router_id)
+            ->where('tenant_id', $peer->tenant_id)
+            ->where('access_backend', 'radius')
+            ->first();
+
+        return $router && $router->hasUsableRadiusConfiguration()
+            ? $router
+            : null;
+    }
+
+    public function recordLabAccountingObservation(array $input): void
+    {
+        if (! RadiusReadiness::available() || ! (bool) config('radius.lab_accounting_log', false)) {
+            throw new RadiusUnavailableException('RADIUS accounting observation is unavailable.');
+        }
+
+        $router = $this->routerBoundToPeer(
+            (int) ($input['authenticated_router_id'] ?? 0),
+            (string) ($input['authenticated_peer_ip'] ?? ''),
+            (string) ($input['nas_identifier'] ?? ''),
+        );
+        if (! $router) {
+            throw new RadiusUnavailableException('RADIUS accounting router identity could not be verified.');
+        }
+
+        $sessionId = (string) ($input['nas_session_id'] ?? '');
+        Log::channel('radius')->info('RADIUS accounting observation', [
+            'router_id' => $router->id,
+            'tenant_id' => $router->tenant_id,
+            'session_fingerprint' => hash_hmac('sha256', $sessionId, (string) config('app.key')),
+            'status_type' => $input['status_type'],
+            'event_time' => $input['event_time'] ?? null,
+            'session_time' => $input['session_time'] ?? null,
+            'input_octets' => $input['input_octets'] ?? null,
+            'input_gigawords' => $input['input_gigawords'] ?? null,
+            'output_octets' => $input['output_octets'] ?? null,
+            'output_gigawords' => $input['output_gigawords'] ?? null,
+            'termination_cause' => $input['termination_cause'] ?? null,
+        ]);
+    }
+
+    private function authorizeForRouter(Router $router, string $nasSessionId, string $voucherCode): array
+    {
         $voucher = Voucher::withoutTenancy()
             ->where('tenant_id', $router->tenant_id)
             ->where('code', $voucherCode)
@@ -104,7 +393,7 @@ class RadiusAccountingService
      */
     public function ingestAccountingEvent(array $input): array
     {
-        if (! RadiusReadiness::available()) {
+        if (! RadiusReadiness::available() || ! config('radius_policy.accounting_reconciliation_enabled', false)) {
             return ['accepted' => false, 'quarantined' => true, 'reason' => 'radius_unavailable'];
         }
 

@@ -34,7 +34,9 @@ class Router extends Model
         'api_port',
         'has_wireless',
         'enable_hotspot',
+        'enable_pppoe',
         'hotspot_config',
+        'pppoe_config',
         'ethernet_ports',
     ];
 
@@ -46,7 +48,9 @@ class Router extends Model
         'telemetry_at' => 'datetime',
         'has_wireless' => 'boolean',
         'enable_hotspot' => 'boolean',
+        'enable_pppoe' => 'boolean',
         'hotspot_config' => 'array',
+        'pppoe_config' => 'array',
         'ethernet_ports' => 'array',
         'api_port' => 'integer',
         'cpu_usage' => 'integer',
@@ -76,6 +80,11 @@ class Router extends Model
     public function vpnPeer(): HasOne
     {
         return $this->hasOne(VpnPeer::class);
+    }
+
+    public function onboarding(): HasOne
+    {
+        return $this->hasOne(RouterOnboarding::class);
     }
 
     /**

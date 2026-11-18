@@ -116,7 +116,8 @@ class DataLimitEnforcementTest extends TestCase
         config(['site_agent.required' => true]);
         $tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme-'.uniqid(), 'status' => 'active']);
         $site = Site::create(['tenant_id' => $tenant->id, 'name' => 'North']);
-        Router::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'R1', 'status' => 'online']);
+        Router::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'R1', 'status' => 'online'])
+            ->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         SiteAgent::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Agent', 'token_hash' => hash('sha256', uniqid()), 'last_seen_at' => now()]);
         $package = Package::create([
             'tenant_id' => $tenant->id, 'name' => 'Pack', 'price' => 1000, 'currency' => 'UGX', 'duration_value' => 1,

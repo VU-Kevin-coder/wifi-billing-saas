@@ -15,6 +15,14 @@ class WireGuardService
 {
     public function __construct(private WireGuardCommandRunner $commands) {}
 
+    public function assertOnboardingReady(): void
+    {
+        $this->assertEnabled();
+        $interface = $this->interfaceName();
+        $this->endpoint();
+        $this->serverPublicKey($interface);
+    }
+
     public function createPeer(Router $router, string $name): VpnPeer
     {
         $this->assertEnabled();
@@ -70,28 +78,19 @@ class WireGuardService
     {
         $this->assertEnabled();
 
-        return DB::transaction(function () use ($peer): string {
-            $lockedPeer = VpnPeer::query()->findOrFail($peer->id);
-            if (! $lockedPeer->enabled || blank($lockedPeer->private_key) || $lockedPeer->config_downloaded_at) {
-                throw new RuntimeException('This WireGuard configuration is unavailable for download. Generate a new peer if it was already downloaded.');
-            }
+        return $this->deliverRouterConfiguration($peer, null);
+    }
 
-            $configuration = $this->buildRouterConfiguration($lockedPeer);
-            $updated = VpnPeer::query()
-                ->whereKey($lockedPeer->id)
-                ->whereNull('config_downloaded_at')
-                ->whereNotNull('private_key')
-                ->update([
-                    'config_downloaded_at' => now(),
-                    'private_key' => null,
-                    'updated_at' => now(),
-                ]);
-            if ($updated !== 1) {
-                throw new RuntimeException('This one-time WireGuard configuration was already downloaded.');
-            }
+    public function onboardingConfiguration(VpnPeer $peer, Router $router): string
+    {
+        $this->assertEnabled();
+        if ((int) $peer->router_id !== (int) $router->id
+            || blank($router->api_username)
+            || blank($router->api_password)) {
+            throw new RuntimeException('The router API account must be configured before onboarding.');
+        }
 
-            return $configuration;
-        });
+        return $this->deliverRouterConfiguration($peer, $router);
     }
 
     public function refreshHandshakes(): void
@@ -171,6 +170,36 @@ class WireGuardService
         return $key;
     }
 
+    private function deliverRouterConfiguration(VpnPeer $peer, ?Router $router): string
+    {
+        return DB::transaction(function () use ($peer, $router): string {
+            $lockedPeer = VpnPeer::query()->findOrFail($peer->id);
+            if (! $lockedPeer->enabled || blank($lockedPeer->private_key) || $lockedPeer->config_downloaded_at) {
+                throw new RuntimeException('This WireGuard configuration is unavailable for download. Generate a new peer if it was already downloaded.');
+            }
+
+            $configuration = $this->buildRouterConfiguration($lockedPeer);
+            if ($router) {
+                $configuration .= $this->buildApiConfiguration($router);
+            }
+
+            $updated = VpnPeer::query()
+                ->whereKey($lockedPeer->id)
+                ->whereNull('config_downloaded_at')
+                ->whereNotNull('private_key')
+                ->update([
+                    'config_downloaded_at' => now(),
+                    'private_key' => null,
+                    'updated_at' => now(),
+                ]);
+            if ($updated !== 1) {
+                throw new RuntimeException('This one-time WireGuard configuration was already downloaded.');
+            }
+
+            return $configuration;
+        });
+    }
+
     private function buildRouterConfiguration(VpnPeer $peer): string
     {
         $interface = $this->interfaceName();
@@ -195,6 +224,22 @@ class WireGuardService
             ':if ([:len [/ip route find dst-address="'.$serverAddress.'/32" gateway="'.$routerInterface.'"]] = 0) do={ /ip route add dst-address="'.$serverAddress.'/32" gateway="'.$routerInterfaceQuoted.'" }',
             '/ip service set api disabled=yes',
             '/ip service set api-ssl disabled=no port=8729 address="'.$serverAddress.'/32"',
+            '',
+        ]);
+    }
+
+    private function buildApiConfiguration(Router $router): string
+    {
+        $serverAddress = $this->routerOsQuote($this->serverAddress());
+        $username = $this->routerOsQuote((string) $router->api_username);
+        $password = $this->routerOsQuote((string) $router->api_password);
+
+        return implode(PHP_EOL, [
+            '# Router API is reachable only from the server through the encrypted WireGuard tunnel.',
+            ':if ([:len [/user group find name="wifi-billing-api"]] = 0) do={ /user group add name="wifi-billing-api" policy=api,read,write comment="Wi-Fi Billing onboarding" }',
+            ':if ([:len [/user find name="'.$username.'"]] = 0) do={ /user add name="'.$username.'" group="wifi-billing-api" password="'.$password.'" comment="Wi-Fi Billing API" } else={ /user set [find name="'.$username.'"] group="wifi-billing-api" password="'.$password.'" }',
+            '/ip service set api-ssl disabled=yes',
+            '/ip service set api port=8728 address="'.$serverAddress.'/32" disabled=no',
             '',
         ]);
     }

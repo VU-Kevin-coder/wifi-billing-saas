@@ -80,15 +80,16 @@ class RouterManagementTest extends TestCase
             ->get('http://acme.localhost/operator/routers/create');
 
         $response->assertStatus(200);
-        $response->assertSee('Add MikroTik Router');
-        $response->assertSee('password is encrypted at rest');
-        $response->assertSee('Allowed API source subnet');
+        $response->assertSee('Add MikroTik Device');
+        $response->assertSee('bg-gray-50', false);
+        $response->assertSee('bg-white', false);
+        $response->assertDontSee('bg-gray-950', false);
+        $response->assertSee('Access backend');
         $response->assertSee('Operating site');
         $response->assertSee('Central Office');
         $response->assertSee('value="'.$site->id.'"', false);
         $response->assertSee('Wi-Fi name (SSID)');
-        $response->assertSee('Service setup');
-        $response->assertSee('value="8729"', false);
+        $response->assertSee('Next: Connect router');
     }
 
     public function test_operator_can_create_new_router(): void

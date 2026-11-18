@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Support\Facades\Blade;
 use Illuminate\View\ComponentAttributeBag;
 use Illuminate\View\ComponentSlot;
 use PHPUnit\Framework\Attributes\Test;
@@ -28,12 +29,12 @@ class UiComponentsTest extends TestCase
     #[Test]
     public function table_empty_row_and_accessible_skeleton_render(): void
     {
-        $row = \Illuminate\Support\Facades\Blade::render('<table><tbody><x-ui.empty-table-row colspan="7" title="No results" action-url="/items" action-label="Browse" /></tbody></table>');
+        $row = Blade::render('<table><tbody><x-ui.empty-table-row colspan="7" title="No results" action-url="/items" action-label="Browse" /></tbody></table>');
         $this->assertStringContainsString('<td colspan="7">', $row);
         $this->assertStringContainsString('No results', $row);
         $this->assertStringContainsString('href="/items"', $row);
 
-        $skeleton = \Illuminate\Support\Facades\Blade::render('<x-ui.skeleton :rows="2" :columns="3" />');
+        $skeleton = Blade::render('<x-ui.skeleton :rows="2" :columns="3" />');
         $this->assertStringContainsString('role="status"', $skeleton);
         $this->assertStringContainsString('Loading, please wait.', $skeleton);
         $this->assertStringContainsString('motion-safe:animate-pulse', $skeleton);

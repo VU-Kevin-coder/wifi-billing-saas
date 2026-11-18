@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\SiteAgentRouterService;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -55,7 +56,7 @@ class RunSiteAgent extends Command
         return self::SUCCESS;
     }
 
-    protected function processCommand(SiteAgentRouterService $routers, \Illuminate\Http\Client\PendingRequest $http, string $baseUrl, array $command): void
+    protected function processCommand(SiteAgentRouterService $routers, PendingRequest $http, string $baseUrl, array $command): void
     {
         $success = false;
         $message = null;

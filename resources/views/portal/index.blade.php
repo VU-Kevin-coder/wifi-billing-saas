@@ -212,11 +212,13 @@
                 </div>
             @endif
 
-            <button type="button" class="help-toggle" @click="helpOpen = !helpOpen" :aria-expanded="helpOpen.toString()">
-                <span>Having trouble connecting?</span>
-                <span aria-hidden="true" x-text="helpOpen ? '−' : '+'"></span>
-            </button>
-            <p class="help-copy" x-show="helpOpen" x-cloak>Check that Wi-Fi is enabled on your device, then enter your voucher code above. If you still need help, contact the network operator.</p>
+            @if ($tenant->settings['show_troubleshooting'] ?? true)
+                <button type="button" class="help-toggle" @click="helpOpen = !helpOpen" :aria-expanded="helpOpen.toString()">
+                    <span>Having trouble connecting?</span>
+                    <span aria-hidden="true" x-text="helpOpen ? '−' : '+'"></span>
+                </button>
+                <p class="help-copy" x-show="helpOpen" x-cloak>Check that Wi-Fi is enabled on your device, then enter your voucher code above. If you still need help, contact the network operator.</p>
+            @endif
 
             <p class="portal-foot">Powered by {{ config('app.name', 'Hamnet') }} · {{ date('Y') }}</p>
         </div>

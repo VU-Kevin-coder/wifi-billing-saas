@@ -1,0 +1,40 @@
+rest {
+    connect_uri = "http://radius-policy-bridge:8080"
+    connect_timeout = 2.0
+    timeout = 5.0
+    read_timeout = 5.0
+
+    authorize {
+        uri = "${..connect_uri}/authorize"
+        method = "post"
+        body = "post"
+        data = "router_id=%{urlencode:%{client:shortname}}&peer_ip=%{urlencode:%{Packet-Src-IP-Address}}&nas_identifier=%{urlencode:%{NAS-Identifier}}&nas_session_id=%{urlencode:%{Acct-Session-Id}}&voucher_code=%{urlencode:%{User-Name}}&service_type=%{urlencode:%{Service-Type}}"
+        force_to = "json"
+        do_xlat = no
+    }
+
+    accounting {
+        uri = "${..connect_uri}/accounting"
+        method = "post"
+        body = "post"
+        data = "router_id=%{urlencode:%{client:shortname}}&peer_ip=%{urlencode:%{Packet-Src-IP-Address}}&nas_identifier=%{urlencode:%{NAS-Identifier}}&nas_session_id=%{urlencode:%{Acct-Session-Id}}&username=%{urlencode:%{User-Name}}&service_type=%{urlencode:%{Service-Type}}&status_type=%{urlencode:%{Acct-Status-Type}}&event_time=%{urlencode:%{Event-Timestamp}}&session_time=%{urlencode:%{Acct-Session-Time}}&input_octets=%{urlencode:%{Acct-Input-Octets}}&input_gigawords=%{urlencode:%{Acct-Input-Gigawords}}&output_octets=%{urlencode:%{Acct-Output-Octets}}&output_gigawords=%{urlencode:%{Acct-Output-Gigawords}}&termination_cause=%{urlencode:%{Acct-Terminate-Cause}}"
+        force_to = "plain"
+        do_xlat = no
+    }
+}
+
+rest radius_client_lookup {
+    connect_uri = "http://radius-policy-bridge:8080"
+    connect_timeout = 2.0
+    timeout = 5.0
+    read_timeout = 5.0
+
+    authorize {
+        uri = "${..connect_uri}/client-lookup"
+        method = "post"
+        body = "post"
+        data = "peer_ip=%{urlencode:%{Packet-Src-IP-Address}}"
+        force_to = "json"
+        do_xlat = no
+    }
+}
