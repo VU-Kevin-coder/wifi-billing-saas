@@ -13,14 +13,15 @@
         <!-- Password Reset Token -->
         <input type="hidden" name="token" value="{{ $request->route('token') }}">
 
-        <!-- Email (pre-filled, read-only) -->
+        <!-- Email (pre-filled and editable) -->
         <div>
             <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-            <input id="email" type="email" name="email" value="{{ old('email', $request->email) }}"
+            <input id="email" type="email" name="email"
+                @error('email') aria-invalid="true" aria-describedby="email-error" @enderror value="{{ old('email', $request->email) }}"
                 required autocomplete="email"
                 class="block w-full rounded-xl border border-gray-300 bg-gray-50 text-sm py-2.5 px-3 text-gray-500 outline-none @error('email') border-red-400 @enderror">
             @error('email')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="email-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
@@ -28,10 +29,11 @@
         <div>
             <label for="password" class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
             <input id="password" type="password" name="password"
+                @error('password') aria-invalid="true" aria-describedby="password-error" @enderror
                 required autocomplete="new-password"
                 class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('password') border-red-400 bg-red-50 @enderror">
             @error('password')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="password-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
