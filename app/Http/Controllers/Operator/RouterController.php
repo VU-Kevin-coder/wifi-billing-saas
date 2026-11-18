@@ -18,6 +18,7 @@ use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -133,8 +134,7 @@ class RouterController extends Controller
         TenantContext $context,
         WireGuardService $wireGuard,
         RouterOnboardingService $onboardingService,
-    )
-    {
+    ) {
         $tenantId = $context->getTenantId();
         $tenant = $context->getTenant();
         abort_unless($tenant, 404, 'Tenant not found');
@@ -284,7 +284,7 @@ class RouterController extends Controller
             (array) config('services.mikrotik.client_ports', ['ether2', 'ether3', 'ether4', 'ether5']),
             fn (string $port): bool => $port !== $wanInterface,
         ));
-        $router = DB::transaction(function () use ($validated, $tenantId, $site, $wifiSsid, $hasWireless, $apiUsername, $apiPassword, $defaultClientPorts, $wanInterface, $request): Router {
+        $router = DB::transaction(function () use ($validated, $tenantId, $site, $wifiSsid, $hasWireless, $apiUsername, $apiPassword, $defaultClientPorts, $wanInterface, $request, $guidedOnboarding): Router {
             $router = Router::create([
                 'tenant_id' => $tenantId,
                 'site_id' => $site?->id,
@@ -332,7 +332,7 @@ class RouterController extends Controller
                 $wireGuard->createPeer($router, $router->name);
                 $onboarding = $onboardingService->create($router->fresh());
             } catch (\RuntimeException|\LogicException $exception) {
-                \Illuminate\Support\Facades\Log::warning('Guided router onboarding could not start.', [
+                Log::warning('Guided router onboarding could not start.', [
                     'router_id' => $router->id,
                     'exception' => $exception::class,
                 ]);
