@@ -17,6 +17,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tenant Domain
+    |--------------------------------------------------------------------------
+    | The base domain used for tenant subdomain routing.
+    | Local:      localhost:8000  (set in .env as TENANT_DOMAIN=localhost:8000)
+    | Production: hamnet.com      (set in Railway/Fly/Coolify env vars)
+    */
+    'tenant_domain' => env('TENANT_DOMAIN', 'localhost'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

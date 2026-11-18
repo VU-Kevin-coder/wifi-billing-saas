@@ -183,153 +183,31 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
         Route::middleware(['auth', 'role:operator_admin|operator_finance|operator_support|operator_network'])
             ->prefix('operator')
             ->name('operator.')
-            ->group(function () {
-                Route::get('/dashboard', OperatorDashboard::class)->middleware('tenant.active:dashboard')->name('dashboard');
-
-                Route::middleware('role:operator_admin|operator_support')->group(function () {
-                    Route::get('/customers/export.csv', [CustomerController::class, 'export'])
-                        ->name('customers.export');
-                    Route::resource('customers', CustomerController::class)
-                        ->only(['index', 'show', 'update', 'destroy']);
-                    Route::post('/customers', [CustomerController::class, 'store'])
-                        ->middleware('idempotency')
-                        ->name('customers.store');
-                });
-
-                Route::middleware('role:operator_admin')->group(function () {
-                    Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
-                    Route::get('/subscribers', [SubscriberController::class, 'index'])->name('subscribers.index');
-                    Route::post('/subscribers', [SubscriberController::class, 'store'])
-                        ->middleware('idempotency')
-                        ->name('subscribers.store');
-                    Route::patch('/subscribers/{subscriber}', [SubscriberController::class, 'update'])
-                        ->whereNumber('subscriber')
-                        ->middleware('idempotency')
-                        ->name('subscribers.update');
-
-                    Route::post('routers/{router}/radius-credential', [RadiusRouterCredentialController::class, 'store'])
-                        ->whereNumber('router')
-                        ->middleware(['mfa.recent', 'throttle:5,1'])
-                        ->name('routers.radius-credential.store');
-
-                    // Vouchers: index + store are gated by the tenant lifecycle policy
-                    Route::get('/vouchers', [VoucherController::class, 'index'])->name('vouchers.index');
-                    Route::post('/vouchers', [VoucherController::class, 'store'])
-                        ->middleware(['tenant.active:generate_vouchers', 'idempotency'])
-                        ->name('vouchers.store');
-
-                    // Voucher void: admin-only, removes a voucher from circulation
-                    Route::post('vouchers/{voucher}/void', [VoucherController::class, 'void'])
-                        ->whereNumber('voucher')
-                        ->name('vouchers.void');
-                });
-
-                Route::middleware('role:operator_admin|operator_network')->group(function () {
-                    Route::post('routers/ping-all', [RouterController::class, 'pingAll'])->name('routers.ping-all');
-                    Route::post('routers/bulk-action', [RouterController::class, 'bulkAction'])->name('routers.bulk-action');
-                    Route::post('routers/{router}/ping', [RouterController::class, 'ping'])->name('routers.ping');
-                    Route::post('routers/{router}/reboot', [RouterController::class, 'reboot'])->name('routers.reboot');
-                    Route::post('routers/{router}/sync', [RouterController::class, 'sync'])->name('routers.sync');
-                    Route::get('routers/{router}/provision-script', [RouterController::class, 'provisionScript'])->name('routers.provision-script');
-                    Route::post('routers/{router}/provision', [RouterController::class, 'provision'])->name('routers.provision');
-                    Route::post('routers/{router}/test', [RouterController::class, 'testConnection'])->name('routers.test');
-                    Route::post('routers/{router}/telemetry', [RouterController::class, 'telemetry'])->name('routers.telemetry');
-                    Route::post('routers/{router}/vpn-peer', [VpnPeerController::class, 'storeForRouter'])->whereNumber('router')->name('routers.vpn-peer.store');
-                    Route::get('routers/{router}/vpn-peer/config', [VpnPeerController::class, 'downloadForRouter'])->whereNumber('router')->middleware('throttle:3,1')->name('routers.vpn-peer.download');
-                    Route::patch('routers/{router}/gateway', [RouterController::class, 'updateGateway'])->name('routers.gateway');
-                    Route::resource('routers', RouterController::class)->except(['store']);
-                    Route::post('/routers', [RouterController::class, 'store'])
-                        ->middleware('idempotency')
-                        ->name('routers.store');
-                    Route::get('routers/{router}/onboarding', [RouterOnboardingController::class, 'show'])
-                        ->whereNumber('router')
-                        ->name('routers.onboarding');
-                    Route::get('routers/{router}/onboarding/status', [RouterOnboardingController::class, 'status'])
-                        ->whereNumber('router')
-                        ->middleware('throttle:60,1')
-                        ->name('routers.onboarding.status');
-                    Route::get('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'services'])
-                        ->whereNumber('router')
-                        ->name('routers.onboarding.services');
-                    Route::post('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'configure'])
-                        ->whereNumber('router')
-                        ->middleware('idempotency')
-                        ->name('routers.onboarding.services.configure');
-                    Route::post('/sessions/{session}/disconnect', [LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
-                    Route::post('/sessions/{session}/ban-device', [LiveSessionController::class, 'banDevice'])->name('sessions.ban-device');
-                    Route::post('/blocked-devices/{blockedDevice}/unban', [LiveSessionController::class, 'unbanDevice'])
-                        ->whereNumber('blockedDevice')
-                        ->name('blocked-devices.unban');
-                    Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
-                });
-
-                Route::get('/sessions', [LiveSessionController::class, 'index'])->name('sessions.index');
-                Route::get('/sites/export', [SiteController::class, 'export'])->middleware('tenant.active:view_reports')->name('sites.export');
-                Route::get('/sites', [SiteController::class, 'index'])->middleware('tenant.active:view_reports')->name('sites.index');
-                Route::get('/billing', [App\Http\Controllers\Operator\BillingController::class, 'index'])
-                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing'])
-                    ->name('billing.index');
-
-                // Operator Wallet & Withdrawals
-                Route::get('/wallet', [WalletController::class, 'index'])
-                    ->middleware('role:operator_admin|operator_finance')
-                    ->name('wallet.index');
-                Route::post('/wallet/withdraw', [WithdrawalController::class, 'store'])
-                    ->middleware(['role:operator_admin|operator_finance', 'tenant.active:withdraw', 'mfa.recent', 'idempotency'])
-                    ->name('wallet.withdraw');
-
-                // Refund requests (the platform approves and pays the customer)
-                Route::middleware('role:operator_admin|operator_finance')->group(function () {
-                    // Analytics (read-only sales reporting)
-                    Route::get('/analytics', [AnalyticsController::class, 'index'])->middleware('tenant.active:view_reports')->name('analytics');
-
-                    Route::get('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'index'])->name('refunds.index');
-                    Route::post('/refunds', [App\Http\Controllers\Operator\RefundController::class, 'store'])->middleware('idempotency')->name('refunds.store');
-                    Route::post('/refunds/{refund}/cancel', [App\Http\Controllers\Operator\RefundController::class, 'cancel'])->whereNumber('refund')->middleware('idempotency')->name('refunds.cancel');
-                });
-
-                Route::middleware('role:operator_admin')->group(function () {
-                    Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
-                    Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general.update');
-                    Route::put('/settings/hotspot', [SettingsController::class, 'updateHotspot'])->name('settings.hotspot.update');
-                    Route::put('/settings/sms', [SettingsController::class, 'updateSms'])->name('settings.sms.update');
-                    Route::put('/settings/whatsapp', [SettingsController::class, 'updateWhatsapp'])->name('settings.whatsapp.update');
-                    Route::put('/settings/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
-                    Route::put('/settings/security', [SettingsController::class, 'updateSecurity'])->name('settings.security.update');
-                    Route::get('/settings/portal', [PortalSettingsController::class, 'edit'])->name('settings.portal');
-                    Route::put('/settings/portal', [PortalSettingsController::class, 'update'])->name('settings.portal.update');
-                });
-
-                Route::middleware('role:operator_admin|operator_network')->group(function () {
-                    Route::get('/settings/router', [RouterSettingsController::class, 'edit'])->name('settings.router');
-                    Route::put('/settings/router', [RouterSettingsController::class, 'update'])->name('settings.router.update');
-                    Route::post('/settings/router/test', [RouterSettingsController::class, 'testConnection'])->name('settings.router.test');
-                    Route::post('/settings/router/sync-all', [RouterSettingsController::class, 'syncAll'])->name('settings.router.sync-all');
-                    Route::post('/settings/router/disconnect', [RouterSettingsController::class, 'disconnect'])->name('settings.router.disconnect');
-                });
-
-                // Staff Management is strictly for operator_admin
-                Route::middleware('role:operator_admin')->group(function () {
-                    Route::get('/team', [TeamController::class, 'index'])->name('team.index');
-                    Route::resource('staff', StaffController::class)->only(['index', 'create', 'store']);
-                    Route::patch('staff/{staff}', [StaffController::class, 'update'])->whereNumber('staff')->name('staff.update');
-                    Route::post('staff/{staff}/deactivate', [StaffController::class, 'deactivate'])->whereNumber('staff')->name('staff.deactivate');
-                    Route::post('staff/{staff}/reactivate', [StaffController::class, 'reactivate'])->whereNumber('staff')->name('staff.reactivate');
-                });
-            });
+            ->group($operatorRoutes);
     });
+}
+
+// Single-Domain Routing (Active on Railway default domain, testing, localhost fallback)
+Route::get('/sso/verify', [\App\Http\Controllers\Auth\AuthenticatedSessionController::class, 'ssoVerify'])
+    ->name('operator.sso.verify');
+
+Route::middleware(['auth', 'role:operator_admin|operator_finance|operator_support|operator_network'])
+    ->prefix('operator')
+    ->name('operator.')
+    ->group($operatorRoutes);
+
+Route::prefix('portal')->name('portal.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\PortalController::class, 'index'])->name('index');
+    Route::post('/redeem', [\App\Http\Controllers\PortalController::class, 'redeem'])->name('redeem');
+    Route::get('/success', [\App\Http\Controllers\PortalController::class, 'success'])->name('success');
+});
 
 // ─── Breeze default dashboard (fallback redirect) ──────────
 Route::get('/dashboard', function () {
     if (auth()->user()->hasRole('platform_admin')) {
         return redirect()->route('platform.tenants.index');
     }
-    $tenant = auth()->user()->tenant;
-    if ($tenant) {
-        return redirect()->to($tenant->url('operator/dashboard'));
-    }
-
-    return redirect()->route('login');
+    return redirect()->route('operator.dashboard');
 })->middleware(['auth'])->name('dashboard');
 
 // ─── Authentication Routes (Breeze) ────────────────────────

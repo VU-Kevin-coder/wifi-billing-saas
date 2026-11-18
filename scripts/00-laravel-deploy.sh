@@ -19,7 +19,7 @@ mkdir -p \
     bootstrap/cache
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
-chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+chmod -R 777 storage bootstrap/cache 2>/dev/null || true
 
 # ── 2. Wait for the database ──────────────────────────────────────────────────
 if [ -n "${DB_HOST:-}" ]; then
@@ -69,11 +69,15 @@ fi
 echo ">>> Running migrations..."
 php artisan migrate --force --no-interaction
 
-# ── 5. Seed platform admin (only on first boot — idempotent guard inside seeder)
-# Uncomment once you have a DatabaseSeeder guard in place:
-# php artisan db:seed --class=PlatformAdminSeeder --force --no-interaction
+# ── 5. Seed roles (idempotent — safe to run every boot)
+echo ">>> Seeding roles..."
+php artisan db:seed --class=RoleSeeder --force --no-interaction
 
-# ── 6. Warm Laravel caches ────────────────────────────────────────────────────
+# ── 6. Storage link
+echo ">>> Linking storage..."
+php artisan storage:link || true
+
+# ── 7. Warm Laravel caches ────────────────────────────────────────────────────
 echo ">>> Warming caches..."
 php artisan config:cache  --quiet || true
 php artisan route:cache   --quiet || true

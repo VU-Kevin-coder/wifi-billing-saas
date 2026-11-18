@@ -22,32 +22,9 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        if (app()->isProduction()) {
-            $message = 'Demo data seeding is disabled in production. Create platform administrators with php artisan platform-admin:create.';
-            $this->command?->error($message);
-
-            throw new \RuntimeException($message);
-        }
-
-        $adminPassword = trim((string) env('SEED_ADMIN_PASSWORD', ''));
-        $tenantPassword = trim((string) env('SEED_TENANT_PASSWORD', ''));
-
-        if (($adminPassword === '') !== ($tenantPassword === '')) {
-            throw new \RuntimeException('SEED_ADMIN_PASSWORD and SEED_TENANT_PASSWORD must either both be set or both be empty.');
-        }
-
-        // ─── 1. ROLES ───────────────────────────────────────────
-        $this->call(RoleSeeder::class);
-
-        // ─── 2. PLATFORM SETTINGS ───────────────────────────────
-        PlatformSetting::set('platform_name', 'Hamnet');
-        PlatformSetting::set('default_commission_rate', 5.00);
-        PlatformSetting::firstOrCreate(['key' => 'flutterwave_environment'], ['value' => 'sandbox']);
-        PlatformSetting::firstOrCreate(['key' => 'flutterwave_status'], ['value' => 'Not Configured']);
-
-        // ─── 3. PLATFORM PLANS (SaaS Tiers) ─────────────────────
-        $starter = PlatformPlan::firstOrCreate(['name' => 'Starter'], [
-            'price' => 100000, 'trial_days' => 14, 'max_customers' => 500, 'max_routers' => 2,
+        $this->call([
+            RoleSeeder::class,
+            // DemoDataSeeder::class, // ❌ DO NOT run in production — test data only
         ]);
         $growth = PlatformPlan::firstOrCreate(['name' => 'Growth'], [
             'price' => 180000, 'trial_days' => 14, 'max_customers' => 2000, 'max_routers' => 10,

@@ -67,10 +67,19 @@ class AuthenticatedSessionController extends Controller
                 return redirect()->intended(route('operator.dashboard'));
             }
 
-            // Transfer authentication with a signed, single-use server-side nonce.
-            return redirect()->to($this->ssoUrl($user, $tenant, $mfaVerified));
+            // Transfer authentication via signed SSO
+            $parameters = ['tenant' => $tenantSlug, 'user' => $user->id];
+            if ($mfaVerified) {
+                $parameters['mfa_verified'] = 1;
+            }
+
+            if (\Illuminate\Support\Facades\Route::has('operator.sso.verify')) {
+                $redirectUrl = URL::temporarySignedRoute('operator.sso.verify', now()->addMinutes(2), $parameters);
+                return redirect()->to($redirectUrl);
+            }
         }
 
+        // Single-domain mode (e.g. Railway testing): stay on the current domain
         return redirect()->intended(route('operator.dashboard'));
     }
 

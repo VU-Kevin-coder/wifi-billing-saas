@@ -85,9 +85,19 @@ mkdir -p storage/framework/cache/data \
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
-# These caches can be environment-specific or stale on the bind-mounted
-# development worktree. Remove only generated bootstrap caches before FPM starts.
-rm -f bootstrap/cache/config.php bootstrap/cache/routes-v7.php bootstrap/cache/events.php
+# Ensure public storage link exists
+php artisan storage:link || true
+
+# ─────────────────────────────────────────────────────────────
+# Warm Laravel caches (config, routes, views, events)
+# This makes every request faster by pre-compiling everything.
+# ─────────────────────────────────────────────────────────────
+echo "Warming Laravel caches..."
+php artisan config:cache  --quiet || true
+php artisan route:cache   --quiet || true
+php artisan view:cache    --quiet || true
+php artisan event:cache   --quiet || true
+echo "Cache warming complete."
 
 # ─────────────────────────────────────────────────────────────
 # Run the CMD (default: php-fpm)

@@ -137,21 +137,32 @@ class DashboardController extends Controller
 
     public function impersonate(Request $request, Tenant $tenant)
     {
-        $user = $request->user();
-        $token = SsoNonce::issue($user, $tenant, mfaVerified: session('mfa.verified') === true, impersonation: true);
+        // Store the impersonated tenant in the session
+        session(['impersonate_tenant' => $tenant->id]);
+        
+        // Set the context immediately for this request
+        $context->setTenant($tenant);
 
-        // Generate a signed, single-use URL to switch into the tenant subdomain.
-        $ssoUrl = URL::temporarySignedRoute(
-            'operator.sso.verify',
-            now()->addMinutes(2),
-            [
-                'tenant' => $tenant->slug,
-                'user' => $user->id,
-                'token' => $token,
-            ]
-        );
+        $hasCustomDomain = config('app.tenant_domain') 
+            && ! str_contains(config('app.tenant_domain'), 'railway.app') 
+            && ! str_contains(config('app.tenant_domain'), 'localhost');
 
-        return redirect()->to($ssoUrl);
+        if ($hasCustomDomain && \Illuminate\Support\Facades\Route::has('operator.sso.verify')) {
+            // Generate signed URL to switch into the tenant subdomain as platform admin
+            $ssoUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                'operator.sso.verify',
+                now()->addMinutes(2),
+                [
+                    'tenant' => $tenant->slug,
+                    'user' => $request->user()->id,
+                    'impersonate' => 1,
+                ]
+            );
+
+            return redirect()->to($ssoUrl);
+        }
+
+        return redirect()->route('operator.dashboard');
     }
 
     public function stopImpersonating(Request $request, TenantContext $context)

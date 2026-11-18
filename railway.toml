@@ -1,0 +1,11 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.render"
+
+[deploy]
+startCommand = "/usr/local/bin/deploy.sh && supervisord -c /etc/supervisor/conf.d/supervisord.conf"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
