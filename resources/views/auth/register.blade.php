@@ -19,11 +19,12 @@
         {{-- ── Business Name ──────────────────────────────────────────────── --}}
         <div>
             <label for="business_name" class="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
-            <input id="business_name" type="text" name="business_name" value="{{ old('business_name') }}"
+            <input id="business_name" type="text" name="business_name"
+                @error('business_name') aria-invalid="true" aria-describedby="business_name-error" @enderror value="{{ old('business_name') }}"
                 required autofocus placeholder="e.g. Kampala Connect"
                 class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('business_name') border-red-400 bg-red-50 @enderror">
             @error('business_name')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="business_name-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
@@ -31,7 +32,8 @@
         <div>
             <label for="subdomain" class="block text-sm font-medium text-gray-700 mb-1">Portal Subdomain</label>
             <div class="flex rounded-xl shadow-sm overflow-hidden border border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition @error('subdomain') border-red-400 bg-red-50 @enderror">
-                <input id="subdomain" type="text" name="subdomain" value="{{ old('subdomain') }}"
+                <input id="subdomain" type="text" name="subdomain"
+                @error('subdomain') aria-invalid="true" aria-describedby="subdomain-error" @enderror value="{{ old('subdomain') }}"
                     required placeholder="acme"
                     class="flex-1 min-w-0 block w-full border-0 text-sm py-2.5 px-3 outline-none bg-transparent">
                 <span class="inline-flex items-center px-3 bg-gray-50 text-gray-400 text-sm border-l border-gray-300 whitespace-nowrap">
@@ -39,18 +41,19 @@
                 </span>
             </div>
             @error('subdomain')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="subdomain-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
         {{-- ── Full Name ──────────────────────────────────────────────────── --}}
         <div>
             <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Your Full Name</label>
-            <input id="name" type="text" name="name" value="{{ old('name') }}"
+            <input id="name" type="text" name="name"
+                @error('name') aria-invalid="true" aria-describedby="name-error" @enderror value="{{ old('name') }}"
                 required
                 class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('name') border-red-400 bg-red-50 @enderror">
             @error('name')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="name-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
@@ -58,7 +61,8 @@
         <div>
             <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email address</label>
             <div class="flex gap-2">
-                <input id="email" type="email" name="email" value="{{ old('email') }}"
+                <input id="email" type="email" name="email"
+                @error('email') aria-invalid="true" aria-describedby="email-error" @enderror value="{{ old('email') }}"
                     required autocomplete="email"
                     class="min-w-0 flex-1 rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('email') border-red-400 bg-red-50 @enderror">
                 <button type="submit" formmethod="POST" formaction="{{ route('register.email-code') }}" formnovalidate
@@ -67,19 +71,20 @@
                 </button>
             </div>
             @error('email')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="email-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
         {{-- ── Email Verification Code ───────────────────────────────────── --}}
         <div>
             <label for="email_code" class="block text-sm font-medium text-gray-700 mb-1">Email verification code</label>
-            <input id="email_code" type="text" name="email_code" value="{{ old('email_code') }}"
+            <input id="email_code" type="text" name="email_code"
+                @error('email_code') aria-invalid="true" aria-describedby="email_code-error" @enderror value="{{ old('email_code') }}"
                 required inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"
                 placeholder="6-digit code"
                 class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('email_code') border-red-400 bg-red-50 @enderror">
             @error('email_code')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="email_code-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
@@ -87,10 +92,11 @@
         <div>
             <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input id="password" type="password" name="password"
+                @error('password') aria-invalid="true" aria-describedby="password-error" @enderror
                 required autocomplete="new-password"
                 class="block w-full rounded-xl border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-1 text-sm py-2.5 px-3 outline-none transition @error('password') border-red-400 bg-red-50 @enderror">
             @error('password')
-                <p class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
+                <p id="password-error" class="text-red-500 text-xs mt-1.5">{{ $message }}</p>
             @enderror
         </div>
 
