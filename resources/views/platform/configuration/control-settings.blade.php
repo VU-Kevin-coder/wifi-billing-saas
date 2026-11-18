@@ -37,8 +37,8 @@
         .control-danger-row{padding:14px 18px;border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,300px);gap:10px 20px;align-items:center}.control-danger-row form{display:flex;gap:6px;flex-wrap:wrap}
         .control-savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border-top:1px solid var(--line2);box-shadow:0 -8px 24px #0002}.control-savebar.show{display:flex}.control-savebar input{width:min(420px,100%);padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}
         @media(max-width:900px){.control-wrap{grid-template-columns:minmax(0,1fr);gap:14px}.control-nav{position:static;max-height:none;display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}.control-nav h6{display:none}.control-nav a{white-space:nowrap;border:1px solid var(--line);background:var(--surface)}.control-row,.control-danger-row{grid-template-columns:minmax(0,1fr)}}
-        @media(prefers-color-scheme:dark){.control-page:not([data-theme=light]){--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}}
-        .control-page[data-theme=dark]{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}
+        @media(prefers-color-scheme:dark){html:not([data-app-theme=light]):not([data-app-theme=dark]) .control-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}}
+        html[data-app-theme=dark] .control-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}
     </style>
 
     <div class="control-page" id="controlPage">
@@ -48,7 +48,6 @@
             <div class="control-actions">
                 <a class="control-btn" href="{{ route('platform.policies.index') }}">Policy center</a>
                 <a class="control-btn" href="{{ route('platform.configuration.export') }}">Export JSON</a>
-                <button class="control-btn" type="button" id="themeToggle">Theme: auto</button>
             </div>
         </div>
 
@@ -146,7 +145,7 @@
                                             @elseif($field['type'] === 'select' || $field['type'] === 'policy_select')
                                                 <select class="control-input" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" aria-label="{{ $field['label'] }}">
                                                     @foreach($field['options'] as $option)
-                                                        <option value="{{ $option }}" @selected((string) $value === (string) $option)>{{ $option }}</option>
+                                                        <option value="{{ $option }}" @selected((string) $value === (string) $option)>{{ $field['option_labels'][$option] ?? $option }}</option>
                                                     @endforeach
                                                 </select>
                                             @elseif($field['type'] === 'number' || ($field['type'] === 'policy' && is_numeric($field['default'])))
@@ -282,7 +281,6 @@
 
     <script>
         (() => {
-            const page = document.getElementById('controlPage');
             const form = document.getElementById('settingsForm');
             const bar = document.getElementById('saveBar');
             const search = document.getElementById('settingSearch');
@@ -374,14 +372,6 @@
                 document.querySelectorAll('[data-group]').forEach(group => {
                     group.hidden = query !== '' && !group.querySelector('[data-setting-row]:not([hidden])');
                 });
-            });
-            const modes = ['auto', 'light', 'dark'];
-            let mode = 0;
-            document.getElementById('themeToggle').addEventListener('click', () => {
-                mode = (mode + 1) % modes.length;
-                if (modes[mode] === 'auto') page.removeAttribute('data-theme');
-                else page.setAttribute('data-theme', modes[mode]);
-                document.getElementById('themeToggle').textContent = 'Theme: ' + modes[mode];
             });
         })();
     </script>

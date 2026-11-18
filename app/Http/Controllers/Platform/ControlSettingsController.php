@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Models\Session;
 use App\Models\SiteAgent;
+use App\Services\Payments\PaymentGatewaySettings;
 use App\Services\Policy\Policy;
 use App\Services\Policy\PolicyDefinitions;
 use App\Services\SmsConfiguration;
@@ -169,6 +170,25 @@ class ControlSettingsController extends Controller
                     PlatformSetting::set('email_status', 'Configured (Untested)');
                 }
             }
+            if (array_intersect([
+                'payment.active_gateway',
+                'payment.obpay.secret_key',
+                'payment.obpay.webhook_secret',
+                'payment.pawapay.api_token',
+                'payment.pawapay.environment',
+                'payment.iotec.client_id',
+                'payment.iotec.client_secret',
+                'payment.iotec.wallet_id',
+                'payment.iotec.webhook_secret',
+            ], array_keys($values)) !== []) {
+                $activeGateway = PlatformSetting::get('payment.active_gateway');
+                if (is_string($activeGateway) && $activeGateway !== ''
+                    && ! PaymentGatewaySettings::configured($activeGateway)) {
+                    throw ValidationException::withMessages([
+                        'settings.payment.active_gateway' => 'Configure all required credentials and callback secrets before enabling this gateway.',
+                    ]);
+                }
+            }
             if ($roleAssignments !== null) {
                 $this->saveRolePermissions($roleAssignments, $catalog);
                 $changes[] = ['key' => 'role_permissions', 'old' => 'previous assignments', 'new' => 'updated assignments', 'source' => 'database'];
@@ -249,9 +269,8 @@ class ControlSettingsController extends Controller
         }
         if ($field['type'] === 'readonly') {
             return match ($key) {
-                'pay.pesapal.ipn' => route('api.webhooks.pesapal'),
-                'pay.mtn.webhook' => config('services.mtn_momo.webhook_url') ?: route('api.webhooks.mtn'),
-                'pay.airtel.webhook' => config('services.airtel_money.webhook_url') ?: route('api.webhooks.airtel'),
+                'payment.iotec.webhook_url' => route('api.webhooks.iotec'),
+                'payment.pawapay.webhook_url' => route('api.webhooks.pawapay'),
                 default => (string) ($field['default'] ?? ''),
             };
         }
@@ -270,13 +289,7 @@ class ControlSettingsController extends Controller
             return PlatformSetting::get('control.desired.'.$key, $field['default']);
         }
 
-        $storageKey = $this->storageKey($key);
-        $value = PlatformSetting::get($storageKey, $field['default']);
-        if (in_array($key, ['pay.pesapal.mode', 'pay.flw.mode', 'pay.mtn.mode', 'pay.airtel.mode'], true)) {
-            return $value === 'production' ? 'live' : $value;
-        }
-
-        return $value;
+        return PlatformSetting::get($this->storageKey($key), $field['default']);
     }
 
     private function writeValue(string $key, array $field, mixed $value): void
@@ -290,11 +303,7 @@ class ControlSettingsController extends Controller
         if ($field['type'] === 'secret') {
             if ($value !== '') {
                 $storageKey = $field['secret_key'] ?? $key;
-                if (in_array($storageKey, ['pesapal_consumer_key', 'flutterwave_public_key'], true)) {
-                    PlatformSetting::set($storageKey, $value);
-                } else {
-                    PlatformSetting::setSecret($storageKey, $value);
-                }
+                PlatformSetting::setSecret($storageKey, $value);
             }
 
             return;
@@ -312,10 +321,6 @@ class ControlSettingsController extends Controller
             return;
         }
 
-        if (in_array($key, ['pay.pesapal.mode', 'pay.flw.mode', 'pay.mtn.mode', 'pay.airtel.mode'], true)) {
-            $value = $value === 'live' ? 'production' : $value;
-        }
-
         PlatformSetting::set($this->storageKey($key), $value);
     }
 
@@ -328,16 +333,6 @@ class ControlSettingsController extends Controller
             'app.support_email' => 'support_email',
             'app.support_phone' => 'support_phone',
             'tenant.commission_rate' => 'default_commission_rate',
-            'pay.pesapal.enabled' => 'pesapal_enabled',
-            'pay.pesapal.mode' => 'pesapal_environment',
-            'pay.pesapal.key' => 'pesapal_consumer_key',
-            'pay.flw.enabled' => 'flutterwave_enabled',
-            'pay.flw.mode' => 'flutterwave_environment',
-            'pay.flw.public' => 'flutterwave_public_key',
-            'pay.mtn.enabled' => 'mtn_enabled',
-            'pay.mtn.mode' => 'mtn_environment',
-            'pay.airtel.enabled' => 'airtel_enabled',
-            'pay.airtel.mode' => 'airtel_environment',
             'sms.provider' => 'sms_provider',
             'sms.username' => 'sms_username',
             'sms.environment' => 'sms_environment',
@@ -417,9 +412,14 @@ class ControlSettingsController extends Controller
                 isset($field['max']) ? 'max:'.$field['max'] : null,
             ]),
             'email' => ['required', 'email', 'max:255'],
-            'select', 'policy_select' => ['required', 'in:'.implode(',', $field['options'])],
+            'select' => $key === 'payment.active_gateway'
+                ? ['nullable', 'in:'.implode(',', $field['options'])]
+                : ['required', 'in:'.implode(',', $field['options'])],
+            'policy_select' => ['required', 'in:'.implode(',', $field['options'])],
             'textarea' => ['nullable', 'string', 'max:5000'],
-            default => array_filter(['required', 'string', isset($field['max']) ? 'max:'.$field['max'] : 'max:2048']),
+            default => $key === 'payment.iotec.wallet_id'
+                ? ['nullable', 'uuid']
+                : array_filter(['required', 'string', isset($field['max']) ? 'max:'.$field['max'] : 'max:2048']),
         };
         $validated = Validator::make(['value' => $value], ['value' => $rules])->validate()['value'];
         if ($key === 'hotspot.default_network') {

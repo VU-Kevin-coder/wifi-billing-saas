@@ -223,12 +223,15 @@ class MfaEnforcementTest extends TestCase
         $this->enableMfa($this->platformAdmin);
         $this->actingAs($this->platformAdmin)->withSession($this->verifiedSession(minutesAgo: 30));
 
-        $this->put(route('platform.configuration.flutterwave.update'), ['flutterwave_environment' => 'production'])
+        $this->put(route('platform.configuration.control.update'), [
+            'reason' => 'Change checkout provider',
+            'settings' => ['payment.active_gateway' => 'pawapay'],
+        ])
             ->assertRedirect(route('mfa.step-up'));
         $this->post(route('platform.impersonate', $this->tenant->id))
             ->assertRedirect(route('mfa.step-up'));
 
-        $this->assertSame(0, AuditLog::where('action', 'platform.config.updated')->count());
+        $this->assertSame(0, AuditLog::where('action', 'platform.settings.updated')->count());
     }
 
     // ── The step-up flow itself ─────────────────────────────────────────────

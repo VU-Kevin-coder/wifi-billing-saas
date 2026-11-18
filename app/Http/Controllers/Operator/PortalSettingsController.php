@@ -44,8 +44,8 @@ class PortalSettingsController extends Controller
         ]);
 
         $validated['show_packages'] = $request->boolean('show_packages');
-        $validated['show_device_registration'] = $request->boolean('show_device_registration', true);
-        $validated['show_troubleshooting'] = $request->boolean('show_troubleshooting', true);
+        $validated['show_device_registration'] = $request->boolean('show_device_registration');
+        $validated['show_troubleshooting'] = $request->boolean('show_troubleshooting');
 
         // Merge with existing settings so we don't overwrite unexpected keys
         $currentSettings = $tenantModel->settings;

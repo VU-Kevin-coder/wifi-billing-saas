@@ -69,9 +69,6 @@ Route::prefix('portal')
         Route::get('/{tenant?}/success', [PortalController::class, 'success'])
             ->middleware('throttle:portal-browse')
             ->name('success');
-        Route::get('/{tenant}/pesapal/callback', [PortalController::class, 'pesapalCallback'])
-            ->middleware('throttle:portal-browse')
-            ->name('pesapal.callback');
         Route::get('/{tenant}/pending/{transaction}', [PortalController::class, 'pending'])
             ->whereNumber('transaction')
             ->middleware('throttle:portal-browse')
@@ -116,7 +113,7 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
         Route::post('/plans', [BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [BillingController::class, 'destroyPlan'])->name('plans.destroy');
-        Route::get('/configuration', fn () => redirect()->route('platform.configuration.control'))->name('configuration.index');
+        Route::get('/configuration', [ConfigurationController::class, 'index'])->name('configuration.index');
         Route::get('/configuration/control', [ControlSettingsController::class, 'index'])->name('configuration.control');
         Route::put('/configuration/control', [ControlSettingsController::class, 'update'])->middleware('mfa.recent')->name('configuration.control.update');
         Route::get('/configuration/export', [ControlSettingsController::class, 'export'])->name('configuration.export');
@@ -126,10 +123,6 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
             ->name('configuration.control.action');
         Route::put('/configuration/general', [ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
-        Route::put('/configuration/pesapal', [ConfigurationController::class, 'updatePesapal'])->middleware('mfa.recent')->name('configuration.pesapal.update');
-        Route::put('/configuration/flutterwave', [ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
-        Route::put('/configuration/mtn', [ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
-        Route::put('/configuration/airtel', [ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
         Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->middleware('mfa.recent')->name('configuration.email.update');
         Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->middleware('mfa.recent')->name('configuration.email.test');
         Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->middleware('mfa.recent')->name('configuration.sms.update');
@@ -165,9 +158,6 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::get('/success', [PortalController::class, 'success'])
                     ->middleware('throttle:portal-browse')
                     ->name('success');
-                Route::get('/pesapal/callback', [PortalController::class, 'pesapalCallback'])
-                    ->middleware('throttle:portal-browse')
-                    ->name('pesapal.callback');
                 Route::get('/pending/{transaction}', [PortalController::class, 'pending'])
                     ->whereNumber('transaction')
                     ->middleware('throttle:portal-browse')
@@ -359,7 +349,7 @@ Route::middleware('auth')->group(function () {
 
 require __DIR__.'/auth.php';
 
-// TEMPORARY: Simulate MTN Payment Success for Sandbox Testing
+// Local payment simulator; available only when explicitly enabled in local/testing.
 Route::get('/simulate-momo-success/{reference}', function ($reference) {
     abort_unless(
         config('payments.simulation_enabled', false)

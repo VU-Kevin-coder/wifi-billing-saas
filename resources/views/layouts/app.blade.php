@@ -6,6 +6,19 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <title>{{ config('app.name', 'soma') }} — Hotspot & Billing</title>
+        <script>
+            (() => {
+                let preference = 'auto';
+                try {
+                    preference = localStorage.getItem('wifi-billing-theme') || 'auto';
+                } catch (_) {}
+                const root = document.documentElement;
+                if (preference === 'light' || preference === 'dark') root.dataset.appTheme = preference;
+                const dark = preference === 'dark'
+                    || (preference === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                root.classList.toggle('dark', dark);
+            })();
+        </script>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

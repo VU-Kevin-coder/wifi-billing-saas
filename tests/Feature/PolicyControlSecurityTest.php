@@ -50,6 +50,21 @@ class PolicyControlSecurityTest extends TestCase
             ->assertDontSee('title="Configuration"', false);
     }
 
+    public function test_theme_preference_control_is_shared_across_platform_settings_and_policies(): void
+    {
+        $this->get(route('platform.configuration.control'))
+            ->assertOk()
+            ->assertSee('data-theme-toggle', false)
+            ->assertSee('wifi-billing-theme', false)
+            ->assertDontSee('id="themeToggle"', false);
+
+        $this->get(route('platform.policies.index'))
+            ->assertOk()
+            ->assertSee('data-theme-toggle', false)
+            ->assertSee('wifi-billing-theme', false)
+            ->assertDontSee('id="policyTheme"', false);
+    }
+
     public function test_controls_are_typed_and_full_section_submission_preserves_unchanged_values(): void
     {
         $page = $this->get(route('platform.configuration.control', ['section' => 'wallet']))->assertOk()->getContent();

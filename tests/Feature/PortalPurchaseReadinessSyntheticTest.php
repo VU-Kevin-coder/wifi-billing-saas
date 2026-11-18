@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Package;
+use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\Transaction;
@@ -75,26 +76,37 @@ class PortalPurchaseReadinessSyntheticTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_existing_paid_callback_still_processes_with_radius_unavailable(): void
+    public function test_verified_pawapay_callback_processes_even_when_radius_is_unavailable(): void
     {
         [$tenant, $package] = $this->fixture();
         $this->router($tenant, 'radius');
+        PlatformSetting::setSecret('payment.pawapay.api_token', 'pawa-test-token');
+        PlatformSetting::set('payment.pawapay.environment', 'sandbox');
         $sale = Transaction::create([
             'tenant_id' => $tenant->id, 'type' => 'voucher_sale', 'amount' => 1000,
-            'status' => 'completed', 'reference' => 'SYNTHETIC-PAID', 'provider_reference' => 'synthetic-tracking',
+            'status' => 'pending', 'reference' => 'SYNTHETIC-PAID', 'provider_reference' => 'synthetic-tracking',
             'payment_token_hash' => hash('sha256', 'synthetic-token'),
-            'meta' => ['package_id' => $package->id, 'voucher_id' => 123],
+            'phone' => '0771234567',
+            'meta' => [
+                'package_id' => $package->id,
+                'phone' => '0771234567',
+                'payment_provider' => 'pawapay',
+                'provider_transaction_id' => 'synthetic-tracking',
+            ],
         ]);
         Http::fake([
-            '*/Auth/RequestToken' => Http::response(['token' => 'synthetic-token']),
-            '*/Transactions/GetTransactionStatus*' => Http::response([
-                'payment_status_description' => 'COMPLETED', 'merchant_reference' => $sale->reference,
-                'currency' => 'UGX', 'amount' => 1000,
+            'https://api.sandbox.pawapay.io/v2/deposits/synthetic-tracking' => Http::response([
+                'depositId' => 'synthetic-tracking',
+                'clientReferenceId' => $sale->reference,
+                'currency' => 'UGX',
+                'amount' => '1000',
+                'status' => 'COMPLETED',
             ]),
         ]);
         Http::preventStrayRequests();
-        $this->withSession(['payment_token' => 'synthetic-token'])->get('/portal/synthetic/pesapal/callback?OrderTrackingId=synthetic-tracking&OrderMerchantReference=SYNTHETIC-PAID')
-            ->assertRedirect('/portal/synthetic/success');
+        $this->postJson('/api/webhooks/pawapay', ['depositId' => 'synthetic-tracking'])
+            ->assertOk()
+            ->assertJson(['status' => 'fulfillment_pending']);
         $this->assertSame('completed', $sale->fresh()->status);
         $this->assertDatabaseCount('transactions', 1);
     }
@@ -107,6 +119,7 @@ class PortalPurchaseReadinessSyntheticTest extends TestCase
         $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active', 'kyc_status' => 'verified']);
         $this->router($other, 'radius');
         $payment = $this->partialMock(PaymentService::class);
+        $payment->shouldReceive('normalizePurchasePhone')->andReturn('256771234567');
         $payment->shouldReceive('initiatePackagePayment')->once()->andReturn(['status' => 'pending']);
         $this->post('/portal/synthetic/purchase', ['package_id' => $package->id, 'phone' => '0771234567', '_idempotency_key' => $this->idempotencyKey()])
             ->assertSessionHasNoErrors();

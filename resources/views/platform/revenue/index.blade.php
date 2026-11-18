@@ -215,6 +215,16 @@
                                                     @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => (($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer' ? 'Confirm you have completed this bank transfer and approve the withdrawal?' : 'Approve and release funds for this withdrawal?')])
                                                     @if(($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer')
                                                         <input type="text" name="payout_reference" required minlength="3" maxlength="100" placeholder="Bank transfer reference" class="mb-2 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs">
+                                                    @else
+                                                        <select name="gateway" required class="mb-2 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs">
+                                                            <option value="">Select payout gateway</option>
+                                                            @foreach($payoutGateways as $gateway => $label)
+                                                                <option value="{{ $gateway }}">{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                        @if($payoutGateways === [])
+                                                            <p class="mb-2 text-xs text-red-600">Configure a payment gateway in Control Settings before approving mobile-money payouts.</p>
+                                                        @endif
                                                     @endif
                                                     <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm">
                                                         {{ ($pendingTx->meta['payout_method'] ?? null) === 'bank_transfer' ? 'Confirm Bank Transfer' : 'Approve Payout' }}
