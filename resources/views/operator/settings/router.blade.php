@@ -15,7 +15,9 @@
         </div>
     </x-slot>
 
-    <div class="py-8" x-data="{ 
+    <div class="py-8" data-test-url="{{ route('operator.settings.router.test') }}" x-init="testUrl = $el.dataset.testUrl" x-data="{
+        testUrl: '',
+        hasSavedHost: {{ $tenant->mikrotik_host ? 'true' : 'false' }},
         testingConnection: false,
         testResult: null,
         testMessage: '',
@@ -26,7 +28,7 @@
             this.testMessage = '';
 
             try {
-                const data = await window.apiFetch('{{ route('operator.settings.router.test') }}', {
+                const data = await window.apiFetch(this.testUrl, {
                     method: 'POST',
                     feedback: false,
                 });
@@ -174,7 +176,7 @@
                                     @if(config('site_agent.allow_direct_router_connection') && !config('site_agent.required'))
                                     <button type="button" 
                                             @click="runTest()" 
-                                            :disabled="testingConnection || !'{{ $tenant->mikrotik_host }}'"
+                                            :disabled="testingConnection || !hasSavedHost"
                                             class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                         <svg x-show="testingConnection" class="animate-spin h-3.5 w-3.5 text-gray-500" fill="none" viewBox="0 0 24 24">
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -193,7 +195,7 @@
 
                                     @if($tenant->mikrotik_host)
                                         <button type="button" 
-                                                @click="window.confirmAction('Disconnect MikroTik router and clear saved credentials for {{ addslashes($tenant->name) }}?').then(confirmed => { if (confirmed) document.getElementById('disconnectRouterForm').requestSubmit(); })"
+                                                data-confirm-message="{{ 'Disconnect MikroTik router and clear saved credentials for '.$tenant->name.'?' }}" @click="window.confirmAction($el.dataset.confirmMessage).then(confirmed => { if (confirmed) document.getElementById('disconnectRouterForm').requestSubmit(); })"
                                                 class="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold transition-colors">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                             <span>Disconnect</span>

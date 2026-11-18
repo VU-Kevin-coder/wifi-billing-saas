@@ -14,7 +14,7 @@ use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\AccessRevoker;
-use App\Services\RadiusRouterCredentialService;
+use App\Services\RadiusUnavailableException;
 use App\Services\RouterConnectionService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
@@ -55,48 +55,146 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertArrayNotHasKey('api_password', $command->payload);
     }
 
-    public function test_radius_activation_is_pending_and_explicit_router_rollback_uses_site_agent(): void
+    public function test_radius_shutdown_does_not_fall_back_but_explicit_router_rollback_uses_site_agent(): void
     {
         config(['site_agent.required' => true]);
-        [$tenant, $site, $router, $agent, $radiusVoucher] = $this->createSiteSetup();
-        app(RadiusRouterCredentialService::class)->optIn($router, 'radius-rollback-test');
-        $agent->delete();
+        [$tenant, , $router, $agent, $voucher] = $this->createSiteSetup();
+        // Represent an existing RADIUS router; new opt-ins are prohibited.
+        $router->forceFill(['access_backend' => 'radius'])->saveOrFail();
 
-        $this->post("http://{$tenant->slug}.localhost/portal/redeem", [
-            'voucher_code' => $radiusVoucher->code,
-            'router_id' => $router->id,
-        ])->assertRedirect("http://{$tenant->slug}.localhost/portal/success");
-        $radiusSession = Session::query()->where('voucher_id', $radiusVoucher->id)->sole();
-
-        $this->assertSame('provisioning', $radiusSession->status);
-        $this->assertSame('redeemed', $radiusVoucher->fresh()->status);
+        try {
+            app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+                ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+            $this->fail('RADIUS activation unexpectedly succeeded.');
+        } catch (RadiusUnavailableException $exception) {
+            $this->assertStringContainsString('RADIUS access is temporarily unavailable', $exception->getMessage());
+        }
+        $this->assertSame('unused', $voucher->fresh()->status);
+        $this->assertDatabaseCount('sessions_log', 0);
         $this->assertDatabaseCount('site_agent_commands', 0);
+        $this->assertSame('radius', $router->fresh()->access_backend);
 
-        // Rollback is an explicit per-router backend change, not automatic fallback.
+        // Only an explicit backend change may route a subsequent attempt to the agent.
         $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
-        $agent = SiteAgent::create([
-            'tenant_id' => $tenant->id,
-            'site_id' => $site->id,
-            'name' => 'Replacement Site Agent',
-            'token_hash' => hash('sha256', 'replacement-agent-token'),
-        ]);
-
         $agentSession = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
-            ->activate($tenant, $radiusVoucher, Request::create('/'), '0771234567'));
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
         $retriedSession = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
-            ->activate($tenant, $radiusVoucher, Request::create('/'), '0771234567'));
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
 
-        $this->assertSame($radiusSession->id, $agentSession->id);
-        $this->assertSame($radiusSession->id, $retriedSession->id);
+        $this->assertSame($agentSession->id, $retriedSession->id);
         $this->assertSame('provisioning', $agentSession->status);
         $command = SiteAgentCommand::query()->sole();
         $this->assertSame('provision_user', $command->operation);
         $this->assertSame($agent->id, $command->site_agent_id);
         $this->assertSame($agentSession->id, $command->session_id);
-        $this->assertSame('redeemed', $radiusVoucher->fresh()->status);
+        $this->assertSame('redeemed', $voucher->fresh()->status);
         $this->assertDatabaseCount('sessions_log', 1);
         $this->assertDatabaseCount('site_agent_commands', 1);
         $this->assertSame('site_agent', $router->fresh()->access_backend);
+    }
+
+    public function test_existing_radius_session_is_reused_once_after_explicit_agent_rollback(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, $site, $router, $agent, $voucher] = $this->createSiteSetup();
+        $agent->delete();
+        $router->forceFill(['access_backend' => 'radius'])->saveOrFail();
+        $voucher->update(['status' => 'redeemed', 'redeemed_at' => now(), 'redeemed_by' => '0771234567']);
+        // Simulate a session created before the RADIUS shutdown, without reopening opt-in.
+        $legacy = Session::create([
+            'tenant_id' => $tenant->id, 'site_id' => $site->id, 'router_id' => $router->id,
+            'voucher_id' => $voucher->id, 'package_id' => $voucher->package_id,
+            'status' => 'provisioning', 'started_at' => now()->subMinute(), 'expires_at' => now()->addHour(),
+        ]);
+        $beforeSession = $legacy->fresh()->getRawOriginal();
+        $beforeVoucher = $voucher->fresh()->getRawOriginal();
+        try {
+            app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+                ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+            $this->fail('A legacy RADIUS session must not bypass shutdown.');
+        } catch (RadiusUnavailableException $exception) {
+            $this->assertStringContainsString('RADIUS access is temporarily unavailable', $exception->getMessage());
+        }
+        $this->assertSame($beforeSession, $legacy->fresh()->getRawOriginal());
+        $this->assertSame($beforeVoucher, $voucher->fresh()->getRawOriginal());
+        $this->assertDatabaseCount('site_agent_commands', 0);
+
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $withoutAgent = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+        $this->assertSame($legacy->id, $withoutAgent->id);
+        $this->assertDatabaseCount('site_agent_commands', 0);
+        $replacement = SiteAgent::create([
+            'tenant_id' => $tenant->id, 'site_id' => $site->id,
+            'name' => 'Replacement Site Agent', 'token_hash' => hash('sha256', 'replacement-agent-token'),
+        ]);
+        $resumed = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+        $retry = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+            ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
+        $this->assertSame($legacy->id, $resumed->id);
+        $this->assertSame($legacy->id, $retry->id);
+        $this->assertSame($beforeSession, $legacy->fresh()->getRawOriginal());
+        $this->assertSame($beforeVoucher, $voucher->fresh()->getRawOriginal());
+        $this->assertDatabaseCount('sessions_log', 1);
+        $this->assertDatabaseCount('site_agent_commands', 1);
+        $command = SiteAgentCommand::query()->sole();
+        $this->assertSame('provision_user', $command->operation);
+        $this->assertSame($tenant->id, $command->tenant_id);
+        $this->assertSame($router->id, $command->router_id);
+        $this->assertSame($replacement->id, $command->site_agent_id);
+        $this->assertSame($legacy->id, $command->session_id);
+    }
+
+    public function test_explicit_rollback_does_not_reprovision_a_session_with_pending_revocation_or_device_ban(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, $site, $router, , $voucher] = $this->createSiteSetup();
+        $voucher->update(['status' => 'redeemed', 'redeemed_at' => now()]);
+        // A previously provisioned RADIUS session whose router was explicitly rolled back.
+        $session = Session::create(['tenant_id' => $tenant->id, 'site_id' => $site->id,
+            'router_id' => $router->id, 'voucher_id' => $voucher->id, 'package_id' => $voucher->package_id,
+            'status' => 'provisioning', 'started_at' => now(), 'expires_at' => now()->addHour()]);
+        foreach (['pending_revocation', 'pending_device_ban'] as $flag) {
+            $session->update([$flag => true]);
+            $before = $session->fresh()->getRawOriginal();
+            $retried = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+                ->activate($tenant, $voucher, Request::create('/')));
+            $this->assertSame($session->id, $retried->id);
+            $this->assertSame($before, $session->fresh()->getRawOriginal());
+            $this->assertDatabaseCount('site_agent_commands', 0);
+            $session->update([$flag => false]);
+        }
+    }
+
+    public function test_existing_session_cannot_resume_through_another_tenants_router(): void
+    {
+        config(['site_agent.required' => true]);
+        [$tenant, $site, $router, $agent, $voucher] = $this->createSiteSetup();
+        $otherTenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Other', 'slug' => 'other-agent', 'status' => 'active']);
+        $otherSite = Site::create(['tenant_id' => $otherTenant->id, 'name' => 'Other Site']);
+        $otherRouter = Router::create(['tenant_id' => $otherTenant->id, 'site_id' => $otherSite->id, 'name' => 'Other Router']);
+        SiteAgent::create(['tenant_id' => $otherTenant->id, 'site_id' => $otherSite->id,
+            'name' => 'Other Agent', 'token_hash' => hash('sha256', 'other-agent-token')]);
+        $voucher->update(['status' => 'redeemed', 'redeemed_at' => now()]);
+        // Model a bad legacy reference: it must not be used to cross a tenant boundary.
+        $legacy = Session::create(['tenant_id' => $tenant->id, 'site_id' => $site->id,
+            'router_id' => $otherRouter->id, 'voucher_id' => $voucher->id, 'package_id' => $voucher->package_id,
+            'status' => 'provisioning', 'started_at' => now(), 'expires_at' => now()->addHour()]);
+        $beforeSession = $legacy->fresh()->getRawOriginal();
+        $beforeVoucher = $voucher->fresh()->getRawOriginal();
+        $beforeRouter = $otherRouter->fresh()->getRawOriginal();
+        try {
+            app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
+                ->activate($tenant, $voucher, Request::create('/')));
+            $this->fail('A foreign tenant router must not resume the session.');
+        } catch (RadiusUnavailableException $exception) {
+            $this->assertStringContainsString('Access cannot be confirmed', $exception->getMessage());
+        }
+        $this->assertSame($beforeSession, $legacy->fresh()->getRawOriginal());
+        $this->assertSame($beforeVoucher, $voucher->fresh()->getRawOriginal());
+        $this->assertSame($beforeRouter, $otherRouter->fresh()->getRawOriginal());
+        $this->assertDatabaseCount('site_agent_commands', 0);
     }
 
     public function test_incomplete_radius_router_fails_closed_without_agent_fallback_or_entitlement_mutation(): void
@@ -113,8 +211,8 @@ class SiteAgentControlPlaneTest extends TestCase
             app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
                 ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
             $this->fail('Activation unexpectedly fell back from an incomplete RADIUS router.');
-        } catch (\LogicException $exception) {
-            $this->assertStringContainsString('RADIUS router is not fully configured', $exception->getMessage());
+        } catch (RadiusUnavailableException $exception) {
+            $this->assertStringContainsString('RADIUS access is temporarily unavailable', $exception->getMessage());
         }
 
         $this->assertSame('unused', $voucher->fresh()->status);

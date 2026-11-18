@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Tenant;
 use App\Services\HotspotProfileSynchronizer;
 use App\Services\RouterService;
 use App\Services\SiteAgentRouterService;
@@ -32,11 +33,13 @@ class RouterServiceTest extends TestCase
         ]);
 
         // 2. Call our service
-        $service = new RouterService;
+        $service = new RouterService($this->syntheticTenant());
         $service->createHotspotUser('KL-TEST-1234', 'Daily-Express');
 
         // 3. Assert that the fake router was actually queried with the right command
         $fake->assertQueried('/ip/hotspot/user/add');
+        $this->assertTrue(config('mikrotik.routers.synthetic-router.ssl'));
+        $this->assertTrue(config('mikrotik.routers.synthetic-router.verify_peer'));
     }
 
     public function test_it_fetches_active_sessions()
@@ -50,11 +53,38 @@ class RouterServiceTest extends TestCase
         ]);
 
         // 2. Call our service
-        $service = new RouterService;
+        $service = new RouterService($this->syntheticTenant());
         $sessions = $service->getActiveSessions();
 
         // 3. Assert the data came through
         $this->assertCount(2, $sessions);
+        $fake->assertQueried('/ip/hotspot/active/print');
+        $this->assertTrue(config('mikrotik.routers.synthetic-router.ssl'));
+        $this->assertTrue(config('mikrotik.routers.synthetic-router.verify_peer'));
+    }
+
+    public function test_tenantless_router_operations_fail_closed_without_querying_router(): void
+    {
+        $fake = MikrotikFake::fake();
+        try {
+            (new RouterService)->createHotspotUser('test', 'test');
+            $this->fail('Tenantless router access must fail closed.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('A tenant router with verified API-SSL is required.', $exception->getMessage());
+        }
+        $fake->assertQueryCount(0);
+    }
+
+    private function syntheticTenant(): Tenant
+    {
+        return (new Tenant)->forceFill([
+            'id' => 42,
+            'slug' => 'synthetic-router',
+            'mikrotik_host' => '192.0.2.42',
+            'mikrotik_port' => 8729,
+            'mikrotik_username' => 'synthetic',
+            'mikrotik_password' => 'synthetic-secret',
+        ]);
     }
 
     public function test_site_agent_telemetry_collects_router_resources_and_hotspot_users(): void
@@ -122,6 +152,7 @@ class RouterServiceTest extends TestCase
                 'host' => '192.0.2.42',
                 'username' => 'agent',
                 'password' => 'local-secret',
+                'port' => 8729,
             ],
         ]);
         MikrotikFake::fake([
@@ -145,6 +176,7 @@ class RouterServiceTest extends TestCase
                 'host' => '192.0.2.42',
                 'username' => 'agent',
                 'password' => 'local-secret',
+                'port' => 8729,
             ],
         ]);
         $client = new SiteAgentTestRouterosClient([], [

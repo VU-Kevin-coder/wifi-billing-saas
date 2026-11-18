@@ -41,31 +41,7 @@ class RunSiteAgent extends Command
                 }
 
                 foreach ($commands as $command) {
-                    $success = false;
-                    $message = null;
-                    $result = null;
-                    $operation = (string) ($command['operation'] ?? '');
-                    try {
-                        $result = $routers->execute(
-                            (int) ($command['router_id'] ?? 0),
-                            $operation,
-                            is_array($command['payload'] ?? null) ? $command['payload'] : [],
-                        );
-                        $success = true;
-                    } catch (Throwable $exception) {
-                        $message = $exception::class.': '.$exception->getMessage();
-                        $this->components->error("Command {$command['id']} failed: {$message}");
-                    }
-
-                    $completion = [
-                        'success' => $success,
-                        'message' => $message,
-                    ];
-                    if ($result !== null) {
-                        $completion[$operation === 'telemetry' ? 'telemetry' : 'result'] = $result;
-                    }
-
-                    $http->post($baseUrl.'/api/site-agent/commands/'.(int) $command['id'].'/complete', $completion)->throw();
+                    $this->processCommand($routers, $http, $baseUrl, $command);
                 }
             } catch (Throwable $exception) {
                 $this->components->error('Site-agent request failed: '.$exception::class);
@@ -74,5 +50,32 @@ class RunSiteAgent extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    protected function processCommand(SiteAgentRouterService $routers, \Illuminate\Http\Client\PendingRequest $http, string $baseUrl, array $command): void
+    {
+        $success = false;
+        $message = null;
+        $result = null;
+        $operation = (string) ($command['operation'] ?? '');
+        try {
+            $result = $routers->execute(
+                (int) ($command['router_id'] ?? 0),
+                $operation,
+                is_array($command['payload'] ?? null) ? $command['payload'] : [],
+            );
+            $success = true;
+        } catch (Throwable) {
+            // Router exceptions can contain credentials or raw API responses.
+            $message = 'Router command failed.';
+            $this->components->error('Command '.(int) ($command['id'] ?? 0).' failed: '.$message);
+        }
+
+        $completion = ['success' => $success, 'message' => $message];
+        if ($result !== null) {
+            $completion[$operation === 'telemetry' ? 'telemetry' : 'result'] = $result;
+        }
+
+        $http->post($baseUrl.'/api/site-agent/commands/'.(int) $command['id'].'/complete', $completion)->throw();
     }
 }

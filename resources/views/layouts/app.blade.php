@@ -16,19 +16,43 @@
             @include('partials.sweetalert-assets')
         @endauth
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        <style>
+            [x-cloak] { display: none !important; }
+            .navigation-fallback, .js-navigation-control { display: none; }
+            body.navigation-enhanced .js-navigation-control { display: flex; }
+            body.navigation-enhanced .navigation-account-fallback { display: none; }
+            body:not(.navigation-enhanced) [x-show="sidebarCollapsed"] { display: none; }
+            body:not(.navigation-enhanced) .desktop-sidebar aside, .navigation-fallback aside { width: 16rem; }
+            header :focus-visible, aside :focus-visible, .navigation-fallback summary:focus-visible {
+                outline: 3px solid #2563eb !important; outline-offset: 2px;
+            }
+            @media (max-width: 1023px) {
+                body:not(.navigation-enhanced) .navigation-fallback { display: block; }
+                body.navigation-enhanced .js-desktop-navigation-control { display: none; }
+                body:not(.navigation-enhanced) .desktop-sidebar { display: none; }
+            }
+            @media (min-width: 1024px) {
+                body:not(.navigation-enhanced) .desktop-sidebar { display: flex; }
+                body.navigation-enhanced .js-mobile-navigation-control { display: none; }
+            }
+        </style>
     </head>
     <body class="font-sans antialiased h-full text-gray-900 bg-[#f8fafc]" 
-          x-data="{ sidebarCollapsed: false, mobileSidebarOpen: false }">
+          x-data="mobileSidebar"
+          x-init="document.body.classList.add('navigation-enhanced')"
+          @keydown.escape.window="closeSidebar()"
+          @focusin.window="keepSidebarFocus($event)"
+          @resize.window="closeSidebarOnDesktop()">
         
         <div class="min-h-screen flex h-full">
 
             <!-- Sidebar (Visible by default) -->
-            <div class="flex shrink-0">
+            <div class="desktop-sidebar hidden lg:flex shrink-0" :inert="mobileSidebarOpen ? '' : null">
                 @include('layouts.sidebar')
             </div>
 
             <!-- Mobile Drawer Sidebar (slide-over) -->
-            <div x-show="mobileSidebarOpen" class="relative z-50 lg:hidden" role="dialog" aria-modal="true" x-cloak>
+            <div id="mobile-navigation" x-ref="sidebarDialog" x-show="mobileSidebarOpen" class="relative z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Main navigation" @keydown.tab="trapSidebarTab($event)" x-cloak>
                 <div x-show="mobileSidebarOpen" 
                      x-transition:enter="transition-opacity ease-linear duration-300"
                      x-transition:enter-start="opacity-0"
@@ -37,9 +61,9 @@
                      x-transition:leave-start="opacity-100"
                      x-transition:leave-end="opacity-0"
                      class="fixed inset-0 bg-gray-900/60 backdrop-blur-xs" 
-                     @click="mobileSidebarOpen = false"></div>
+                     @click="closeSidebar()"></div>
 
-                <div class="fixed inset-0 flex">
+                <div class="fixed inset-0 flex" @click.self="closeSidebar()">
                     <div x-show="mobileSidebarOpen" 
                          x-transition:enter="transition ease-in-out duration-300 transform"
                          x-transition:enter-start="-translate-x-full"
@@ -48,13 +72,18 @@
                          x-transition:leave-start="translate-x-0"
                          x-transition:leave-end="-translate-x-full"
                          class="relative mr-16 flex w-full max-w-xs flex-1">
+                        <button x-ref="sidebarClose" type="button" @click="closeSidebar()" aria-label="Close navigation" class="absolute left-full top-3 ml-2 flex h-11 w-11 items-center justify-center rounded-lg bg-white text-xl text-gray-900 shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"><span aria-hidden="true">&times;</span></button>
                         @include('layouts.sidebar')
                     </div>
                 </div>
             </div>
 
             <!-- Main Content Area -->
-            <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
+            <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto" :inert="mobileSidebarOpen ? '' : null">
+                <details class="navigation-fallback">
+                    <summary>Navigation</summary>
+                    @include('layouts.sidebar', ['fallback' => true])
+                </details>
                 
                 <!-- Impersonation Banner if active -->
                 @if(session()->has('impersonate_tenant'))
@@ -71,7 +100,7 @@
                 @include('layouts.topbar')
 
                 <!-- Main Page Slot -->
-                <main class="flex-1">
+                <main x-ref="mainContent" tabindex="-1" class="flex-1">
                     {{ $slot }}
                 </main>
             </div>

@@ -1,9 +1,9 @@
 <x-app-layout>
-    <div class="py-8 bg-[#F8FAFC] min-h-screen" x-data="{ 
+    <div class="py-8 bg-[#F8FAFC] min-h-screen" data-currency="{{ $currency }}" x-data="{
         showOverlay: false, 
         editMode: false, 
         packageId: null, 
-        currency: @js($currency),
+        currency: $el.dataset.currency,
         displayCurrency() {
             return this.editMode ? (this.form.currency || this.currency) : this.currency;
         },
@@ -259,7 +259,7 @@
                             <p class="text-[11px] text-slate-400 pb-3 border-b border-slate-100">
                                 0 active subscriptions
                             </p>
-                            <button @click="openEdit({{ $package->toJson() }})" type="button" class="mt-3 w-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors">
+                            <button data-package="{{ $package->toJson() }}" @click="openEdit(JSON.parse($el.dataset.package))" type="button" class="mt-3 w-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors">
                                 <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                                 </svg>
@@ -363,13 +363,13 @@
                                              class="absolute right-6 mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-50 text-left"
                                              x-cloak>
                                             <button type="button" 
-                                                    @click="open = false; openEdit({{ $package->toJson() }})" 
+                                                    data-package="{{ $package->toJson() }}" @click="open = false; openEdit(JSON.parse($el.dataset.package))"
                                                     class="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors">
                                                 <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                                                 Edit package
                                             </button>
                                             <button type="button" 
-                                                    @click="open = false; openCreate(); form = { ...{{ $package->toJson() }}, name: '{{ $package->name }} (Copy)', is_published: false }" 
+                                                    data-package="{{ $package->toJson() }}" @click="open = false; const pkg = JSON.parse($el.dataset.package); openCreate(); form = { ...pkg, name: pkg.name + ' (Copy)', is_published: false }"
                                                     class="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors">
                                                 <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
                                                 Duplicate plan
@@ -457,7 +457,7 @@
 
                                 <!-- Drawer Form -->
                                 <div class="relative flex-1 px-6 py-6">
-                                    <form :action="editMode ? `/operator/packages/${packageId}` : '{{ route('operator.packages.store') }}'" method="POST" id="packageForm">
+                                    <form data-store-url="{{ route('operator.packages.store') }}" :action="editMode ? `/operator/packages/${packageId}` : $el.dataset.storeUrl" method="POST" id="packageForm">
                                         @csrf
                                         <template x-if="editMode">
                                             <input type="hidden" name="_method" value="PUT">

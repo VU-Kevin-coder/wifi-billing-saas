@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
+use App\Models\Site;
+use App\Models\SiteAgent;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\AirtelMoneyService;
@@ -170,7 +173,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
             ->assertRedirect($successUrl);
     }
 
-    public function test_successful_payment_fulfillment_is_idempotent_and_starts_the_session_immediately(): void
+    public function test_successful_payment_fulfillment_is_idempotent_and_waits_for_agent_provisioning(): void
     {
         [$tenant, $package, $transaction] = $this->createPendingPayment();
         $paymentService = app(PaymentService::class);
@@ -192,6 +195,8 @@ class MobileMoneyPaymentFlowTest extends TestCase
         $this->assertSame('redeemed', $voucher->fresh()->status);
         $this->assertNotNull($voucher->fresh()->redeemed_at);
         $this->assertDatabaseCount('sessions_log', 1);
+        $this->assertDatabaseHas('sessions_log', ['tenant_id' => $tenant->id, 'status' => 'provisioning']);
+        $this->assertDatabaseCount('site_agent_commands', 1);
         $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
     }
 
@@ -535,8 +540,11 @@ class MobileMoneyPaymentFlowTest extends TestCase
 
         $statusResponse = $this->getJson('/api/payments/status', ['X-Payment-Token' => self::PAYMENT_STATUS_TOKEN]);
         Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), '/standard/v1/payments/'));
-        $statusResponse->assertOk()
-            ->assertJsonPath('status', 'completed');
+        $statusResponse->assertStatus(202)
+            ->assertJsonPath('status', 'provisioning')
+            ->assertJsonMissingPath('voucher_code');
+        $this->assertDatabaseHas('sessions_log', ['tenant_id' => $tenant->id, 'status' => 'provisioning']);
+        $this->assertDatabaseHas('site_agent_commands', ['tenant_id' => $tenant->id, 'operation' => 'provision_user', 'status' => 'pending']);
         $this->assertSame('completed', $transaction->fresh()->status);
         $this->assertSame('950.00', $tenant->fresh()->wallet_balance);
         $this->assertDatabaseCount('vouchers', 1);
@@ -750,6 +758,32 @@ class MobileMoneyPaymentFlowTest extends TestCase
         return $state;
     }
 
+    public function test_confirmed_payment_without_router_is_not_fulfilled_or_charged_again(): void
+    {
+        Http::fake();
+        [$tenant, $package, $transaction] = $this->createPendingPayment();
+        Router::withoutGlobalScopes()->where('tenant_id', $tenant->id)->delete();
+
+        $voucher = app(PaymentService::class)->handleSuccessfulPackagePayment($tenant, $package, '0771234567', $transaction);
+
+        $this->assertNull($voucher);
+        $this->assertSame('completed', $transaction->fresh()->status);
+        $this->assertDatabaseCount('vouchers', 0);
+        $this->assertDatabaseCount('sessions_log', 0);
+        $this->assertDatabaseHas('sale_fulfillment_work', ['transaction_id' => $transaction->id, 'status' => 'pending']);
+        Http::assertNothingSent();
+    }
+
+    private function createSyntheticAgentRouter(Tenant $tenant): void
+    {
+        // Synthetic only: fulfillment remains provisioning until an agent confirms it.
+        config(['site_agent.required' => true]);
+        $site = Site::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site']);
+        $router = Router::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic router', 'status' => 'online']);
+        $router->forceFill(['access_backend' => 'site_agent'])->save();
+        SiteAgent::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic agent', 'token_hash' => hash('sha256', 'synthetic-unused-token')]);
+    }
+
     private function createPendingPayment(): array
     {
         $tenant = Tenant::create([
@@ -761,6 +795,7 @@ class MobileMoneyPaymentFlowTest extends TestCase
             'wallet_balance' => 0,
             'commission_rate' => 5,
         ]);
+        $this->createSyntheticAgentRouter($tenant);
         $package = Package::create([
             'tenant_id' => $tenant->id,
             'name' => 'One hour',

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Running</title></head><body>
+<button id="origin" type="button">Open</button>
+<form id="danger" method="post" data-confirm-action="Delete this?"><button id="submit" type="submit" name="choice" value="yes">Delete</button></form>
+<pre id="results"></pre>
+<script src="../../public/js/ui-dialog.js"></script>
+<script src="../../resources/js/confirm.js"></script>
+<script src="../../resources/js/form-guard.js"></script>
+<script>
+(async () => {
+    const results = document.querySelector('#results');
+    const check = (condition, message) => { if (!condition) throw new Error(message); results.textContent += 'PASS ' + message + '\n'; };
+    const tick = () => new Promise(resolve => setTimeout(resolve, 10));
+    const current = () => document.querySelector('dialog[open]');
+    const click = (selector) => current().querySelector(selector).click();
+    try {
+        document.querySelector('#origin').focus();
+        const p = window.confirmAction('<img src=x onerror=alert(1)>');
+        check(!!current() && current().getAttribute('aria-labelledby') === 'ui-dialog-title', 'accessible modal opens');
+        check(!current().querySelector('img') && current().textContent.includes('<img'), 'dialog content is text, not HTML');
+        check(document.activeElement.classList.contains('ui-dialog-cancel'), 'cancel initially focused');
+        click('.ui-dialog-cancel');
+        check(await p === false && document.activeElement.id === 'origin', 'cancel fails closed and restores focus');
+        const escape = window.confirmAction('Test escape');
+        current().dispatchEvent(new Event('cancel', { cancelable: true }));
+        check(await escape === false, 'escape fails closed');
+        const reason = window.confirmWithReason('Reason needed');
+        click('.ui-dialog-confirm'); await tick();
+        check(!!current() && current().querySelector('[role=alert]').textContent.includes('3 characters'), 'reason validation keeps dialog open');
+        current().querySelector('textarea').value = '  reason  ';
+        click('.ui-dialog-confirm');
+        check(await reason === 'reason', 'reason returned only after valid confirmation');
+        const first = window.Swal.fire({ title: 'First' });
+        const second = window.Swal.fire({ title: 'Second' });
+        check(current().textContent.includes('First'), 'dialogs queue in order');
+        click('.ui-dialog-confirm'); await first; await tick();
+        check(current().textContent.includes('Second'), 'second dialog waits its turn');
+        click('.ui-dialog-confirm'); await second;
+        const form = document.querySelector('#danger');
+        let submitted = 0;
+        form.addEventListener('submit', e => { e.preventDefault(); submitted++; });
+        form.requestSubmit(document.querySelector('#submit'));
+        form.requestSubmit(document.querySelector('#submit'));
+        check(submitted === 0 && document.querySelectorAll('dialog[open]').length === 1, 'repeated submit cannot bypass confirmation');
+        click('.ui-dialog-cancel'); await tick();
+        check(submitted === 0, 'cancel never submits form');
+        form.requestSubmit(document.querySelector('#submit'));
+        click('.ui-dialog-confirm'); await tick();
+        check(submitted === 1, 'confirmed form submits exactly once');
+        check(!document.querySelector('#submit').disabled && !form.querySelector('[data-ui-submitter-copy]'), 'cancelled navigation restores button and submitter copy');
+        const original = HTMLDialogElement.prototype.showModal;
+        HTMLDialogElement.prototype.showModal = undefined;
+        check(await window.confirmAction('Unsupported') === false, 'unavailable modal fails closed');
+        HTMLDialogElement.prototype.showModal = original;
+        document.title = 'PASS';
+    } catch (error) {
+        results.textContent += 'FAIL ' + error.stack;
+        document.title = 'FAIL';
+    }
+})();
+</script></body></html>

@@ -76,9 +76,13 @@ class AuthenticateRadiusPolicyService
             return $this->unauthorized();
         }
 
-        $response = $next($request);
-
-        return $response->withHeaders([
+        // A valid service HMAC authenticates the adapter, not the router that
+        // sent a RADIUS packet. NAS-Identifier in that packet (or in an HTTP
+        // header/body) is a claim, not proof of router identity. Until a
+        // trusted transport supplies and verifies a router binding, none of
+        // these endpoints may authorize, mutate accounting, or issue/ack
+        // disconnects. There is deliberately no configuration bypass.
+        return response()->json(['message' => 'RADIUS policy unavailable.'], 503, [
             'Cache-Control' => 'no-store, private',
             'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',

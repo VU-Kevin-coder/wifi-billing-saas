@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Package;
 use App\Models\PlatformSetting;
+use App\Models\Router;
+use App\Models\Site;
+use App\Models\SiteAgent;
 use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
@@ -28,6 +31,30 @@ class PortalPlanTest extends TestCase
         $this->freezeTime();
         $this->tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme WiFi', 'slug' => 'acme', 'status' => 'active']);
         $this->package = $this->package($this->tenant);
+    }
+
+    public function test_purchase_without_a_router_fails_before_requesting_payment(): void
+    {
+        Http::fake();
+        $this->post('http://acme.localhost/portal/purchase', [
+            'package_id' => $this->package->id,
+            'phone' => '0771234567',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertSessionHasErrors(['error' => 'Wi-Fi access is temporarily unavailable. No payment was requested. Please contact the operator.']);
+
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertDatabaseCount('vouchers', 0);
+        Http::assertNothingSent();
+    }
+
+    private function createSyntheticAgentRouter(Tenant $tenant): void
+    {
+        // Synthetic only: fulfillment remains provisioning until an agent confirms it.
+        config(['site_agent.required' => true]);
+        $site = Site::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site']);
+        $router = Router::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic router', 'status' => 'online']);
+        $router->forceFill(['access_backend' => 'site_agent'])->save();
+        SiteAgent::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic agent', 'token_hash' => hash('sha256', 'synthetic-unused-token')]);
     }
 
     private function package(Tenant $tenant, bool $published = true): Package
@@ -176,6 +203,7 @@ class PortalPlanTest extends TestCase
             'https://sandbox.momodeveloper.mtn.com/collection/token/' => Http::response(['access_token' => 't']),
             'https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay' => Http::response([], 202),
         ]);
+        $this->createSyntheticAgentRouter($this->tenant);
         $session = $this->createSession($this->tenant, $this->package, 'ACME-0007');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0007']);
         $plan = $this->open($session)->assertOk();

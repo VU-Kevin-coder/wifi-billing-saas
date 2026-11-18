@@ -1,0 +1,11 @@
+# Settings draft and navigation limitations
+
+The control and policy pages do not save or replay client-side drafts or flashed input. After a validation redirect, the pages show the current server-rendered settings and a visible notice that changes and the reason must be re-entered. Browser autofill or history restoration is outside this code's control. Existing tab-scoped `control-settings-draft:` entries are removed without reading values when the control page is loaded, but cleanup is best-effort: blocked storage, other tabs, and pages not subsequently visited cannot be guaranteed cleaned.
+
+The original first-unload suppression was removed: a submit event does not identify which navigation causes the first `beforeunload`. Both settings pages therefore request a native warning whenever dirty, including during an intended save or discard; browsers control whether and how the warning appears. If a browser cancels the native prompt during submission, the general submit guard may remain locked until a page restoration or reload; this interaction needs real-browser testing. The browser's native warning is not a concurrency control or guaranteed loss prevention.
+
+No stale-write protection was added. In particular, the control form submits all its rendered settings, so another administrator's changes made after this page was loaded could still be overwritten on a normal save. The policy page filters out unchanged controls, but concurrent edits to the same changed policy are not conflict-detected. Server-side optimistic locking/versioning remains necessary.
+
+This change only removes client draft persistence and replay. Existing Laravel validation handling excludes the `settings` group from flashed input, but can still flash `reason` and `policies` on the server; successful saves intentionally record an audit reason. The scope of this change does not alter server session or audit retention. No claim is made that all submitted data is never stored server-side.
+
+Run `node --test tests/ui/settings-forms.test.mjs` for the DOM/VM regression tests. They do not exercise real browser navigation, Blade rendering, Laravel validation/session handling, or the database. Those need integration testing when dependencies are available.

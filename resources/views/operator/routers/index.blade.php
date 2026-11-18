@@ -320,8 +320,10 @@
                         <tr>
                             <th scope="col" class="w-10 px-4 py-3 text-left">
                                 <input type="checkbox" 
-                                       @click="selectAll = !selectAll; selected = selectAll ? [{{ $routers->pluck('id')->join(',') }}] : []"
-                                       :checked="selectAll && selected.length > 0"
+                                       aria-label="Select all routers on this page"
+                                       @change="selectAll = $event.target.checked; selected = selectAll ? [{{ $routers->pluck('id')->join(',') }}] : []"
+                                       :checked="{{ $routers->count() }} > 0 && selected.length === {{ $routers->count() }}"
+                                       @disabled($routers->isEmpty())
                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5">
                             </th>
                             <th scope="col" class="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
@@ -343,6 +345,7 @@
                             <tr class="hover:bg-gray-50/70 transition-colors">
                                 <td class="px-4 py-3.5 whitespace-nowrap">
                                     <input type="checkbox" 
+                                           aria-label="Select router {{ $router->name }}"
                                            :value="{{ $router->id }}" 
                                            x-model="selected"
                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5">
@@ -465,6 +468,7 @@
                                         <!-- Quick Action: Reboot Router -->
                                         <form method="POST" action="{{ route('operator.routers.reboot', $router) }}" data-confirm-action="Reboot router {{ $router->name }}? Device will temporarily go offline." class="inline">
                                             @csrf
+                                            @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Reboot router ' . ($router->name) . '? Device will temporarily go offline.'])
                                             <button type="submit" 
                                                     title="Reboot router" 
                                                     class="w-7 h-7 rounded-lg inline-flex items-center justify-center text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors">
@@ -562,6 +566,7 @@
 
                                                 <form method="POST" action="{{ route('operator.routers.reboot', $router) }}" data-confirm-action="Reboot router {{ $router->name }}?">
                                                     @csrf
+                                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Reboot router ' . ($router->name) . '?'])
                                                     <button type="submit" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-amber-700 hover:bg-amber-50 text-left">
                                                         <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                                         <span>Reboot router</span>
@@ -572,6 +577,7 @@
 
                                                 <form method="POST" action="{{ route('operator.routers.destroy', $router) }}" data-confirm-action="Are you sure you want to remove router {{ $router->name }}?">
                                                     @csrf
+                                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Are you sure you want to remove router ' . ($router->name) . '?'])
                                                     @method('DELETE')
                                                     <button type="submit" class="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-red-600 hover:bg-red-50 text-left">
                                                         <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -585,11 +591,13 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr>
-                                <td colspan="8" class="px-6 py-12 text-center text-gray-400 text-xs">
-                                    No routers found in workspace <strong>{{ $tenant->name }}</strong>. Click "Connect router" to add your first MikroTik device.
-                                </td>
-                            </tr>
+                            @if(request('search') || (request('site_id') && request('site_id') !== 'all') || (request('site') && request('site') !== 'all') || (request('status') && request('status') !== 'all'))
+                                <x-ui.empty-table-row colspan="8" title="No matching routers on this page" message="Try changing or clearing the filters." :action-url="route('operator.routers.index')" action-label="Clear filters" />
+                            @elseif($totalRouters > 0)
+                                <x-ui.empty-table-row colspan="8" title="No routers on this page" message="Return to the first page to view routers." :action-url="route('operator.routers.index')" action-label="View routers" />
+                            @else
+                                <x-ui.empty-table-row colspan="8" title="No routers yet" :message="'There are no routers in workspace '.$tenant->name.'.'" :action-url="route('operator.routers.create')" action-label="Connect router" />
+                            @endif
                         @endforelse
                     </tbody>
                 </table>

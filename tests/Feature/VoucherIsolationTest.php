@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Package;
+use App\Models\Router;
 use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\User;
@@ -115,9 +116,12 @@ class VoucherIsolationTest extends TestCase
         $this->actingAs($operator)
             ->get('http://acme.localhost/operator/vouchers')
             ->assertOk()
-            ->assertSee("voucherPrefix: 'AC'", false)
-            ->assertSee('voucherLength: 10', false)
-            ->assertSee("voucherFormat: 'numeric'", false)
+            ->assertSee('data-voucher-prefix="AC"', false)
+            ->assertSee('data-voucher-length="10"', false)
+            ->assertSee('data-voucher-format="numeric"', false)
+            ->assertSee('voucherPrefix = $el.dataset.voucherPrefix', false)
+            ->assertSee('voucherLength = Number($el.dataset.voucherLength)', false)
+            ->assertSee('voucherFormat = $el.dataset.voucherFormat', false)
             ->assertSee('x-text="voucherFormatPreview()"', false)
             ->assertDontSee('KL-XXXX-XXXX');
     }
@@ -157,9 +161,12 @@ class VoucherIsolationTest extends TestCase
             ]);
         });
 
+        $router = Router::create(['tenant_id' => $this->acme->id, 'name' => 'Acme router', 'access_backend' => 'site_agent']);
+
         // 1. Redeem voucher through captive portal
         $response = $this->post('http://acme.localhost/portal/redeem', [
             'voucher_code' => 'TEST-PASS-99',
+            'router_id' => $router->id,
         ]);
 
         $response->assertRedirect('http://acme.localhost/portal/success');
@@ -173,6 +180,7 @@ class VoucherIsolationTest extends TestCase
         $this->assertNotNull($session);
         $this->assertEquals('active', $session->status);
         $this->assertEquals($this->acme->id, $session->tenant_id);
+        $this->assertEquals($router->id, $session->router_id);
 
         // 3. Live sessions UI must show this session
         $sessionsUiResponse = $this->actingAs($operator)

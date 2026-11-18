@@ -87,7 +87,15 @@
                 </div>
             @endif
 
-            @if($canProvisionRadius)
+            @if(!\App\Services\RadiusReadiness::available() && ($canProvisionRadius || $router->access_backend === 'radius'))
+                <section class="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900" role="status">
+                    <h2 class="text-base font-bold">RADIUS access unavailable</h2>
+                    <p class="mt-2">RADIUS cannot be enabled while the policy service is unavailable. Viewing this page does not change this router's backend or credentials.</p>
+                    @if($router->access_backend === 'radius')
+                        <p class="mt-2">This router is already configured for RADIUS. Its RADIUS access is unavailable; recovery requires an explicit operator action.</p>
+                    @endif
+                </section>
+            @elseif($canProvisionRadius)
                 <section class="rounded-xl border border-indigo-200 bg-white p-6 shadow-sm">
                     <h2 class="text-base font-bold text-gray-900">RADIUS access for this router</h2>
                     <p class="mt-2 text-sm text-gray-600">
@@ -323,21 +331,21 @@
                     <div>
                         <h2 class="text-base font-bold text-gray-900 flex items-center gap-2">
                             <span>RouterOS Provisioning & Setup</span>
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $router->status === 'online' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800' }}">
-                                {{ $router->status === 'online' ? 'Provisioned' : 'Setup Required' }}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                                Script and direct deployment blocked
                             </span>
                         </h2>
                         <p class="mt-1 text-xs text-gray-500">
-                            Apply hotspot configuration, captive portal redirection, walled garden, and package profiles to this MikroTik router.
+                            Script generation and direct API deployment are disabled: router identity and existing configuration cannot be verified. Bridge, DHCP, firewall and RADIUS settings could be disrupted. Do not use previously downloaded scripts. This does not block all other router writes.
                         </p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <a href="{{ route('operator.routers.provision-script', ['tenant' => $tenant->slug, 'router' => $router->id, 'download' => 1]) }}"
+                        <button type="button" disabled
                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-sm transition-colors">
                             <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                            Download .rsc
-                        </a>
-                        <button type="button" @click="deployNow()" :disabled="deploying || !{{ $hasApiCredentials ? 'true' : 'false' }}"
+                            Download .rsc unavailable
+                        </button>
+                        <button type="button" disabled
                                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 text-xs font-semibold text-white hover:bg-orange-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <svg x-show="deploying" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -355,9 +363,6 @@
                         <button type="button" @click="deployResult = null" class="text-xs font-bold">&times;</button>
                     </div>
                 </div>
-                @unless ($hasApiCredentials)
-                    <p class="mt-2 text-xs text-amber-700">Save a router host, API username, and API password before deploying via API.</p>
-                @endunless
 
                 <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-100">
@@ -386,7 +391,7 @@
 
                 <div class="mt-4 border-t border-gray-100 pt-3">
                     <p class="text-[11px] text-gray-600">
-                        The downloaded .rsc contains the router API password. Treat it as a secret, import it only on the intended fresh/dedicated router, and do not paste it into tickets or logs.
+                        Previously downloaded scripts may contain credentials and destructive commands. Treat them as secrets and do not import them.
                     </p>
                 </div>
             </section>

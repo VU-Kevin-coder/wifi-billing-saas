@@ -39,11 +39,8 @@ class RouterConnectionService
             ];
         }
 
-        $port = (int) ($router->api_port ?: 8728);
-        $protocol = $port === 8729 ? 'API-SSL' : 'RouterOS API';
-        $key = $this->configureRouter($router, $host);
-
         try {
+            $key = $this->configureRouter($router, $host);
             // This is deliberately read-only: it proves API reachability
             // without changing hotspot, users, profiles or firewall rules.
             $resource = MikroTik::router($key)->system()->getResources();
@@ -56,18 +53,20 @@ class RouterConnectionService
                 'resource' => $resource,
             ];
         } catch (\Throwable $exception) {
-            $diagnostic = sprintf(
-                'Target %s:%d (%s). %s: %s',
-                $host,
-                $port,
-                $protocol,
-                $exception::class,
-                $this->safeExceptionMessage($exception, $router->api_password),
-            );
+            // Client exceptions may contain credentials or other private data.
+            // Only disclose the fixed, non-secret transport validation messages.
+            $safeTransportMessages = [
+                'Router API port is invalid.',
+                'Router API requires verified TLS; plaintext API is blocked.',
+                'Router API-SSL requires a valid IPv4 address or DNS hostname for certificate identity verification.',
+            ];
+            $diagnostic = $exception instanceof RouterTransportException
+                && in_array($exception->getMessage(), $safeTransportMessages, true)
+                ? $exception->getMessage()
+                : 'Connection or authentication failed.';
 
             Log::warning('MikroTik LAN demo connection failed', [
                 'router_id' => $router->getKey(),
-                'host' => $host,
                 'exception' => $exception::class,
                 'diagnostic' => $diagnostic,
             ]);
@@ -173,17 +172,22 @@ class RouterConnectionService
 
         $key = $this->configureRouter($router, $host);
 
-        $hotspot = MikroTik::router($key)->hotspot();
-        $isActive = collect($hotspot->getActiveHosts())
-            ->contains(fn (array $host): bool => ($host['user'] ?? null) === $voucherCode);
+        try {
+            $hotspot = MikroTik::router($key)->hotspot();
+            $isActive = collect($hotspot->getActiveHosts())
+                ->contains(fn (array $host): bool => ($host['user'] ?? null) === $voucherCode);
 
-        if (! $isActive) {
-            return false;
+            if (! $isActive) {
+                return false;
+            }
+
+            $hotspot->kickHost($voucherCode);
+
+            return true;
+        } catch (\Throwable $exception) {
+            // Client exceptions may contain credentials; do not retain them as a cause.
+            throw new RouterTransportException('Unable to disconnect the router session.');
         }
-
-        $hotspot->kickHost($voucherCode);
-
-        return true;
     }
 
     private function configureRouter(Router $router, ?string $host = null): string
@@ -213,13 +217,4 @@ class RouterConnectionService
             : (config('site_agent.allow_direct_router_connection') ? $router->management_ip : null);
     }
 
-    private function safeExceptionMessage(\Throwable $exception, ?string $password): string
-    {
-        $message = trim($exception->getMessage());
-        if (filled($password)) {
-            $message = str_replace($password, '[redacted]', $message);
-        }
-
-        return $message !== '' ? $message : 'The router client returned no error details.';
-    }
 }

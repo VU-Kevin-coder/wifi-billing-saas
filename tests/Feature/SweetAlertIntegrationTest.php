@@ -6,11 +6,14 @@ use Tests\TestCase;
 
 class SweetAlertIntegrationTest extends TestCase
 {
-    public function test_sweetalert_is_pinned_and_available_across_system_and_portal_layouts(): void
+    public function test_local_dialog_is_available_across_system_and_portal_layouts(): void
     {
         $assets = file_get_contents(resource_path('views/partials/sweetalert-assets.blade.php'));
-        $this->assertStringContainsString('sweetalert2@11.14.5/dist/sweetalert2.all.min.js', $assets);
-        $this->assertStringContainsString('integrity="sha384-YB/DdIkloKoRpclWB8bNcYXWakt57USgtQPDzvnIDHYU0lasD5eWlXVo1S4ODukY"', $assets);
+        $this->assertStringContainsString("asset('js/ui-dialog.js')", $assets);
+        $this->assertStringContainsString("asset('css/ui-dialog.css')", $assets);
+        $this->assertStringNotContainsString('cdn.jsdelivr.net', $assets);
+        $this->assertFileExists(public_path('js/ui-dialog.js'));
+        $this->assertFileExists(public_path('css/ui-dialog.css'));
 
         foreach ([
             'layouts/app.blade.php',
@@ -35,7 +38,9 @@ class SweetAlertIntegrationTest extends TestCase
         $toast = file_get_contents(resource_path('js/toast.js'));
         $confirm = file_get_contents(resource_path('js/confirm.js'));
 
-        $this->assertStringContainsString('window.toast?.[type]?.(message)', $partial);
+        $this->assertStringContainsString('data-flash-message="{{ $message }}"', $partial);
+        $this->assertStringContainsString('<details class="ui-flash" open>', $partial);
+        $this->assertStringNotContainsString('<script>', $partial);
         $this->assertStringContainsString('window.Swal?.fire', $toast);
         $this->assertStringNotContainsString('toast: true', $toast);
         $this->assertStringContainsString('window.confirmWithReason', $confirm);

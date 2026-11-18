@@ -80,10 +80,15 @@
                             @empty
                                 <tr><td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500">No team members found.</td></tr>
                             @endforelse
+                            @if ($users->isNotEmpty())
+                                <tr x-cloak x-show="search.trim() !== '' &amp;&amp; !Array.from($el.parentElement.querySelectorAll('tr[data-search]')).some(row => row.dataset.search.includes(search.trim().toLowerCase()))">
+                                    <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500" role="status">No users match your search.</td>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 </div>
-                <div class="border-t border-gray-100 px-6 py-3 text-xs text-gray-500">Showing {{ $users->count() }} {{ \Illuminate\Support\Str::plural('user', $users->count()) }}</div>
+                <div class="border-t border-gray-100 px-6 py-3 text-xs text-gray-500">{{ $users->count() }} total {{ \Illuminate\Support\Str::plural('user', $users->count()) }}</div>
             </section>
 
             <section x-show="tab === 'roles'" x-cloak class="grid grid-cols-1 gap-6 md:grid-cols-2">

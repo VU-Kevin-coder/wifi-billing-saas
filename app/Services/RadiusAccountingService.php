@@ -28,6 +28,10 @@ class RadiusAccountingService
      */
     public function authorize(string $nasIdentifier, string $nasSessionId, string $voucherCode): array
     {
+        if (! RadiusReadiness::available()) {
+            return ['decision' => 'reject'];
+        }
+
         $router = $this->radiusRouter($nasIdentifier);
         if (! $router) {
             return ['decision' => 'reject'];
@@ -100,6 +104,10 @@ class RadiusAccountingService
      */
     public function ingestAccountingEvent(array $input): array
     {
+        if (! RadiusReadiness::available()) {
+            return ['accepted' => false, 'quarantined' => true, 'reason' => 'radius_unavailable'];
+        }
+
         $router = $this->radiusRouter((string) ($input['nas_identifier'] ?? ''));
         if (! $router) {
             return [

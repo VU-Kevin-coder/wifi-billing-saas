@@ -181,9 +181,14 @@ class ControlSettingsController extends Controller
             }
         });
 
-        return redirect()->route('platform.configuration.control', [
-            'section' => $request->input('section', 'general'),
-        ])->with('status', $changes === [] ? 'No settings changed.' : count($changes).' setting(s) saved.');
+        $section = $request->input('section', 'general');
+        $status = $changes === [] ? 'No settings changed.' : count($changes).' setting(s) saved.';
+        if ($request->header('X-Settings-Async') === '1' && $request->expectsJson()) {
+            $request->session()->flash('status', $status);
+            return response()->json(['saved' => true, 'redirect' => route('platform.configuration.control', ['section' => $section]), 'message' => $status]);
+        }
+
+        return redirect()->route('platform.configuration.control', ['section' => $section])->with('status', $status);
     }
 
     public function export()

@@ -120,7 +120,7 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="7"><x-ui.empty-state title="No packages yet" message="Create a package to start offering Wi-Fi access."><a href="{{ route('operator.packages.index') }}" class="inline-flex items-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">Create a package</a></x-ui.empty-state></td></tr>
+                                <x-ui.empty-table-row colspan="7" title="No packages yet" message="Create a package to start offering Wi-Fi access." :action-url="route('operator.packages.index')" action-label="Create a package" />
                             @endforelse
                         </tbody>
                 </table>

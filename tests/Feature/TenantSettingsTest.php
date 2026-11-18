@@ -353,9 +353,11 @@ class TenantSettingsTest extends TestCase
             ->assertSee('Acme Guest Wi-Fi')
             ->assertSee('Fast, reliable guest access')
             ->assertSee('--accent: #123456', false)
-            ->assertSee('id="voucher-checking"', false)
-            ->assertSee('Searching voucher records')
-            ->assertSee('Voucher found, activating')
+            ->assertSee('id="voucher-form"', false)
+            ->assertSee('name="voucher_code"', false)
+            ->assertSee('data-loading-text="Checking voucher…"', false)
+            ->assertSee('id="voucher-status" role="status" aria-live="polite"', false)
+            ->assertDontSee('Voucher found, activating')
             ->assertSee('flex: 0 0 20px', false);
     }
 

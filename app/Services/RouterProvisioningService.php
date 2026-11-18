@@ -12,6 +12,11 @@ use ZillEAli\MikrotikLaravel\Facades\MikroTik;
 
 class RouterProvisioningService
 {
+    // No request, confirmation or opt-in is sufficient until target identity and
+    // existing configuration can be verified. Do not bypass this server-side gate.
+    private const PROVISIONING_BLOCKED = true;
+
+    public const SAFETY_BLOCK = 'Router provisioning is disabled: the target device identity and existing configuration cannot be verified, and the script may overwrite bridge, DHCP, firewall or RADIUS settings. Do not use previously downloaded scripts.';
     /**
      * Escape a string value for safe insertion into RouterOS .rsc scripts.
      * Escapes backslashes, double quotes, and dollar signs (variable expansion).
@@ -36,6 +41,10 @@ class RouterProvisioningService
      */
     public function generateScript(Router $router): string
     {
+        if (self::PROVISIONING_BLOCKED) {
+            throw new \LogicException(self::SAFETY_BLOCK);
+        }
+
         $tenant = $router->tenant ?? Tenant::find($router->tenant_id);
         $hotspotConfig = $router->hotspot_config ?? [];
 
@@ -292,6 +301,10 @@ class RouterProvisioningService
      */
     public function deploy(Router $router): array
     {
+        if (self::PROVISIONING_BLOCKED) {
+            return ['ok' => false, 'message' => self::SAFETY_BLOCK];
+        }
+
         $tenant = $router->tenant ?? Tenant::find($router->tenant_id);
         if (config('site_agent.required')) {
             return [
@@ -313,14 +326,13 @@ class RouterProvisioningService
         }
 
         $key = 'provision-router-'.$router->id;
-        DynamicMikrotikRouterConfig::set($key, [
-            'username' => $router->api_username,
-            'password' => $router->api_password,
-            ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: config('services.mikrotik.api_port')), $router->id),
-            'timeout' => 8,
-        ]);
-
         try {
+            DynamicMikrotikRouterConfig::set($key, [
+                'username' => $router->api_username,
+                'password' => $router->api_password,
+                ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: config('services.mikrotik.api_port')), $router->id),
+                'timeout' => 8,
+            ]);
             $client = MikroTik::router($key);
             $hotspot = $client->hotspot();
 
@@ -360,12 +372,11 @@ class RouterProvisioningService
             Log::warning('Router automated provisioning failed', [
                 'router_id' => $router->id,
                 'exception' => $e::class,
-                'message' => $e->getMessage(),
             ]);
 
             return [
                 'ok' => false,
-                'message' => 'Could not connect to router API: '.$e->getMessage(),
+                'message' => $e instanceof RouterTransportException ? $e->getMessage() : 'Could not connect to router API.',
             ];
         }
     }

@@ -17,7 +17,8 @@ class HotspotProfileSyncTest extends TestCase
 
     public function test_site_agent_creates_missing_profile(): void
     {
-        config(['site_agent.routers.7' => [
+        // The MikroTik facade is mocked; this opt-in is scoped to this test.
+        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => [
             'host' => '10.0.0.1',
             'username' => 'api',
             'password' => 'secret',
@@ -36,7 +37,8 @@ class HotspotProfileSyncTest extends TestCase
 
     public function test_site_agent_updates_existing_profile(): void
     {
-        config(['site_agent.routers.7' => [
+        // The MikroTik facade is mocked; this opt-in is scoped to this test.
+        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => [
             'host' => '10.0.0.1',
             'username' => 'api',
             'password' => 'secret',
@@ -64,7 +66,8 @@ class HotspotProfileSyncTest extends TestCase
 
     public function test_user_provisioning_syncs_profile_before_add_without_profile_fields_on_user(): void
     {
-        config(['site_agent.routers.7' => [
+        // The MikroTik facade is mocked; this opt-in is scoped to this test.
+        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => [
             'host' => '10.0.0.1',
             'username' => 'api',
             'password' => 'secret',

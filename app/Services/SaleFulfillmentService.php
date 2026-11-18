@@ -145,8 +145,11 @@ class SaleFulfillmentService
                 $work = DB::table('sale_fulfillment_work')->where('tenant_id', $tenantId)
                     ->where('transaction_id', $saleId)->lockForUpdate()->first();
                 if ($work && $work->status === 'running' && $work->lease_token === $token) {
-                    $exhausted = $work->attempts >= self::MAX_ATTEMPTS;
+                    // An infrastructure outage must not consume the customer's retry budget.
+                    $unavailable = $exception instanceof RadiusUnavailableException;
+                    $exhausted = ! $unavailable && $work->attempts >= self::MAX_ATTEMPTS;
                     DB::table('sale_fulfillment_work')->where('id', $work->id)->update([
+                        'attempts' => $unavailable ? max(0, $work->attempts - 1) : $work->attempts,
                         'status' => $exhausted ? 'exhausted' : 'pending',
                         'lease_token' => null, 'next_attempt_at' => $exhausted ? null : now()->addMinutes(5),
                         'last_error_class' => $exception::class, 'updated_at' => now(),

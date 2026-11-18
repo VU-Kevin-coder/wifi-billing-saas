@@ -59,7 +59,7 @@
                 <h3 class="text-base font-bold text-gray-900">Peer inventory</h3>
             </div>
             @if($peers->isEmpty())
-                <p class="px-6 py-8 text-sm text-gray-500">No WireGuard peers have been generated.</p>
+                <x-ui.empty-state title="No WireGuard peers have been generated" message="Once peer management is configured, use the form above to generate a peer for a router." />
             @else
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-100 text-left text-sm">

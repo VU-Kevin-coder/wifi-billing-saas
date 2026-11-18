@@ -243,8 +243,9 @@
 
                                                 <div class="border-t border-gray-100 my-1"></div>
 
-                                                <form action="{{ route('operator.customers.destroy', $customer) }}" method="POST" data-confirm-action="Are you sure you want to delete customer {{ addslashes($customer->name) }}?">
+                                                <form action="{{ route('operator.customers.destroy', $customer) }}" method="POST" data-confirm-action="Are you sure you want to delete customer {{ $customer->name }}?">
                                                     @csrf
+                                                    @include('partials.confirm-action-acknowledgment', ['confirmationMessage' => 'Are you sure you want to delete customer ' . ($customer->name) . '?'])
                                                     @method('DELETE')
                                                     <button type="submit" 
                                                             class="w-full text-left px-3.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
@@ -257,14 +258,10 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr>
-                                    <td colspan="7" class="px-4 py-12 text-center text-sm">
-                                        <p class="font-semibold text-gray-700">{{ ($validated['q'] ?? '') !== '' || ($validated['status'] ?? '') !== '' ? 'No customers match these filters.' : 'No customers yet.' }}</p>
-                                        @if(($validated['q'] ?? '') !== '' || ($validated['status'] ?? '') !== '')
-                                            <a href="{{ route('operator.customers.index') }}" class="mt-2 inline-flex text-blue-600 hover:text-blue-800">Clear filters</a>
-                                        @endif
-                                    </td>
-                                </tr>
+                                <x-ui.empty-table-row colspan="7"
+                                    :title="($validated['q'] ?? '') !== '' || ($validated['status'] ?? '') !== '' ? 'No customers match these filters.' : 'No customers yet.'"
+                                    :action-url="($validated['q'] ?? '') !== '' || ($validated['status'] ?? '') !== '' ? route('operator.customers.index') : null"
+                                    action-label="Clear filters" />
                             @endforelse
                         </tbody>
                     </table>

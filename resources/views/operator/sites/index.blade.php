@@ -189,7 +189,7 @@
                     </div>
                     <div class="flex justify-end gap-2 border-t border-gray-100 pt-4">
                         <button type="button" @click="addSiteOpen = false" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-                        <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Create site</button>
+                        <button type="submit" data-loading-text="Submitting…" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Create site</button>
                     </div>
                 </form>
             </section>

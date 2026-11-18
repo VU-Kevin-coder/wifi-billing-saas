@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\Refund;
+use App\Models\Router;
 use App\Models\Session;
 use App\Models\SmsMessage;
 use App\Models\Tenant;
@@ -48,6 +49,9 @@ class RefundFlowTest extends TestCase
         }
 
         $this->tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active', 'commission_rate' => 5]);
+        // Fulfillment uses a synthetic site-agent router, never a live device.
+        Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Synthetic site-agent router'])
+            ->forceFill(['access_backend' => 'site_agent'])->save();
         $this->package = Package::create([
             'tenant_id' => $this->tenant->id, 'name' => 'One hour', 'price' => 1000, 'currency' => 'UGX',
             'duration_value' => 1, 'duration_unit' => 'hours', 'speed_limit_mbps' => 5, 'device_limit' => 1,

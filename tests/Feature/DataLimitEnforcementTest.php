@@ -153,7 +153,8 @@ class DataLimitEnforcementTest extends TestCase
 
     public function test_the_agent_applies_the_cap_to_the_router_user(): void
     {
-        config(['site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
+        // The MikroTik facade is mocked; this opt-in is scoped to this test.
+        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getUser')->once()->with('VOUCHER-1')->andReturn(null);
         $hotspot->shouldReceive('createUser')->once()->with(Mockery::on(
@@ -171,7 +172,8 @@ class DataLimitEnforcementTest extends TestCase
 
     public function test_no_cap_means_the_router_user_has_no_byte_limit_field(): void
     {
-        config(['site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
+        // The MikroTik facade is mocked; this opt-in is scoped to this test.
+        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getUser')->andReturn(null);
         $hotspot->shouldReceive('createUser')->once()->with(Mockery::on(fn (array $data) => ! array_key_exists('limit-bytes-total', $data)));

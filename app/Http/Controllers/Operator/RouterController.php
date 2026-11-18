@@ -657,7 +657,16 @@ class RouterController extends Controller
     {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
-        $script = $provisioningService->generateScript($router);
+        try {
+            $script = $provisioningService->generateScript($router);
+        } catch (\LogicException $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 423)
+                    ->header('Cache-Control', 'no-store');
+            }
+
+            return response($e->getMessage(), 423, ['Content-Type' => 'text/plain', 'Cache-Control' => 'no-store']);
+        }
 
         if ($request->query('download') || $request->is('*/download')) {
             $filename = 'mikrotik-provision-'.$router->id.'.rsc';

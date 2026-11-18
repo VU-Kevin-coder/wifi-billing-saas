@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 use ZillEAli\MikrotikLaravel\MikrotikManager;
-use ZillEAli\MikrotikLaravel\Testing\MikrotikFake;
+use ZillEAli\MikrotikLaravel\Facades\MikroTik;
 
 class RouterProvisioningTest extends TestCase
 {
@@ -82,36 +82,15 @@ class RouterProvisioningTest extends TestCase
         URL::defaults(['tenant' => $this->tenant->slug]);
     }
 
-    public function test_provisioning_service_generates_routeros_script(): void
+    public function test_provisioning_service_blocks_script_and_preserves_package_profile(): void
     {
-        $service = new RouterProvisioningService;
-        $script = $service->generateScript($this->router);
-
-        $this->assertStringContainsString('/system identity set name="Main-Hotspot-Router"', $script);
-        $this->assertStringContainsString('/interface bridge add name=br-hotspot', $script);
-        $this->assertStringContainsString('/interface bridge port add bridge=br-hotspot interface="ether2"', $script);
-        $this->assertStringContainsString('/ip address add address=10.10.0.1/16 interface=br-hotspot', $script);
-        $this->assertStringContainsString('/ip hotspot profile add name=prof-billing dns-name="wifi.acme.local"', $script);
-        $this->assertStringContainsString('login-by=http-chap use-radius=no', $script);
-        $this->assertStringNotContainsString('/interface wifi set', $script);
-        $this->assertStringNotContainsString('http-pap', $script);
-        $this->assertStringContainsString('policy=api,read,write', $script);
-        $this->assertStringNotContainsString('policy=api,read,write,test,password', $script);
-        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*pesapal.com*"', $script);
-        $this->assertStringContainsString('/ip hotspot walled-garden add dst-host="*mtn.co.ug*"', $script);
-        $this->assertStringContainsString('/ip service set api port=8728 address="192.168.88.0/24" disabled=no', $script);
-        $this->assertStringContainsString('/ip service set api-ssl disabled=yes', $script);
-        $this->assertStringContainsString('ranges=10.10.0.10-10.10.255.254', $script);
-        $this->assertStringContainsString('password="'.$service->escapeRouterOs('secret123').'"', $script);
-        $this->assertStringNotContainsString('******', $script);
+        $this->assertScriptBlockedWithoutMutation($this->router);
         $profile = $this->package->routerProfileSettings();
-        $this->assertStringContainsString('/ip hotspot user profile add name="package-'.$this->package->id.'" rate-limit="15M/15M" shared-users=2', $script);
         $this->assertArrayNotHasKey('limit-uptime', $profile);
         $this->assertArrayNotHasKey('limit-bytes-total', $profile);
-        $this->assertStringContainsString('Voucher uptime and data caps are applied to each HotSpot user', $script);
     }
 
-    public function test_wireless_provisioning_sets_ssid_for_legacy_and_routeros_wifi_radios(): void
+    public function test_wireless_provisioning_is_blocked_and_ssid_escaping_remains_safe(): void
     {
         $router = Router::create([
             'tenant_id' => $this->tenant->id,
@@ -119,28 +98,22 @@ class RouterProvisioningTest extends TestCase
             'has_wireless' => true,
             'wifi_ssid' => 'Guest "$WiFi"',
         ]);
-        $service = new RouterProvisioningService;
-        $script = $service->generateScript($router);
-        $escapedSsid = $service->escapeRouterOs('Guest "$WiFi"');
-
-        $this->assertStringContainsString('/interface wireless set [find default-name=wlan1] ssid="'.$escapedSsid.'" disabled=no', $script);
-        $this->assertStringContainsString('/interface wireless set [find default-name=wlan2] ssid="'.$escapedSsid.'" disabled=no', $script);
-        $this->assertStringContainsString('/interface wifi set [find default-name=wifi1] configuration.ssid="'.$escapedSsid.'" disabled=no', $script);
-        $this->assertStringContainsString('/interface wifi set [find default-name=wifi2] configuration.ssid="'.$escapedSsid.'" disabled=no', $script);
-        $this->assertStringContainsString('existing security settings are preserved', $script);
+        $this->assertScriptBlockedWithoutMutation($router);
+        $escaped = (new RouterProvisioningService)->escapeRouterOs($router->wifi_ssid);
+        $this->assertStringContainsString('\\$', $escaped);
+        $this->assertStringContainsString('\\"', $escaped);
     }
 
-    public function test_generated_api_account_uses_the_configured_default_username(): void
+    public function test_default_username_does_not_bypass_provisioning_block(): void
     {
         config(['services.mikrotik.api_username' => 'router_api_default']);
         $this->router->forceFill(['api_username' => null])->save();
 
-        $script = (new RouterProvisioningService)->generateScript($this->router);
-
-        $this->assertStringContainsString('name="router_api_default"', $script);
+        $this->assertScriptBlockedWithoutMutation($this->router);
+        $this->assertNull($this->router->fresh()->api_username);
     }
 
-    public function test_platform_router_defaults_are_used_without_bridging_the_wan_interface(): void
+    public function test_platform_defaults_do_not_bypass_provisioning_block(): void
     {
         config(['services.mikrotik.gateway' => '192.168.20.1']);
         PlatformSetting::set('hotspot.default_network', '192.168.20.0/24');
@@ -157,20 +130,11 @@ class RouterProvisioningTest extends TestCase
             'api_password' => null,
             'ethernet_ports' => ['ether2', 'ether3'],
         ]);
-        $script = (new RouterProvisioningService)->generateScript($router);
-        $password = $router->fresh()->api_password;
-
-        $this->assertSame(32, strlen($password));
-        $this->assertStringContainsString('address="192.168.20.0/24"', $script);
-        $this->assertStringContainsString('dns-server="9.9.9.9"', $script);
-        $this->assertStringContainsString('dst-host="*example.org*"', $script);
-        $this->assertStringContainsString('keepalive-timeout=7m', $script);
-        $this->assertStringContainsString('/ip service set [find name=telnet] disabled=yes', $script);
-        $this->assertStringNotContainsString('interface="ether2"', $script);
-        $this->assertStringContainsString('interface="ether3"', $script);
+        $this->assertScriptBlockedWithoutMutation($router);
+        $this->assertNull($router->fresh()->api_password);
     }
 
-    public function test_generated_routeros_values_are_escaped_and_generated_password_is_persisted(): void
+    public function test_provisioning_block_does_not_generate_password_and_escaping_remains_safe(): void
     {
         $router = Router::create([
             'tenant_id' => $this->tenant->id,
@@ -186,23 +150,13 @@ class RouterProvisioningTest extends TestCase
                 'management_subnet' => '192.168.88.0/24',
             ],
         ]);
-        $service = new RouterProvisioningService;
-
-        $script = $service->generateScript($router);
-        $password = $router->fresh()->api_password;
-
-        $this->assertNotSame('', $password);
-        $this->assertStringContainsString('password="'.$service->escapeRouterOs($password).'"', $script);
-        $this->assertStringContainsString('name="'.$service->escapeRouterOs($router->name).'"', $script);
-        $this->assertStringContainsString('password="'.$service->escapeRouterOs($password).'"', $script);
-        $this->assertStringNotContainsString('******', $script);
-        $this->assertStringContainsString('ranges=192.168.20.10-192.168.20.254', $script);
-        $this->assertStringContainsString('/ip service set api-ssl port=8729 address="192.168.88.0/24" disabled=no', $script);
-        $this->assertStringContainsString('/ip service set api disabled=yes', $script);
-        $this->assertStringNotContainsString($router->name, $script);
+        $this->assertScriptBlockedWithoutMutation($router);
+        $this->assertNull($router->fresh()->api_password);
+        $escaped = (new RouterProvisioningService)->escapeRouterOs($router->name);
+        $this->assertStringNotContainsString($router->name, $escaped);
     }
 
-    public function test_invalid_hotspot_network_is_rejected_before_script_generation(): void
+    public function test_safety_block_precedes_invalid_network_validation(): void
     {
         $this->router->forceFill([
             'hotspot_config' => [
@@ -213,8 +167,8 @@ class RouterProvisioningTest extends TestCase
             ],
         ])->save();
 
-        $this->expectException(\InvalidArgumentException::class);
-        (new RouterProvisioningService)->generateScript($this->router);
+        // The safety gate takes precedence over validation until provisioning is restored.
+        $this->assertScriptBlockedWithoutMutation($this->router);
     }
 
     public function test_dynamic_router_configuration_refreshes_the_resolved_manager(): void
@@ -235,7 +189,7 @@ class RouterProvisioningTest extends TestCase
         $this->assertContains($key, $manager->getRouterNames());
     }
 
-    public function test_operator_can_download_provisioning_script(): void
+    public function test_operator_cannot_download_provisioning_script(): void
     {
         $response = $this->actingAs($this->operatorAdmin)
             ->get(route('operator.routers.provision-script', [
@@ -244,9 +198,10 @@ class RouterProvisioningTest extends TestCase
                 'download' => 1,
             ]));
 
-        $response->assertOk();
-        $response->assertHeader('Content-Disposition', 'attachment; filename="mikrotik-provision-'.$this->router->id.'.rsc"');
-        $this->assertStringContainsString('Main-Hotspot-Router', $response->getContent());
+        $response->assertStatus(423)->assertSee(RouterProvisioningService::SAFETY_BLOCK);
+        $this->assertFalse($response->headers->has('Content-Disposition'));
+        $response->assertDontSee('secret123');
+        $this->assertSame('provisioning', $this->router->fresh()->status);
     }
 
     public function test_router_show_page_renders_provisioning_section(): void
@@ -277,36 +232,34 @@ class RouterProvisioningTest extends TestCase
         $response->assertSee('wifi.acme.local');
     }
 
-    public function test_automated_provisioning_deploys_to_mikrotik_via_api(): void
+    public function test_automated_provisioning_does_not_deploy_to_mikrotik_via_api(): void
     {
         config([
             'site_agent.required' => false,
             'site_agent.allow_direct_router_connection' => true,
         ]);
-        $key = 'provision-router-'.$this->router->id;
-        config(["mikrotik.routers.{$key}" => []]);
-        $fake = MikrotikFake::fake([
-            '/system/resource/print' => [
-                ['uptime' => '5d', 'cpu-load' => 10, 'free-memory' => 100000000, 'total-memory' => 256000000],
-            ],
-            '/ip/hotspot/user/profile/print' => [],
-            '/ip/hotspot/user/profile/add' => [],
-        ]);
-
+        MikroTik::shouldReceive('router')->never();
+        $before = $this->router->fresh()->getRawOriginal();
         $response = $this->actingAs($this->operatorAdmin)
             ->postJson(route('operator.routers.provision', [
                 'tenant' => $this->tenant->slug,
                 'router' => $this->router->id,
-            ]));
+            ]), ['opt_in' => true, 'confirmed' => true]);
 
-        $response->assertOk()
-            ->assertJson([
-                'ok' => true,
-                'profiles_synced' => 1,
-            ]);
-
-        $this->router->refresh();
-        $this->assertSame('online', $this->router->status);
-        $this->assertNotNull($this->router->last_seen_at);
+        $response->assertStatus(422)->assertJsonPath('ok', false)
+            ->assertJsonPath('message', RouterProvisioningService::SAFETY_BLOCK);
+        $this->assertSame($before, $this->router->fresh()->getRawOriginal());
     }
+    private function assertScriptBlockedWithoutMutation(Router $router): void
+    {
+        $before = $router->fresh()->getRawOriginal();
+        try {
+            (new RouterProvisioningService)->generateScript($router);
+            $this->fail('Unsafe script generation must be blocked.');
+        } catch (\LogicException $exception) {
+            $this->assertSame(RouterProvisioningService::SAFETY_BLOCK, $exception->getMessage());
+        }
+        $this->assertSame($before, $router->fresh()->getRawOriginal());
+    }
+
 }

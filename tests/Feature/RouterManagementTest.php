@@ -135,8 +135,10 @@ class RouterManagementTest extends TestCase
                 'download' => 1,
             ]));
 
-        $script->assertOk();
-        $this->assertStringContainsString('password="supersecretpass123"', $script->getContent());
+        $script->assertStatus(423)->assertSee('Router provisioning is disabled');
+        $script->assertDontSee('supersecretpass123');
+        $this->assertFalse($script->headers->has('Content-Disposition'));
+        $this->assertSame('provisioning', $router->fresh()->status);
     }
 
     public function test_router_detail_page_can_be_rendered(): void
@@ -547,10 +549,12 @@ class RouterManagementTest extends TestCase
         $result = app(RouterConnectionService::class)->test($router);
 
         $this->assertFalse($result['ok']);
-        $this->assertStringContainsString('10.8.1.2:8729 (API-SSL)', $result['diagnostic']);
-        $this->assertStringContainsString(ConnectionException::class, $result['diagnostic']);
-        $this->assertStringContainsString('Login failed', $result['diagnostic']);
-        $this->assertStringNotContainsString('do-not-display-this-password', $result['message']);
+        $this->assertSame('Connection or authentication failed.', $result['diagnostic']);
+        $this->assertSame('Router API test failed. Connection or authentication failed.', $result['message']);
+        foreach (['do-not-display-this-password', 'router-admin', '10.8.1.2', 'Login failed', ConnectionException::class] as $sensitiveDetail) {
+            $this->assertStringNotContainsString($sensitiveDetail, $result['diagnostic']);
+            $this->assertStringNotContainsString($sensitiveDetail, $result['message']);
+        }
     }
 
     public function test_operator_reboot_is_not_reported_as_success_without_agent_support(): void
@@ -668,6 +672,16 @@ class RouterManagementTest extends TestCase
             ->postJson("http://acme.localhost/operator/routers/{$betaRouter->id}/test")
             ->assertStatus(404);
 
+        MikroTik::shouldReceive('router')->never();
+        $before = $betaRouter->fresh()->getRawOriginal();
+        $this->actingAs($this->acmeUser)
+            ->get("http://acme.localhost/operator/routers/{$betaRouter->id}/provision-script?download=1")
+            ->assertNotFound();
+        $this->actingAs($this->acmeUser)
+            ->postJson("http://acme.localhost/operator/routers/{$betaRouter->id}/provision", ['confirmed' => true])
+            ->assertNotFound();
+        $this->assertSame($before, $betaRouter->fresh()->getRawOriginal());
+
         $this->actingAs($this->acmeUser)
             ->delete("http://acme.localhost/operator/routers/{$betaRouter->id}")
             ->assertStatus(404);
@@ -730,7 +744,8 @@ class RouterManagementTest extends TestCase
             ->get('http://acme.localhost/operator/routers');
 
         $listResponse->assertStatus(200);
-        $listResponse->assertSee('No routers found in workspace');
+        $listResponse->assertSee('No routers yet');
+        $listResponse->assertSee('There are no routers in workspace '.$this->acme->name.'.');
         $listResponse->assertSee('Across 0 operating site(s)');
         $listResponse->assertDontSee('NTD-CORE-01');
         $listResponse->assertDontSee('Jinja-MKT-02');

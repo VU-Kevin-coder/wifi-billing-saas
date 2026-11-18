@@ -59,6 +59,8 @@ window.confirmWithReason = async function confirmWithReason(message, options = {
     return result.isConfirmed ? result.value.trim() : null;
 };
 
+const pendingConfirmations = new WeakSet();
+
 document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !form.dataset.confirmAction) {
@@ -72,16 +74,24 @@ document.addEventListener('submit', (event) => {
 
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (pendingConfirmations.has(form)) return;
+    pendingConfirmations.add(form);
     const submitter = event.submitter;
 
     requestConfirmation(form.dataset.confirmAction, {
         confirmButtonText: form.dataset.confirmButtonText,
     }).then((confirmed) => {
-        if (!confirmed) {
-            return;
-        }
-
+        if (confirmed !== true || !form.isConnected) return;
         form.dataset.confirmed = 'true';
-        form.requestSubmit(submitter || undefined);
-    });
+        try {
+            form.requestSubmit(submitter || undefined);
+        } finally {
+            // Validation or a removed submitter must never authorize a later attempt.
+            delete form.dataset.confirmed;
+        }
+    }).catch(() => {
+        window.dispatchEvent(new CustomEvent('ui-toast', {
+            detail: { type: 'error', message: 'Confirmation failed. Your action was not submitted.' },
+        }));
+    }).finally(() => pendingConfirmations.delete(form));
 }, true);

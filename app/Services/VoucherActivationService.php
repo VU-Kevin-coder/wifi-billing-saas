@@ -37,6 +37,15 @@ class VoucherActivationService
                 ->first();
 
             if ($session) {
+                $existingRouter = $session->router_id
+                    ? Router::query()->where('tenant_id', $tenant->id)->find($session->router_id)
+                    : null;
+                if (! $existingRouter || ! in_array($existingRouter->access_backend, ['site_agent', 'radius'], true)) {
+                    throw new RadiusUnavailableException('Access cannot be confirmed. Contact the operator; please do not pay again.');
+                }
+                if ($existingRouter->access_backend === 'radius') {
+                    RadiusReadiness::requireAvailable();
+                }
                 if (! in_array($session->status, ['active', 'provisioning'], true)
                     || $session->expires_at?->isPast()) {
                     throw new LogicException('This voucher session has already expired or disconnected.');
@@ -62,12 +71,18 @@ class VoucherActivationService
 
             $router = $this->resolveRouter($tenant, $voucher, $request, $sessionContext);
             $site = $this->resolveSite($tenant, $voucher, $router);
-            $accessBackend = $router?->access_backend ?? 'site_agent';
+            if (! $router) {
+                throw new RadiusUnavailableException('Router cannot be identified. Contact the operator; please do not pay again.');
+            }
+            $accessBackend = $router->access_backend;
             if (! in_array($accessBackend, ['site_agent', 'radius'], true)) {
-                throw new LogicException('This router has an unsupported access backend. Access was not activated.');
+                throw new RadiusUnavailableException('This router has an unsupported access backend. Contact the operator; please do not pay again.');
             }
 
             $usesRadius = $accessBackend === 'radius';
+            if ($usesRadius) {
+                RadiusReadiness::requireAvailable();
+            }
             if ($usesRadius && ! $router->hasUsableRadiusConfiguration()) {
                 throw new LogicException('This RADIUS router is not fully configured. Access was not activated.');
             }
@@ -169,45 +184,47 @@ class VoucherActivationService
         $routerId = $context['router_id'] ?? $request->input('router_id');
         if ($routerId) {
             $router = Router::where('tenant_id', $tenant->id)->find($routerId);
-            if ($router) {
-                return $router;
+            if (! $router) {
+                throw new RadiusUnavailableException('Router cannot be identified. Contact the operator; please do not pay again.');
             }
+            return $router;
         }
 
         $routerIdentity = $context['router'] ?? $request->input('router');
         if ($routerIdentity) {
-            $router = Router::where('tenant_id', $tenant->id)
+            $routers = Router::where('tenant_id', $tenant->id)
                 ->where(function ($query) use ($routerIdentity): void {
-                    $query->where('name', $routerIdentity)
-                        ->orWhere('serial_number', $routerIdentity);
-                })
-                ->first();
-            if ($router) {
-                return $router;
+                    $query->where('name', $routerIdentity)->orWhere('serial_number', $routerIdentity);
+                })->limit(2)->get();
+            if ($routers->count() !== 1) {
+                throw new RadiusUnavailableException('Router cannot be identified uniquely. Contact the operator; please do not pay again.');
             }
+            return $routers->first();
         }
 
         $siteId = $context['site_id'] ?? $voucher->site_id;
         if ($siteId) {
             $routers = Router::where('tenant_id', $tenant->id)->where('site_id', $siteId)->limit(2)->get();
-            if (config('site_agent.required') && $routers->count() > 1) {
-                throw new LogicException('This site has multiple routers. Specify the router before activating access.');
+            if ($routers->count() > 1) {
+                throw new RadiusUnavailableException('This site has multiple routers. Contact the operator; please do not pay again.');
             }
-            if ($routers->isNotEmpty()) {
-                return $routers->first();
+            if ($routers->isEmpty()) {
+                throw new RadiusUnavailableException('Router cannot be identified for this site. Contact the operator; please do not pay again.');
             }
+            return $routers->first();
         }
 
         if ($voucher->assigned_site) {
             $routers = Router::where('tenant_id', $tenant->id)
                 ->where('site', $voucher->assigned_site)
                 ->limit(2)->get();
-            if (config('site_agent.required') && $routers->count() > 1) {
-                throw new LogicException('This site has multiple routers. Specify the router before activating access.');
+            if ($routers->count() > 1) {
+                throw new RadiusUnavailableException('This site has multiple routers. Contact the operator; please do not pay again.');
             }
-            if ($routers->isNotEmpty()) {
-                return $routers->first();
+            if ($routers->isEmpty()) {
+                throw new RadiusUnavailableException('Router cannot be identified for this site. Contact the operator; please do not pay again.');
             }
+            return $routers->first();
         }
 
         $fallbackRouters = Router::where('tenant_id', $tenant->id)
@@ -215,8 +232,8 @@ class VoucherActivationService
             ->limit(2)
             ->get();
 
-        if (config('site_agent.required') && $fallbackRouters->count() > 1) {
-            throw new LogicException('This voucher is not bound to a router. Access was not activated.');
+        if ($fallbackRouters->count() > 1) {
+            throw new RadiusUnavailableException('This voucher is not bound to a router. Contact the operator; please do not pay again.');
         }
 
         return $fallbackRouters->first();

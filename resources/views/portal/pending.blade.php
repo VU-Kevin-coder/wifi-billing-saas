@@ -53,8 +53,9 @@
         <p class="lede">Approve the mobile money prompt on your phone. Keep this page open while we confirm your payment.</p>
 
         <div id="status-message" role="status" aria-live="polite">
-            Checking payment status…
+            Payment status has not been checked yet.
         </div>
+        <noscript><p class="payment-details">Payment status updates require JavaScript. Enable JavaScript to check your payment status.</p></noscript>
 
         <div class="payment-details">
             <p>Reference: {{ $transaction->reference }}</p>
@@ -94,10 +95,12 @@
 
                 if (result.status === 'fulfillment_pending') {
                     statusElement.textContent = 'Payment confirmed. Access is being prepared. Please do not pay again.';
-                }
-
-                if (result.status === 'provisioning' || result.status === 'activation_pending') {
+                } else if (result.status === 'provisioning' || result.status === 'activation_pending') {
                     statusElement.textContent = 'Payment confirmed. Waiting for the site router to activate your access…';
+                } else if (result.status === 'pending') {
+                    statusElement.textContent = 'Waiting for payment confirmation…';
+                } else {
+                    statusElement.textContent = 'Payment status is not yet available. We will check again shortly.';
                 }
             } catch (error) {
                 statusElement.textContent = 'Unable to check right now. We will try again shortly.';

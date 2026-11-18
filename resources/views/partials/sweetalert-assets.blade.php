@@ -1,3 +1,3 @@
-<script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"
-        integrity="sha384-YB/DdIkloKoRpclWB8bNcYXWakt57USgtQPDzvnIDHYU0lasD5eWlXVo1S4ODukY"
-        crossorigin="anonymous"></script>
+{{-- Local SweetAlert-style, text-only dialog implementation; no third-party CDN. --}}
+<link rel="stylesheet" href="{{ asset('css/ui-dialog.css') }}">
+<script defer src="{{ asset('js/ui-dialog.js') }}"></script>
