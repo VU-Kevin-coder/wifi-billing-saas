@@ -21,14 +21,16 @@ class Phase1DomainMigrationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_phase_one_migrations_are_repeatable_and_keep_legacy_defaults(): void
+    public function test_phase_one_migrations_are_repeatable_and_new_routers_default_to_radius(): void
     {
         $routerAndSaleMigration = $this->loadMigration('2026_11_16_000001_add_radius_router_and_sale_links.php');
         $accountingMigration = $this->loadMigration('2026_11_16_000002_create_radius_accounting_tables.php');
+        $defaultBackendMigration = $this->loadMigration('2026_11_17_000001_default_radius_backend_for_new_routers.php');
 
         // RefreshDatabase already ran the fresh migrations; rerun each to verify safe re-entry.
         $routerAndSaleMigration->up();
         $accountingMigration->up();
+        $defaultBackendMigration->up();
 
         $this->assertTrue(Schema::hasColumn('routers', 'access_backend'));
         $this->assertTrue(Schema::hasColumn('vouchers', 'sale_transaction_id'));
@@ -41,9 +43,16 @@ class Phase1DomainMigrationTest extends TestCase
 
         $tenant = $this->createTenant();
         $router = $this->createRouter($tenant);
+        $legacyRouter = Router::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Existing site-agent router',
+        ]);
+        $legacyRouter->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $defaultBackendMigration->up();
         $voucher = $this->createVoucher($tenant);
 
-        $this->assertSame('site_agent', $router->fresh()->access_backend);
+        $this->assertSame('radius', $router->fresh()->access_backend);
+        $this->assertSame('site_agent', $legacyRouter->fresh()->access_backend);
         $this->assertNull($voucher->fresh()->sale_transaction_id);
     }
 

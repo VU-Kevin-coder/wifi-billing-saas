@@ -99,7 +99,7 @@ class RadiusOptInShutdownTest extends TestCase
             'radius_shared_secret' => 'injected-secret',
         ])->assertRedirect();
         $fresh = Router::withoutTenancy()->findOrFail($router->id);
-        $this->assertSame('site_agent', $fresh->access_backend);
+        $this->assertSame('radius', $fresh->access_backend);
         $this->assertNull($fresh->radius_nas_identifier);
         $this->assertNull($fresh->getRawOriginal('radius_shared_secret'));
     }
@@ -122,6 +122,7 @@ class RadiusOptInShutdownTest extends TestCase
         $router = Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic router']);
         $user = User::factory()->create(['tenant_id' => $tenant->id]);
         $user->assignRole('operator_admin');
+
         return [$tenant, $router, $user];
     }
 

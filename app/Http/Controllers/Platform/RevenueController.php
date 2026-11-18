@@ -10,7 +10,8 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Notifications\WithdrawalApproved;
 use App\Notifications\WithdrawalRejected;
-use App\Services\FlutterwaveWithdrawalService;
+use App\Services\Payments\PaymentGatewaySettings;
+use App\Services\Payments\PaymentPayoutService;
 use App\Services\Policy\AdjustmentService;
 use App\Services\WalletService;
 use Illuminate\Contracts\Encryption\DecryptException;
@@ -80,9 +81,13 @@ class RevenueController extends Controller
             })
             ->groupBy('tenant_id');
 
+        $payoutGateways = collect(PaymentGatewaySettings::enabledProviders())
+            ->mapWithKeys(fn (string $provider): array => [$provider => PaymentGatewaySettings::label($provider)])
+            ->all();
+
         return view('platform.revenue.index', compact(
             'totalCommissions', 'subscriptionRevenue', 'platformPayouts', 'operators', 'currency',
-            'pendingWithdrawalsByTenant',
+            'pendingWithdrawalsByTenant', 'payoutGateways',
         ));
     }
 
@@ -97,14 +102,23 @@ class RevenueController extends Controller
             ->findOrFail($id);
     }
 
-    public function approveWithdrawal(Request $request, int|string $transaction, FlutterwaveWithdrawalService $withdrawals)
+    public function approveWithdrawal(Request $request, int|string $transaction, PaymentPayoutService $withdrawals)
     {
         $transaction = $this->findWithdrawal($transaction);
         $manualBankTransfer = ($transaction->meta['payout_method'] ?? null) === 'bank_transfer';
         $validated = $request->validate([
             'payout_reference' => [$manualBankTransfer ? 'required' : 'nullable', 'string', 'min:3', 'max:100'],
+            'gateway' => [
+                $manualBankTransfer ? 'nullable' : 'required',
+                'string',
+                'in:'.implode(',', PaymentGatewaySettings::enabledProviders()),
+            ],
         ]);
-        $result = $withdrawals->approve($transaction, $validated['payout_reference'] ?? null);
+        $result = $withdrawals->approve(
+            $transaction,
+            $validated['gateway'] ?? null,
+            $validated['payout_reference'] ?? null,
+        );
         $transaction->refresh();
         AuditLog::record(
             $result['ok'] ? 'withdrawal.approved' : 'withdrawal.approval_failed',
@@ -138,8 +152,10 @@ class RevenueController extends Controller
             }
 
             if (! empty($locked->meta['flutterwave_transfer_id'])
-                || in_array($locked->meta['flutterwave_transfer_submission'] ?? null, ['submitting', 'submitted', 'unknown'], true)) {
-                return 'A Flutterwave transfer has been submitted or may be in progress. Reconcile it before rejecting the withdrawal.';
+                || in_array($locked->meta['flutterwave_transfer_submission'] ?? null, ['submitting', 'submitted', 'unknown'], true)
+                || ! empty($locked->meta['payout_provider_transaction_id'])
+                || in_array($locked->meta['payout_submission'] ?? null, ['submitting', 'submitted', 'unknown'], true)) {
+                return 'A payout has been submitted or may be in progress. Reconcile it before rejecting the withdrawal.';
             }
 
             $locked->update(['status' => 'rejected']);

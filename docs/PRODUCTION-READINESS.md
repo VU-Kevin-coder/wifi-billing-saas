@@ -1,6 +1,6 @@
 # Production readiness
 
-Status date: 2026-11-13
+Status date: 2026-11-18
 
 This document records repository changes and validation evidence. A passing
 automated test is not a substitute for testing RouterOS firmware or verifying
@@ -10,6 +10,7 @@ the production proxy chain.
 
 | Finding | Status | Change / evidence |
 |---|---|---|
+| RADIUS and guided router onboarding | Application implementation extended; dynamic lookup and physical acceptance pending validation | Guided WireGuard onboarding supports separate HotSpot and PPPoE setup. PPPoE subscriber credentials are tenant-scoped, encrypted at rest, and authorized through the policy API; PAP authentication and usage accounting are wired into the local service path. FreeRADIUS now requests a per-router client record through an authenticated private lookup, preserving each router's unique secret and requiring Message-Authenticator; unknown or disabled peers fail closed, and FreeRADIUS caches records for 30 seconds. The configuration passes `freeradius -XC` on FreeRADIUS 3.2.1, but end-to-end dynamic attribute resolution and physical RouterOS acceptance have not been run. Subscriber suspension rejects new authentications but does not disconnect an already active PPPoE session (CoA/disconnect is not implemented). CHAP/MSCHAP are not configured. Do not treat this implementation as production-ready. See [RADIUS-CHR-LAB.md](./RADIUS-CHR-LAB.md). |
 | D1 — Misleading router health | In progress | Added site-agent telemetry commands for uptime, CPU, memory, and active hotspot users. Router detail status distinguishes recent telemetry from last-known state and displays separate agent/telemetry timestamps. Successful profile sync alone no longer marks a router online. Automated coverage added; physical-agent/router run pending. |
 | D2 — Captive-portal credentials | In progress | Generated profile removes `http-pap` and keeps `http-chap`; login URLs no longer carry voucher codes, which remain on the application success page for manual entry into the router login form. RouterOS HTTPS captive login still requires a trusted router certificate and is not configured by the script. |
 | D2 — Router API account | In progress | Removed `test` and `password` from the generated account policy and retained API/read/write. RouterOS group policies grant write at configuration scope; this script cannot restrict it to `/ip hotspot` alone. Do not describe this account as subtree-scoped. |
@@ -17,16 +18,16 @@ the production proxy chain.
 | D2 — Scheduler mail | Done in configuration | Scheduler worker now receives the same SMTP settings as the web service. Delivery must still be verified with the production mail provider. |
 | D2 — CHR exposure/version | Done in repository | CHR ports bind to `127.0.0.1`; image pinned to `evilfreelancer/docker-routeros:7.24.6`. Container startup/RouterOS behavior not verified in this run. |
 | D3 — Hardware matrix and acceptance plan | Done as documentation | [HARDWARE-MATRIX.md](./HARDWARE-MATRIX.md) records target models, RouterOS version target, untested status, and acceptance steps. No physical router result has been supplied or recorded. |
-| D4 — Full test suite/CI | In progress | Local `php artisan test` passed on PHP 8.2/SQLite: 490 tests, 2,496 assertions. SQLite, MySQL 8, and PostgreSQL 16 full-suite jobs use PHP 8.3; Pint and Composer/npm audits are blocking, and `CI passed` includes these jobs. CI has not run for this change; the MySQL/PostgreSQL jobs and GitHub branch protection requirement remain pending. |
+| D4 — Full test suite/CI | In progress | Local `php artisan test` exited 0 (651 warnings from missing per-test `phpunit-environment-disabled` temp files, 1 skipped, 16 passed; 4,861 assertions); `vendor/bin/pint --test` passed. CI has not run for this change; SQLite/MySQL/PostgreSQL CI jobs, dependency audits, and branch-protection status remain pending. |
 | D4 — npm audit network failure | Done locally; CI pending | `npm audit --omit=dev --audit-level=high` passed locally with 0 vulnerabilities and is blocking in GitHub Actions. If registry DNS/audit fails there, CI fails visibly rather than passing with an ignored result. |
 | Notifications | Done in application; production schema pending | Added persisted role-targeted notifications for new tenant/user signups, subscription and account/KYC changes, router failures/recovery/configuration, package/site creation and edits, and voucher batches. Bell uses the authenticated API and polls unread counts. Docker database connectivity blocked applying its migrations; see database status below. |
 | Registration email verification and welcome | Done in application; delivery pending | Registration sends a short-lived, rate-limited six-digit email code, verifies it before creating the tenant/user, and sends a welcome email after successful signup. Actual SMTP delivery has not been tested against a configured provider. |
 | Tenant integration secret storage | Done in application; migration pending | Tenant SMS API keys and WhatsApp API/webhook secrets are encrypted at rest with the application key. Existing plaintext values are handled by a data migration and encrypted on the next settings save. Do not rotate `APP_KEY` without a planned re-encryption/rotation procedure. |
-| Currency configuration | Done for package creation and display; provider limits remain | New packages inherit the platform-configured currency; package, voucher, customer, dashboard, wallet, and billing displays use configured/package currency. Pesapal submits package currency. MTN/Airtel collection remains Uganda/UGX-only and rejects non-UGX packages rather than charging the wrong amount. |
+| Currency configuration | Done for package creation and display; provider limits remain | New packages inherit the platform-configured currency. OBPay, PawaPay, and ioTec checkout is limited to whole-number UGX packages and rejects unsupported currencies before submitting a charge. |
 | Application and tenant URL defaults | Done in code; production DNS pending | Tenant URLs now use the scheme, host, and non-standard port from `APP_URL`; `TENANT_BASE_DOMAIN` is an explicit optional override. Router onboarding uses the actual authenticated router-specific script download and configurable RouterOS defaults. `hotspot.local` remains a configurable RouterOS captive-portal DNS name, not the SaaS URL. |
 | System status and dependency alerts | Done in application; deployment monitoring pending | The static health claim is replaced by dependency status from database, cache, scheduler heartbeat, and queue configuration. Health transitions email active platform admins. `/health/ready` returns 503 when degraded; configure an external monitor to poll it so a stopped process is detected independently. Non-sync queue workers remain unverified without a worker heartbeat. |
 | Expired sessions awaiting router enforcement | Done in application | Expired sessions with pending router actions are marked `disconnecting` and shown separately from active sessions; retries preserve this state until router confirmation. |
-| Duplicate pending purchases and callbacks | Done in application; provider retry behavior tested | Pending payment intents are deduplicated under a tenant/package/normalized-phone fingerprint and cache lock; a new attempt is allowed after failure/completion. Pesapal uses customer email or configured `MAIL_FROM_ADDRESS`. Provider callback retry tests verify idempotent fulfillment. |
+| Duplicate pending purchases and callbacks | Done in application; provider retry behavior tested | Pending payment intents are deduplicated under a tenant/package/normalized-phone fingerprint and cache lock; a new attempt is allowed after failure/completion. OBPay, PawaPay, and ioTec callbacks trigger authoritative provider-status reconciliation; callbacks alone never fulfill a sale. |
 | Database recovery / migrations | Local development stack healthy; production recovery remains unverified | `docker compose ps` reports MySQL healthy and `docker compose exec -T app php artisan migrate:status` reports all migrations as run, including the latest revocation, blocked-device, and purchase-intent migrations. No production backup/restore rehearsal was performed. |
 
 ## Batches A–C
@@ -38,7 +39,7 @@ those features have passed on physical hardware.
 
 ## Validation evidence
 
-| Check | Result as of 2026-11-13 |
+| Check | Result as of 2026-11-18 |
 |---|---|
 | Full local application suite (`php artisan test`, PHP 8.2/SQLite) | Passed: 490 tests, 2,496 assertions |
 | Full SQLite / MySQL / PostgreSQL CI suite | SQLite passed locally; MySQL/PostgreSQL and GitHub Actions run pending |
@@ -56,17 +57,20 @@ those features have passed on physical hardware.
 | CHR script import / end-to-end acceptance | Not run; no RouterOS configuration was changed |
 | Physical router acceptance | Not run |
 | Render proxy chain / forwarded-header overwrite | Not verified against a deployed service |
+| PPPoE policy, subscriber credentials, accounting, generated provisioning script, and network separation (`php artisan test --filter="RadiusPolicyBoundaryTest|RadiusRuntimeReadinessTest|RouterRadiusCredentialDeliveryTest|RouterProvisioningSafetyTest|RouterGuidedProvisioningTest|PppoeSubscriberRadiusTest"`) | Passed: 36 tests, 286 assertions; test environment emitted temporary dotenv-file warnings |
+| RADIUS policy bridge security (`python -m unittest discover -s tests\security -p "test_radius*.py"`) | Passed: 23 tests |
+| Physical PPPoE/RADIUS acceptance | Not run |
 
 ## Deferred work
 
 | Item | Status | Reason / target |
 |---|---|---|
 | VPN UI polish | Deferred | Not required for the core router control path; revisit by 2026-12-11. |
-| RADIUS | Deferred | Not implemented in this deployment; revisit by 2026-12-11 after captive-portal acceptance. |
+| RADIUS production deployment | Deferred | Local CHR listener and policy integration are implemented, but no production network/TLS design, multi-router credential lifecycle, accounting reconciliation, CoA, or RouterOS acceptance has been completed. Do not set `RADIUS_PRODUCTION_ENABLED` in production. |
 | WireGuard key rotation UX | Deferred | Current recovery requires support intervention; define and test rotation before wider production rollout, target 2026-12-11. |
 | RouterOS subtree-only write permissions | Deferred with security limitation | Native RouterOS user-group policy is global; a separate constrained command boundary is required before claiming least-privilege hotspot-only write. Reassess by 2026-11-18. |
 | Router HTTPS captive portal | Deferred with configuration prerequisite | Requires a valid trusted certificate on each router and a customer-reachable hostname. Keep CHAP-only login until certificate provisioning and validation are implemented; reassess by 2026-11-18. |
 | Render proxy verification | Deferred with deployment prerequisite | Configure exact proxy CIDRs and confirm forwarded-header overwrite behavior in the live Render service before production traffic; target 2026-11-18. |
 | Real email delivery | Deferred with deployment prerequisite | Configure and verify SMTP delivery for registration codes and welcome messages before accepting public signups; target 2026-11-18. |
 | Production database backup / restore rehearsal | Pending with deployment prerequisite | The local Docker MySQL service is healthy and its migrations are current. Before production testing, confirm the production target, take and verify a backup, inspect its schema/data, then apply approved migrations; do not run `migrate:fresh` against persistent data. |
-| Physical router acceptance | Deferred with hardware prerequisite | Run and record the acceptance procedure in [HARDWARE-MATRIX.md](./HARDWARE-MATRIX.md) on an isolated physical router; no physical test is claimed. Target 2026-11-18. |
+| Physical router acceptance | Not run; end-to-end dynamic lookup verification is the immediate prerequisite | Use an isolated, recoverable RouterOS 7.x test router, not a production router. The host must expose/forward only the WireGuard UDP endpoint required by this test; RADIUS UDP ports remain private. Verify FreeRADIUS resolves the enabled router from its WireGuard peer and rejects an unknown or disabled peer before testing. Then verify the WireGuard handshake, HotSpot voucher login/rejection/limits, and PPPoE PAP subscriber login/rejection/limits/accounting on a separate physical interface or VLAN. Also verify failure recovery and no overlap with HotSpot addressing. CHAP/MSCHAP acceptance and the complete production network design remain blockers to general rollout. Record model, exact RouterOS version, application commit, outcomes, and sanitized evidence in [HARDWARE-MATRIX.md](./HARDWARE-MATRIX.md). Do not label production readiness from a successful lab test. |

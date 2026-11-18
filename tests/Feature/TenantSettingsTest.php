@@ -167,6 +167,36 @@ class TenantSettingsTest extends TestCase
         $this->assertTrue($settings['extend_gateway_fee']);
     }
 
+    public function test_unchecked_portal_features_are_saved_as_disabled_and_control_the_live_portal(): void
+    {
+        Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $tenant = Tenant::create(['name' => 'Acme Wi-Fi', 'slug' => 'acme']);
+        $operator = User::factory()->create(['tenant_id' => $tenant->id]);
+        $operator->assignRole('operator_admin');
+
+        $this->actingAs($operator)
+            ->put('http://acme.localhost/operator/settings/portal', [
+                'primary_color' => '#123456',
+                'template' => 'rose',
+                'portal_title' => 'Acme Guest Wi-Fi',
+            ])
+            ->assertRedirect(route('operator.settings.index', [
+                'tenant' => $tenant->slug,
+                'tab' => 'portal',
+            ]));
+
+        $tenant->refresh();
+        $this->assertFalse($tenant->settings['show_packages']);
+        $this->assertFalse($tenant->settings['show_device_registration']);
+        $this->assertFalse($tenant->settings['show_troubleshooting']);
+
+        $this->get('http://acme.localhost/portal')
+            ->assertOk()
+            ->assertDontSee('Or purchase a package')
+            ->assertDontSee('Having trouble connecting?');
+    }
+
     public function test_operator_can_configure_communication_and_notification_settings(): void
     {
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);

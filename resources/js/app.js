@@ -4,6 +4,7 @@ import './confirm';
 import './form-guard';
 import './toast';
 import './notification-bell';
+import './theme';
 
 import Alpine from 'alpinejs';
 import { mobileSidebar } from './mobile-sidebar';

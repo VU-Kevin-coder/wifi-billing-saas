@@ -8,6 +8,7 @@ use App\Models\Router;
 use App\Services\RadiusReadiness;
 use App\Services\RadiusRouterCredentialService;
 use App\Services\RadiusUnavailableException;
+use App\Services\RouterProvisioningService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +60,11 @@ class RadiusRouterCredentialController extends Controller
                 return ['status' => Response::HTTP_SERVICE_UNAVAILABLE, 'content' => RadiusRouterCredentialService::UNAVAILABLE_MESSAGE];
             }
 
+            $labScript = null;
+            if (config('router.lab_provisioning_enabled')) {
+                $labScript = app(RouterProvisioningService::class)->generateRadiusLabScript($routerModel, $secret);
+            }
+
             AuditLog::record('router.radius_credential_provisioned', $routerModel, [
                 'nas_identifier' => $routerModel->radius_nas_identifier,
             ]);
@@ -69,6 +75,7 @@ class RadiusRouterCredentialController extends Controller
                     'tenant' => $tenant,
                     'router' => $routerModel,
                     'secret' => $secret,
+                    'labScript' => $labScript,
                 ])->render(),
             ];
         });

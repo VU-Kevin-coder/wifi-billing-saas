@@ -138,6 +138,7 @@
                                         <span class="text-sm font-semibold text-gray-800">Show packages on portal</span>
                                         <p class="text-xs text-gray-500">Allow customers to browse and buy available data plans.</p>
                                     </div>
+                                    <input type="hidden" name="show_packages" value="0">
                                     <input type="checkbox" name="show_packages" value="1" x-model="showPackages"
                                            class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500 h-5 w-5">
                                 </label>
@@ -147,6 +148,7 @@
                                         <span class="text-sm font-semibold text-gray-800">Smart TV & Console box</span>
                                         <p class="text-xs text-gray-500">Display secondary registration link for browser-less devices.</p>
                                     </div>
+                                    <input type="hidden" name="show_device_registration" value="0">
                                     <input type="checkbox" name="show_device_registration" value="1" x-model="showDeviceReg"
                                            class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500 h-5 w-5">
                                 </label>
@@ -156,6 +158,7 @@
                                         <span class="text-sm font-semibold text-gray-800">Troubleshooting collapsible</span>
                                         <p class="text-xs text-gray-500">Provide an expandable 'Connection Issues?' FAQ guide.</p>
                                     </div>
+                                    <input type="hidden" name="show_troubleshooting" value="0">
                                     <input type="checkbox" name="show_troubleshooting" value="1" x-model="showTrouble"
                                            class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500 h-5 w-5">
                                 </label>

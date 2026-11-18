@@ -4,12 +4,15 @@ namespace Tests\Feature\Auth;
 
 use DOMDocument;
 use DOMXPath;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\ViewErrorBag;
 use Tests\TestCase;
 
 class FormAccessibilityTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();

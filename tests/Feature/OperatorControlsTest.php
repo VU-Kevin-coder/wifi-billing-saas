@@ -120,7 +120,8 @@ class OperatorControlsTest extends TestCase
     {
         config(['site_agent.required' => true]);
         $site = Site::create(['tenant_id' => $this->tenant->id, 'name' => 'North']);
-        Router::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'R1', 'status' => 'online']);
+        Router::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'R1', 'status' => 'online'])
+            ->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         SiteAgent::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'Agent', 'token_hash' => hash('sha256', 'tok'), 'last_seen_at' => now()]);
         $voucher = $this->voucher('unused', 'VOID-003');
         $session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)

@@ -73,6 +73,13 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'radius' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/radius-accounting.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

@@ -43,8 +43,8 @@
         .policy-savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border-top:1px solid var(--line2);box-shadow:0 -8px 24px #0002}.policy-savebar.show{display:flex}.policy-savebar input{width:min(420px,100%);padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}
         .policy-empty{padding:32px;text-align:center;color:var(--fg3)}.policy-old{color:var(--bad);text-decoration:line-through}.policy-new{color:var(--ok);font-weight:700}
         @media(max-width:760px){.policy-row{grid-template-columns:minmax(0,1fr)}}
-        @media(prefers-color-scheme:dark){.policy-page:not([data-theme=light]){--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}}
-        .policy-page[data-theme=dark]{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}
+        @media(prefers-color-scheme:dark){html:not([data-app-theme=light]):not([data-app-theme=dark]) .policy-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}}
+        html[data-app-theme=dark] .policy-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}
     </style>
 
     <div class="policy-page" id="policyPage">
@@ -54,7 +54,6 @@
             <div class="policy-actions">
                 <a class="policy-btn" href="{{ route('platform.configuration.control') }}">Control settings</a>
                 <a class="policy-btn" href="{{ route('platform.policies.export') }}">Export JSON</a>
-                <button class="policy-btn" type="button" id="policyTheme">Theme: auto</button>
             </div>
         </div>
 
@@ -235,7 +234,6 @@
 
     <script>
         (() => {
-            const page = document.getElementById('policyPage');
             const form = document.getElementById('policyForm');
             const bar = document.getElementById('policySaveBar');
             const count = document.getElementById('policyChangeCount');
@@ -385,14 +383,6 @@
                     output.appendChild(item);
                 });
             }
-            const modes = ['auto', 'light', 'dark'];
-            let mode = 0;
-            document.getElementById('policyTheme').addEventListener('click', () => {
-                mode = (mode + 1) % modes.length;
-                if (modes[mode] === 'auto') page.removeAttribute('data-theme');
-                else page.setAttribute('data-theme', modes[mode]);
-                document.getElementById('policyTheme').textContent = 'Theme: ' + modes[mode];
-            });
             showTab();
             renderLifecycle();
             changed();

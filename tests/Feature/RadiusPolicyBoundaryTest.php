@@ -14,6 +14,7 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
+use App\Models\VpnPeer;
 use App\Services\PaymentService;
 use App\Services\RadiusAccountingService;
 use App\Services\RadiusRouterCredentialService;
@@ -21,6 +22,7 @@ use App\Services\RadiusUnavailableException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -155,6 +157,108 @@ class RadiusPolicyBoundaryTest extends TestCase
             '192.168.40.7',
             '10.41.2.9',
         )->assertUnauthorized();
+    }
+
+    public function test_signed_policy_authorization_requires_the_router_wireguard_peer_and_returns_safe_attributes(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'radius_policy.service_secret' => self::SERVICE_SECRET,
+            'radius_policy.nonce_cache_store' => null,
+            'radius_policy.allowed_source_cidrs' => [],
+        ]);
+        [, $router, $voucher] = $this->createRadiusAccess();
+        $this->createVpnPeer($router, '10.8.1.20');
+
+        $payload = [
+            'authenticated_router_id' => $router->id,
+            'authenticated_peer_ip' => '10.8.1.20',
+            'nas_identifier' => $router->radius_nas_identifier,
+            'nas_session_id' => 'router-auth-session',
+            'voucher_code' => $voucher->code,
+        ];
+        $this->signedCall('POST', '/internal/radius/v1/authorize', $payload)
+            ->assertOk()
+            ->assertJsonPath('control:Cleartext-Password.value.0', $voucher->code)
+            ->assertJsonPath('control:Cleartext-Password.do_xlat', false)
+            ->assertJsonPath('reply:Port-Limit', 2)
+            ->assertJsonPath('reply:Mikrotik-Rate-Limit', '10M/10M')
+            ->assertJsonPath('reply:Mikrotik-Total-Limit', 1073741824)
+            ->assertJsonPath('reply:Mikrotik-Total-Limit-Gigawords', 1)
+            ->assertJsonMissingPath('reply:Auth-Type');
+
+        $payload['authenticated_peer_ip'] = '10.8.1.21';
+        $this->signedCall('POST', '/internal/radius/v1/authorize', $payload)->assertUnauthorized();
+    }
+
+    public function test_signed_dynamic_client_lookup_returns_only_the_enabled_radius_peer_record(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'radius_policy.service_secret' => self::SERVICE_SECRET,
+            'radius_policy.nonce_cache_store' => null,
+            'radius_policy.allowed_source_cidrs' => [],
+        ]);
+        [, $router] = $this->createRadiusAccess();
+        $peer = $this->createVpnPeer($router, '10.8.1.20');
+        $secret = $router->radius_shared_secret;
+
+        $this->signedCall('POST', '/internal/radius/v1/client-lookup', [
+            'authenticated_peer_ip' => '10.8.1.20',
+            'authenticated_router_id' => 99999,
+        ])->assertOk()
+            ->assertJsonPath('control:FreeRADIUS-Client-IP-Address.value.0', '10.8.1.20')
+            ->assertJsonPath('control:FreeRADIUS-Client-Secret.value.0', $secret)
+            ->assertJsonPath('control:FreeRADIUS-Client-Shortname.value.0', 'router-'.$router->id)
+            ->assertJsonPath('control:FreeRADIUS-Client-NAS-Type.value.0', 'other')
+            ->assertJsonPath('control:FreeRADIUS-Client-Require-MA.value.0', 'yes')
+            ->assertHeader('Cache-Control', 'no-store, private');
+
+        $this->signedCall('POST', '/internal/radius/v1/client-lookup', [
+            'authenticated_peer_ip' => '10.8.1.21',
+        ])->assertUnauthorized();
+
+        $peer->update(['enabled' => false]);
+        $this->signedCall('POST', '/internal/radius/v1/client-lookup', [
+            'authenticated_peer_ip' => '10.8.1.20',
+        ])->assertUnauthorized();
+    }
+
+    public function test_accounting_endpoint_logs_sanitized_observations_without_reconciling_sessions(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'radius_policy.service_secret' => self::SERVICE_SECRET,
+            'radius_policy.nonce_cache_store' => null,
+            'radius_policy.allowed_source_cidrs' => [],
+        ]);
+        [, $router] = $this->createRadiusAccess();
+        $this->createVpnPeer($router, '10.8.1.22');
+        $sessionId = 'raw-accounting-session-id';
+        $log = \Mockery::mock();
+        $log->shouldReceive('info')->once()->withArgs(function (string $message, array $context) use ($sessionId): bool {
+            return $message === 'RADIUS accounting observation'
+                && $context['status_type'] === 'Start'
+                && $context['session_fingerprint'] !== $sessionId
+                && ! array_key_exists('nas_session_id', $context)
+                && ! array_key_exists('voucher_code', $context);
+        });
+        Log::shouldReceive('channel')->once()->with('radius')->andReturn($log);
+
+        $this->signedCall('POST', '/internal/radius/v1/accounting-events', [
+            'authenticated_router_id' => $router->id,
+            'authenticated_peer_ip' => '10.8.1.22',
+            'nas_identifier' => $router->radius_nas_identifier,
+            'nas_session_id' => $sessionId,
+            'status_type' => 'Start',
+            'event_time' => '2026-07-14 08:15:00',
+            'session_time' => 12,
+            'input_octets' => 100,
+            'output_octets' => 200,
+        ])->assertNoContent();
+
+        $this->assertDatabaseCount('radius_accounting_events', 0);
+        $this->assertDatabaseCount('radius_accounting_sessions', 0);
     }
 
     public function test_production_private_policy_route_keeps_https_hmac_and_replay_checks_for_allowed_peer(): void
@@ -405,7 +509,8 @@ class RadiusPolicyBoundaryTest extends TestCase
         config(['site_agent.required' => false]);
         PlatformSetting::set('sms.voucher_receipt', false);
         $tenant = $this->createTenant('radius-sale');
-        Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site agent router']);
+        $router = Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site agent router']);
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         $package = Package::create([
             'tenant_id' => $tenant->id,
             'name' => 'Sale package',
@@ -486,6 +591,18 @@ class RadiusPolicyBoundaryTest extends TestCase
         ]);
 
         return [$tenant, $router, $voucher, $session, $package];
+    }
+
+    private function createVpnPeer(Router $router, string $tunnelIp): VpnPeer
+    {
+        return VpnPeer::create([
+            'tenant_id' => $router->tenant_id,
+            'router_id' => $router->id,
+            'name' => 'RADIUS test peer',
+            'public_key' => base64_encode(random_bytes(32)),
+            'tunnel_ip' => $tunnelIp,
+            'enabled' => true,
+        ]);
     }
 
     private function createTenant(string $slug): Tenant

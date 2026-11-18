@@ -1,0 +1,40 @@
+server default {
+    listen {
+        type = auth
+        ipaddr = ${RADIUS_LISTEN_ADDRESS}
+        port = 1812
+    }
+
+    listen {
+        type = acct
+        ipaddr = ${RADIUS_LISTEN_ADDRESS}
+        port = 1813
+    }
+
+    authorize {
+        filter_username
+        chap
+        update control {
+            REST-HTTP-Header := "Authorization: Bearer ${RADIUS_BRIDGE_TOKEN}"
+        }
+        rest
+        pap
+    }
+
+    authenticate {
+        Auth-Type CHAP {
+            chap
+        }
+
+        Auth-Type PAP {
+            pap
+        }
+    }
+
+    accounting {
+        update control {
+            REST-HTTP-Header := "Authorization: Bearer ${RADIUS_BRIDGE_TOKEN}"
+        }
+        rest
+    }
+}

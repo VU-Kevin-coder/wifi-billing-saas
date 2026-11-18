@@ -25,13 +25,16 @@ class HotspotLoginUrlTest extends TestCase
     {
         $site = Site::create(['tenant_id' => $tenant->id, 'name' => $name.' site']);
 
-        return Router::create([
+        $router = Router::create([
             'tenant_id' => $tenant->id,
             'site_id' => $site->id,
             'name' => $name,
             'status' => 'online',
             'hotspot_config' => $hotspotConfig,
         ]);
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+
+        return $router;
     }
 
     // ── URL building ────────────────────────────────────────────────────────
@@ -178,6 +181,24 @@ class HotspotLoginUrlTest extends TestCase
 
         $stored = Router::withoutTenancy()->where('name', 'Good')->firstOrFail();
         $this->assertSame('192.168.88.1', $stored->hotspot_config['gateway']);
+    }
+
+    public function test_router_creation_can_explicitly_select_site_agent_without_mass_assigning_backend(): void
+    {
+        Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
+        $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
+        $user = User::factory()->create(['tenant_id' => $tenant->id]);
+        $user->assignRole('operator_admin');
+        URL::defaults(['tenant' => 'acme']);
+
+        $this->actingAs($user)->post(route('operator.routers.store'), [
+            'name' => 'Agent Router',
+            'access_backend' => 'site_agent',
+            '_idempotency_key' => $this->idempotencyKey(),
+        ])->assertSessionHasNoErrors();
+
+        $router = Router::withoutTenancy()->where('name', 'Agent Router')->firstOrFail();
+        $this->assertSame('site_agent', $router->access_backend);
     }
 
     public function test_no_hardcoded_gateway_address_remains_in_application_code(): void

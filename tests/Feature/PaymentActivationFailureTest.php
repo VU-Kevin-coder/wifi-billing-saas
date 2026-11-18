@@ -21,23 +21,22 @@ class PaymentActivationFailureTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const MTN_URL = 'https://sandbox.momodeveloper.mtn.com';
+    private const PAWAPAY_URL = 'https://api.sandbox.pawapay.io';
 
     private const PAYMENT_STATUS_TOKEN = 'test-payment-status-token';
 
     protected function setUp(): void
     {
         parent::setUp();
-        PlatformSetting::setSecret('mtn_subscription_key', 'mtn-subscription-test');
-        PlatformSetting::setSecret('mtn_api_user', 'mtn-api-user-test');
-        PlatformSetting::setSecret('mtn_api_key', 'mtn-api-key-test');
+        PlatformSetting::setSecret('payment.pawapay.api_token', 'pawapay-test-token');
+        PlatformSetting::set('payment.active_gateway', 'pawapay');
         config(['payments.simulation_enabled' => false]);
     }
 
     public function test_verified_payment_survives_activation_failure_and_retries_without_provider_reverification(): void
     {
         [$tenant, $package, $transaction] = $this->createPendingPayment();
-        $this->fakeMtn();
+        $this->fakePawaPay();
         app(PaymentService::class)->initiatePackagePayment($tenant, $package, '0771234567', $transaction);
         $this->mock(VoucherActivationService::class, function ($mock): void {
             $mock->shouldReceive('activate')->once()->andThrow(new \RuntimeException('simulated activation failure'));
@@ -51,7 +50,7 @@ class PaymentActivationFailureTest extends TestCase
         $this->getJson('/api/payments/status', ['X-Payment-Token' => self::PAYMENT_STATUS_TOKEN])
             ->assertStatus(202)->assertJson(['status' => 'fulfillment_pending']);
         Http::assertSent(fn (ClientRequest $request): bool => $request->method() === 'GET'
-            && str_ends_with($request->url(), '/collection/v1_0/requesttopay/'.$transaction->fresh()->provider_reference));
+            && str_ends_with($request->url(), '/v2/deposits/'.$transaction->fresh()->provider_reference));
 
         $this->app->forgetInstance(VoucherActivationService::class);
         $this->travel(6)->minutes();
@@ -145,16 +144,32 @@ class PaymentActivationFailureTest extends TestCase
         $this->assertDatabaseCount('vouchers', 0);
     }
 
-    private function fakeMtn(): void
+    private function fakePawaPay(): void
     {
         Http::preventStrayRequests();
-        Http::fake([
-            self::MTN_URL.'/collection/token/' => Http::response(['access_token' => 'mtn-access-token']),
-            self::MTN_URL.'/collection/v1_0/requesttopay' => Http::response([], 202),
-            self::MTN_URL.'/collection/v1_0/requesttopay/*' => Http::response([
-                'amount' => '1000', 'currency' => 'EUR', 'externalId' => 'ONL-TEST-001', 'status' => 'SUCCESSFUL',
-            ]),
-        ]);
+        Http::fake(function (ClientRequest $request) {
+            if (str_ends_with($request->url(), '/v2/predict-provider')) {
+                return Http::response(['provider' => 'MTN_UGA', 'phoneNumber' => '256771234567']);
+            }
+            if ($request->method() === 'POST' && str_ends_with($request->url(), '/v2/deposits')) {
+                $transaction = Transaction::withoutTenancy()->where('reference', 'ONL-TEST-001')->firstOrFail();
+
+                return Http::response([
+                    'status' => 'ACCEPTED',
+                    'depositId' => $transaction->provider_reference,
+                ]);
+            }
+
+            $transaction = Transaction::withoutTenancy()->where('reference', 'ONL-TEST-001')->firstOrFail();
+
+            return Http::response([
+                'depositId' => $transaction->provider_reference,
+                'clientReferenceId' => $transaction->reference,
+                'amount' => '1000',
+                'currency' => 'UGX',
+                'status' => 'COMPLETED',
+            ]);
+        });
     }
 
     private function createPendingPayment(): array

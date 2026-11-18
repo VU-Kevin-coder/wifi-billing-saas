@@ -10,10 +10,12 @@ use App\Http\Controllers\Operator\PackageController;
 use App\Http\Controllers\Operator\PortalSettingsController;
 use App\Http\Controllers\Operator\RadiusRouterCredentialController;
 use App\Http\Controllers\Operator\RouterController;
+use App\Http\Controllers\Operator\RouterOnboardingController;
 use App\Http\Controllers\Operator\RouterSettingsController;
 use App\Http\Controllers\Operator\SettingsController;
 use App\Http\Controllers\Operator\SiteController;
 use App\Http\Controllers\Operator\StaffController;
+use App\Http\Controllers\Operator\SubscriberController;
 use App\Http\Controllers\Operator\TeamController;
 use App\Http\Controllers\Operator\VoucherController;
 use App\Http\Controllers\Operator\WalletController;
@@ -67,9 +69,6 @@ Route::prefix('portal')
         Route::get('/{tenant?}/success', [PortalController::class, 'success'])
             ->middleware('throttle:portal-browse')
             ->name('success');
-        Route::get('/{tenant}/pesapal/callback', [PortalController::class, 'pesapalCallback'])
-            ->middleware('throttle:portal-browse')
-            ->name('pesapal.callback');
         Route::get('/{tenant}/pending/{transaction}', [PortalController::class, 'pending'])
             ->whereNumber('transaction')
             ->middleware('throttle:portal-browse')
@@ -124,10 +123,6 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
             ->name('configuration.control.action');
         Route::put('/configuration/general', [ConfigurationController::class, 'updateGeneral'])->name('configuration.general.update');
         Route::put('/configuration/security', [ConfigurationController::class, 'updateSecurity'])->name('configuration.security.update');
-        Route::put('/configuration/pesapal', [ConfigurationController::class, 'updatePesapal'])->middleware('mfa.recent')->name('configuration.pesapal.update');
-        Route::put('/configuration/flutterwave', [ConfigurationController::class, 'updateFlutterwave'])->middleware('mfa.recent')->name('configuration.flutterwave.update');
-        Route::put('/configuration/mtn', [ConfigurationController::class, 'updateMtn'])->middleware('mfa.recent')->name('configuration.mtn.update');
-        Route::put('/configuration/airtel', [ConfigurationController::class, 'updateAirtel'])->middleware('mfa.recent')->name('configuration.airtel.update');
         Route::put('/configuration/email', [ConfigurationController::class, 'updateEmail'])->middleware('mfa.recent')->name('configuration.email.update');
         Route::post('/configuration/email/test', [ConfigurationController::class, 'testEmail'])->middleware('mfa.recent')->name('configuration.email.test');
         Route::put('/configuration/sms', [ConfigurationController::class, 'updateSms'])->middleware('mfa.recent')->name('configuration.sms.update');
@@ -163,9 +158,6 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::get('/success', [PortalController::class, 'success'])
                     ->middleware('throttle:portal-browse')
                     ->name('success');
-                Route::get('/pesapal/callback', [PortalController::class, 'pesapalCallback'])
-                    ->middleware('throttle:portal-browse')
-                    ->name('pesapal.callback');
                 Route::get('/pending/{transaction}', [PortalController::class, 'pending'])
                     ->whereNumber('transaction')
                     ->middleware('throttle:portal-browse')
@@ -206,6 +198,14 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
 
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
+                    Route::get('/subscribers', [SubscriberController::class, 'index'])->name('subscribers.index');
+                    Route::post('/subscribers', [SubscriberController::class, 'store'])
+                        ->middleware('idempotency')
+                        ->name('subscribers.store');
+                    Route::patch('/subscribers/{subscriber}', [SubscriberController::class, 'update'])
+                        ->whereNumber('subscriber')
+                        ->middleware('idempotency')
+                        ->name('subscribers.update');
 
                     Route::post('routers/{router}/radius-credential', [RadiusRouterCredentialController::class, 'store'])
                         ->whereNumber('router')
@@ -241,6 +241,20 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::post('/routers', [RouterController::class, 'store'])
                         ->middleware('idempotency')
                         ->name('routers.store');
+                    Route::get('routers/{router}/onboarding', [RouterOnboardingController::class, 'show'])
+                        ->whereNumber('router')
+                        ->name('routers.onboarding');
+                    Route::get('routers/{router}/onboarding/status', [RouterOnboardingController::class, 'status'])
+                        ->whereNumber('router')
+                        ->middleware('throttle:60,1')
+                        ->name('routers.onboarding.status');
+                    Route::get('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'services'])
+                        ->whereNumber('router')
+                        ->name('routers.onboarding.services');
+                    Route::post('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'configure'])
+                        ->whereNumber('router')
+                        ->middleware('idempotency')
+                        ->name('routers.onboarding.services.configure');
                     Route::post('/sessions/{session}/disconnect', [LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
                     Route::post('/sessions/{session}/ban-device', [LiveSessionController::class, 'banDevice'])->name('sessions.ban-device');
                     Route::post('/blocked-devices/{blockedDevice}/unban', [LiveSessionController::class, 'unbanDevice'])
@@ -335,7 +349,7 @@ Route::middleware('auth')->group(function () {
 
 require __DIR__.'/auth.php';
 
-// TEMPORARY: Simulate MTN Payment Success for Sandbox Testing
+// Local payment simulator; available only when explicitly enabled in local/testing.
 Route::get('/simulate-momo-success/{reference}', function ($reference) {
     abort_unless(
         config('payments.simulation_enabled', false)

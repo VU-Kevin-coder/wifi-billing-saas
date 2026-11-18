@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\VpnPeer;
 use Illuminate\Support\Facades\Log;
 
 class RouterTransportConfig
@@ -43,6 +44,31 @@ class RouterTransportConfig
             'verify_peer' => true,
             'ca_cert_path' => config('site_agent.router_ca_cert_path'),
         ];
+    }
+
+    /**
+     * The RouterOS plaintext API is acceptable only inside the authenticated,
+     * encrypted WireGuard tunnel and only for that peer's assigned tunnel IP.
+     */
+    public static function forVerifiedWireGuardPeer(string $host, int $port, VpnPeer $peer, int|string $routerId): array
+    {
+        if (! $peer->enabled
+            || filter_var($peer->tunnel_ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || ! hash_equals($peer->tunnel_ip, $host)) {
+            throw new RouterTransportException('Router API host is not bound to its enabled WireGuard peer.');
+        }
+
+        if ($port === 8728) {
+            return [
+                'host' => $host,
+                'port' => $port,
+                'ssl' => false,
+                'verify_peer' => false,
+                'ca_cert_path' => null,
+            ];
+        }
+
+        return self::forRouter($host, $port, $routerId);
     }
 
     private static function isValidPeerHost(string $host): bool

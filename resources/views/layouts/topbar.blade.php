@@ -6,8 +6,10 @@
     $tenantName = $currentTenant?->name ?? ($isPlatform ? 'Platform Admin' : config('app.name'));
     
     $breadcrumbTitle = 'Dashboard';
-    if (str_contains($routeName, 'platform.configuration')) {
-        $breadcrumbTitle = 'Platform Configuration';
+    if (str_contains($routeName, 'platform.policies')) {
+        $breadcrumbTitle = 'Platform Policies';
+    } elseif (str_contains($routeName, 'platform.configuration')) {
+        $breadcrumbTitle = 'Control Settings';
     } elseif (str_contains($routeName, 'platform.billing')) {
         $breadcrumbTitle = 'Platform Billing';
     } elseif (str_contains($routeName, 'tenants')) {
@@ -61,6 +63,10 @@
 
     <!-- Right: Search, System Status, Actions -->
     <div class="flex items-center gap-3 sm:gap-4">
+        <button type="button" data-theme-toggle aria-label="Change color theme"
+                class="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors text-xs font-semibold">
+            Theme: auto
+        </button>
         
         <!-- Search Bar with ⌘ K -->
         <div class="hidden md:flex items-center relative w-64 lg:w-72">

@@ -169,6 +169,7 @@ class SitesAndHotspotsTest extends TestCase
         $data = app(TenantContext::class)->runAs($this->acme, function (): array {
             $site = $this->acme->sites()->create(['name' => 'Portal Site']);
             $router = Router::create(['name' => 'Portal Router', 'site_id' => $site->id, 'site' => $site->name, 'status' => 'online']);
+            $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
             $package = Package::create([
                 'name' => 'Guest Pass',
                 'price' => 500,

@@ -59,7 +59,8 @@ class AuditTrailTest extends TestCase
         $this->finance = User::factory()->create(['tenant_id' => $this->tenant->id]);
         $this->finance->assignRole('operator_finance');
 
-        PlatformSetting::setSecret('flutterwave_secret_key', 'test-secret-key');
+        PlatformSetting::setSecret('payment.obpay.secret_key', 'test-secret-key');
+        PlatformSetting::setSecret('payment.obpay.webhook_secret', 'test-webhook-secret');
         PlatformSetting::set('currency', 'UGX');
         URL::defaults(['tenant' => $this->tenant->slug]);
     }
@@ -207,21 +208,24 @@ class AuditTrailTest extends TestCase
     {
         $tx = $this->withdrawal();
         Http::fake([
-            'https://api.flutterwave.com/v3/transfers' => Http::response([
-                'status' => 'success',
-                'data' => ['id' => 9911, 'status' => 'NEW'],
+            'https://obpay.online/api/public/v1/payouts' => Http::response([
+                'success' => true,
+                'data' => ['reference' => $tx->reference, 'status' => 'pending'],
             ]),
-            'https://api.flutterwave.com/v3/transfers/9911' => Http::response([
-                'status' => 'success',
+            'https://obpay.online/api/public/v1/transactions/'.$tx->reference => Http::response([
+                'success' => true,
                 'data' => [
-                    'id' => 9911, 'reference' => $tx->reference,
-                    'amount' => 10000, 'currency' => 'UGX', 'status' => 'SUCCESSFUL',
+                    'reference' => $tx->reference,
+                    'amount' => 10000, 'currency' => 'UGX', 'status' => 'pending',
                 ],
             ]),
         ]);
 
         $this->actingAs($this->platformAdmin)
-            ->post(route('platform.revenue.withdrawals.approve', $tx->id), ['_idempotency_key' => $this->idempotencyKey()]);
+            ->post(route('platform.revenue.withdrawals.approve', $tx->id), [
+                'gateway' => 'obpay',
+                '_idempotency_key' => $this->idempotencyKey(),
+            ]);
 
         $log = AuditLog::where('action', 'withdrawal.approved')->firstOrFail();
         $this->assertSame($tx->id, $log->auditable_id);
@@ -287,15 +291,18 @@ class AuditTrailTest extends TestCase
     public function test_payment_credential_changes_are_audited_without_secret_values(): void
     {
         $this->actingAs($this->platformAdmin)
-            ->put(route('platform.configuration.flutterwave.update'), [
-                'flutterwave_secret_key' => 'FLWSECK-super-secret',
-                'flutterwave_environment' => 'production',
+            ->put(route('platform.configuration.control.update'), [
+                'reason' => 'Configure checkout credentials',
+                'settings' => [
+                    'payment.obpay.secret_key' => 'obpay-super-secret',
+                ],
             ])
             ->assertSessionHasNoErrors();
 
-        $log = AuditLog::where('action', 'platform.config.updated')->firstOrFail();
-        $this->assertSame('flutterwave', $log->meta['section']);
-        $this->assertSame(['flutterwave_secret_key'], $log->meta['credentials_changed']);
+        $log = AuditLog::where('action', 'platform.settings.updated')->firstOrFail();
+        $this->assertSame('Configure checkout credentials', $log->meta['reason']);
+        $this->assertSame('payment.obpay.secret_key', $log->meta['changes'][0]['key']);
+        $this->assertSame('[redacted]', $log->meta['changes'][0]['new']);
         $this->assertStringNotContainsString('super-secret', json_encode($log->meta));
     }
 

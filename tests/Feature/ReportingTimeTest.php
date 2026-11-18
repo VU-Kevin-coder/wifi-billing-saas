@@ -165,7 +165,8 @@ class ReportingTimeTest extends TestCase
             'package_id' => $this->package->id, 'code' => 'SNAP-1', 'status' => 'unused',
         ]);
 
-        $router = Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Price snapshot router', 'access_backend' => 'site_agent']);
+        $router = Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Price snapshot router']);
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         $session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
             ->activate($this->tenant, $voucher, Request::create('/', 'POST', ['router_id' => $router->id]), '0771234567'));
         $this->assertSame($router->id, $session->router_id);

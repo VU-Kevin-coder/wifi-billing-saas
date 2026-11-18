@@ -9,11 +9,11 @@ use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\RadiusAccountingService;
-use App\Services\RadiusRouterCredentialService;
 use App\Services\RadiusUnavailableException;
 use App\Services\SaleFulfillmentService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -90,7 +90,7 @@ class RadiusRuntimeReadinessTest extends TestCase
         try {
             app(TenantContext::class)->runAs($other, fn () => app(VoucherActivationService::class)->activate($other, $voucher, Request::create('/')));
             $this->fail('Cross-tenant voucher should not resolve');
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             $this->assertSame('redeemed', $voucher->fresh()->status);
         }
     }
@@ -106,6 +106,7 @@ class RadiusRuntimeReadinessTest extends TestCase
             'radius_nas_identifier' => 'test-nas',
             'radius_shared_secret' => str_repeat('a', 64),
         ])->save();
+
         return [$tenant, $package, $router->fresh()];
     }
 }

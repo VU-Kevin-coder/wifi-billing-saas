@@ -57,7 +57,8 @@ class ProvisioningWatchdogTest extends TestCase
         $this->admin->assignRole('operator_admin');
 
         $site = Site::create(['tenant_id' => $this->tenant->id, 'name' => 'North Site']);
-        Router::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'North Router', 'status' => 'online']);
+        Router::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'North Router', 'status' => 'online'])
+            ->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         $this->agent = SiteAgent::create([
             'tenant_id' => $this->tenant->id,
             'site_id' => $site->id,

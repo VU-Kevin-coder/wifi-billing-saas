@@ -5,3 +5,64 @@
 [x-cloak] {
     display: none !important;
 }
+
+html.dark {
+    color-scheme: dark;
+}
+
+html.dark body {
+    background-color: #0f172a !important;
+    color: #e2e8f0 !important;
+}
+
+html.dark .bg-white {
+    background-color: #1e293b !important;
+}
+
+html.dark .bg-gray-50,
+html.dark .bg-gray-50\/70,
+html.dark .bg-gray-100 {
+    background-color: #0f172a !important;
+}
+
+html.dark .bg-gray-200,
+html.dark .bg-gray-200\/60 {
+    background-color: #334155 !important;
+}
+
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-gray-700 {
+    color: #e2e8f0 !important;
+}
+
+html.dark .text-gray-600,
+html.dark .text-gray-500 {
+    color: #cbd5e1 !important;
+}
+
+html.dark .text-gray-400,
+html.dark .text-gray-300 {
+    color: #94a3b8 !important;
+}
+
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300,
+html.dark .border-gray-200\/80,
+html.dark .border-gray-300\/60 {
+    border-color: #334155 !important;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+html.dark select,
+html.dark textarea {
+    background-color: #0f172a;
+    border-color: #475569;
+    color: #e2e8f0;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+    color: #94a3b8;
+}
