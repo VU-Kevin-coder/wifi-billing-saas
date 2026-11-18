@@ -29,6 +29,7 @@ class PolicyBridgeTests(unittest.TestCase):
             "nas_identifier": "chr-lab-17",
             "nas_session_id": "session-1",
             "voucher_code": "voucher-1",
+            "service_type": "",
         })
 
     def test_accounting_payload_is_allowlisted_and_rejects_bad_status(self):

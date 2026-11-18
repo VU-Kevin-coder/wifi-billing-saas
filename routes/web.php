@@ -15,6 +15,7 @@ use App\Http\Controllers\Operator\RouterSettingsController;
 use App\Http\Controllers\Operator\SettingsController;
 use App\Http\Controllers\Operator\SiteController;
 use App\Http\Controllers\Operator\StaffController;
+use App\Http\Controllers\Operator\SubscriberController;
 use App\Http\Controllers\Operator\TeamController;
 use App\Http\Controllers\Operator\VoucherController;
 use App\Http\Controllers\Operator\WalletController;
@@ -207,6 +208,14 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
 
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
+                    Route::get('/subscribers', [SubscriberController::class, 'index'])->name('subscribers.index');
+                    Route::post('/subscribers', [SubscriberController::class, 'store'])
+                        ->middleware('idempotency')
+                        ->name('subscribers.store');
+                    Route::patch('/subscribers/{subscriber}', [SubscriberController::class, 'update'])
+                        ->whereNumber('subscriber')
+                        ->middleware('idempotency')
+                        ->name('subscribers.update');
 
                     Route::post('routers/{router}/radius-credential', [RadiusRouterCredentialController::class, 'store'])
                         ->whereNumber('router')

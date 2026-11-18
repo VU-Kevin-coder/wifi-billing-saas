@@ -60,6 +60,128 @@ class RouterGuidedProvisioningTest extends TestCase
         $this->assertStringNotContainsString('address="192.0.2.1"', $script);
     }
 
+    public function test_pppoe_only_provisioning_uses_a_separate_pap_radius_service(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'wireguard.server_address' => '10.8.0.1',
+            'tenancy.base_domain' => 'example.test',
+        ]);
+        $router = $this->makeConnectedRouter();
+        $router->forceFill([
+            'hardware_model' => 'RB4011',
+            'enable_hotspot' => false,
+            'enable_pppoe' => true,
+            'pppoe_config' => [
+                'interface' => 'ether3',
+                'vlan_id' => 101,
+                'network' => '10.20.0.0/16',
+                'gateway' => '10.20.0.1',
+                'dns' => '1.1.1.1,8.8.8.8',
+            ],
+            'ethernet_ports' => [],
+        ])->saveOrFail();
+        $script = null;
+        $connection = Mockery::mock(RouterConnectionService::class);
+        $connection->shouldReceive('executeOnboardingScript')
+            ->once()
+            ->withArgs(function (Router $target, string $source) use (&$script, $router): bool {
+                $this->assertSame($router->id, $target->id);
+                $script = $source;
+
+                return true;
+            });
+        $this->app->instance(RouterConnectionService::class, $connection);
+
+        $result = app(RouterProvisioningService::class)->deployGuided($router->fresh(), true);
+
+        $this->assertTrue($result['ok']);
+        $this->assertStringContainsString('name="pppoe-vlan-'.$router->id.'" interface="ether3" vlan-id=101', $script);
+        $this->assertStringContainsString('remote-address="pool-pppoe"', $script);
+        $this->assertStringContainsString('authentication=pap', $script);
+        $this->assertStringContainsString('service=ppp', $script);
+        $this->assertStringNotContainsString('service=hotspot', $script);
+        $this->assertStringNotContainsString('/ip hotspot', $script);
+    }
+
+    public function test_combined_hotspot_and_pppoe_registers_both_radius_services(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'wireguard.server_address' => '10.8.0.1',
+            'tenancy.base_domain' => 'example.test',
+        ]);
+        $router = $this->makeConnectedRouter();
+        $router->forceFill([
+            'hardware_model' => 'RB4011',
+            'enable_pppoe' => true,
+            'pppoe_config' => [
+                'interface' => 'ether3',
+                'vlan_id' => null,
+                'network' => '10.20.0.0/16',
+                'gateway' => '10.20.0.1',
+                'dns' => '1.1.1.1,8.8.8.8',
+            ],
+        ])->saveOrFail();
+        $script = null;
+        $connection = Mockery::mock(RouterConnectionService::class);
+        $connection->shouldReceive('executeOnboardingScript')
+            ->once()
+            ->withArgs(function (Router $target, string $source) use (&$script, $router): bool {
+                $this->assertSame($router->id, $target->id);
+                $script = $source;
+
+                return true;
+            });
+        $this->app->instance(RouterConnectionService::class, $connection);
+
+        $result = app(RouterProvisioningService::class)->deployGuided($router->fresh(), true);
+
+        $this->assertTrue($result['ok']);
+        $this->assertStringContainsString('service=hotspot,ppp', $script);
+        $this->assertStringContainsString('authentication=pap', $script);
+    }
+
+    public function test_pppoe_rejects_chr_and_overlapping_networks(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'wireguard.server_address' => '10.8.0.1',
+            'tenancy.base_domain' => 'example.test',
+        ]);
+        $service = app(RouterProvisioningService::class);
+        $this->assertTrue($service->networksOverlap('10.20.0.0/16', '10.20.10.0/24'));
+        $this->assertFalse($service->networksOverlap('10.20.0.0/16', '10.21.0.0/16'));
+
+        $router = $this->makeConnectedRouter();
+        $router->forceFill([
+            'hardware_model' => 'CHR',
+            'enable_hotspot' => false,
+            'enable_pppoe' => true,
+        ])->saveOrFail();
+
+        $result = $service->deployGuided($router->fresh(), true);
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('not available for CHR', $result['message']);
+
+        $router->forceFill([
+            'hardware_model' => 'RB4011',
+            'enable_hotspot' => true,
+            'enable_pppoe' => true,
+            'pppoe_config' => [
+                'interface' => 'ether2',
+                'network' => '10.20.0.0/16',
+                'gateway' => '10.20.0.1',
+                'dns' => '1.1.1.1',
+            ],
+        ])->saveOrFail();
+        $sameInterface = $service->deployGuided($router->fresh(), true);
+
+        $this->assertFalse($sameInterface['ok']);
+        $this->assertStringContainsString('separate, detected Ethernet interface', $sameInterface['message']);
+    }
+
     private function makeConnectedRouter(): Router
     {
         $tenant = Tenant::create([

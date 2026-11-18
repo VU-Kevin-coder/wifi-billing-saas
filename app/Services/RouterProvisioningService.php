@@ -110,15 +110,25 @@ class RouterProvisioningService
             return ['ok' => false, 'message' => 'Guided router provisioning requires the RADIUS backend.'];
         }
 
+        if ($router->enable_pppoe && stripos((string) $router->hardware_model, 'chr') !== false) {
+            return ['ok' => false, 'message' => 'PPPoE provisioning is not available for CHR lab routers.'];
+        }
+
         if ($router->access_backend === 'radius') {
             if (! RadiusReadiness::available() || ! $router->hasUsableRadiusConfiguration()) {
                 return ['ok' => false, 'message' => RadiusRouterCredentialService::UNAVAILABLE_MESSAGE];
             }
         }
+        if (! $router->enable_hotspot && ! $router->enable_pppoe) {
+            return ['ok' => false, 'message' => 'Enable at least one supported router service before provisioning.'];
+        }
 
         try {
-            $radiusSecret = $router->access_backend === 'radius' ? $router->radius_shared_secret : null;
-            $script = $this->buildScript($router, $radiusSecret);
+            $radiusSecret = $router->radius_shared_secret;
+            $script = $this->buildScript($router, $router->enable_hotspot ? $radiusSecret : null);
+            if ($router->enable_pppoe) {
+                $script .= $this->buildPppoeScript($router, $radiusSecret);
+            }
             app(RouterConnectionService::class)->executeOnboardingScript($router, $script);
         } catch (\InvalidArgumentException|\LogicException $exception) {
             return ['ok' => false, 'message' => $exception->getMessage()];
@@ -286,7 +296,8 @@ class RouterProvisioningService
             $radiusSource = $this->escapeRouterOs((string) $router->vpnPeer->tunnel_ip);
             $escapedRadiusSecret = $this->escapeRouterOs((string) $radiusSecret);
             $lines[] = '# --- Private RADIUS server over WireGuard ---';
-            $lines[] = ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s }';
+            $radiusServices = $router->enable_pppoe ? 'hotspot,ppp' : 'hotspot';
+            $lines[] = ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s }';
             $lines[] = '';
         }
 
@@ -354,11 +365,85 @@ class RouterProvisioningService
         return implode("\r\n", $lines)."\r\n";
     }
 
+    private function buildPppoeScript(Router $router, ?string $radiusSecret): string
+    {
+        if ($radiusSecret === null || ! $router->hasUsableRadiusConfiguration()) {
+            throw new \LogicException('A configured RADIUS credential is required for PPPoE.');
+        }
+
+        $config = $router->pppoe_config ?? [];
+        $interface = (string) ($config['interface'] ?? '');
+        $wanInterface = (string) ($router->hotspot_config['wan_interface'] ?? PlatformSetting::get('hotspot.wan_interface', 'ether1'));
+        $ports = (array) ($router->ethernet_ports ?? []);
+        $vlanId = $config['vlan_id'] ?? null;
+        if (! preg_match('/^ether\d+$/', $interface)
+            || $interface === $wanInterface
+            || ($router->enable_hotspot && in_array($interface, $ports, true))) {
+            throw new \InvalidArgumentException('PPPoE requires a separate, detected Ethernet interface outside the WAN and HotSpot client bridge.');
+        }
+        if ($vlanId !== null && (! is_numeric($vlanId) || (int) $vlanId < 1 || (int) $vlanId > 4094)) {
+            throw new \InvalidArgumentException('PPPoE VLAN ID must be between 1 and 4094.');
+        }
+        if ($vlanId !== null && filter_var($vlanId, FILTER_VALIDATE_INT) === false) {
+            throw new \InvalidArgumentException('PPPoE VLAN ID must be an integer between 1 and 4094.');
+        }
+
+        $network = (string) ($config['network'] ?? '');
+        $gateway = (string) ($config['gateway'] ?? '');
+        $dnsServers = (string) ($config['dns'] ?? '');
+        [, $poolStart, $poolEnd] = $this->networkAddressDetails($network, $gateway, 'PPPoE network');
+        $this->validateDnsServers($dnsServers);
+        $escapedDnsServers = $this->escapeRouterOs($dnsServers);
+        $escapedSecret = $this->escapeRouterOs($radiusSecret);
+        $radiusServerAddress = (string) config('wireguard.server_address');
+        $radiusSourceAddress = (string) $router->vpnPeer?->tunnel_ip;
+        if (filter_var($radiusServerAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || filter_var($radiusSourceAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            throw new \InvalidArgumentException('Valid WireGuard IPv4 addresses are required for PPPoE RADIUS.');
+        }
+        $serverAddress = $this->escapeRouterOs($radiusServerAddress);
+        $sourceAddress = $this->escapeRouterOs($radiusSourceAddress);
+        $escapedInterface = $this->escapeRouterOs($interface);
+        $serviceInterface = $escapedInterface;
+        $vlanLines = [];
+        if ($vlanId !== null) {
+            $serviceInterface = 'pppoe-vlan-'.$router->id;
+            $escapedServiceInterface = $this->escapeRouterOs($serviceInterface);
+            $vlanLines[] = ':if ([:len [/interface vlan find name="'.$escapedServiceInterface.'"]] = 0) do={ /interface vlan add name="'.$escapedServiceInterface.'" interface="'.$escapedInterface.'" vlan-id='.(int) $vlanId.' disabled=no } else={ /interface vlan set [find name="'.$escapedServiceInterface.'"] interface="'.$escapedInterface.'" vlan-id='.(int) $vlanId.' disabled=no }';
+        }
+        $escapedServiceInterface = $this->escapeRouterOs($serviceInterface);
+        $localAddress = $this->escapeRouterOs($gateway);
+        $profileName = 'pppoe-billing';
+        $poolName = 'pool-pppoe';
+        $lines = [
+            '',
+            '# --- Separate PPPoE subscriber service ---',
+            '# This service uses its own interface/VLAN and RADIUS subscriber accounts; it does not use HotSpot vouchers.',
+        ];
+        foreach ($vlanLines as $vlanLine) {
+            $lines[] = $vlanLine;
+        }
+        $lines[] = ':if ([:len [/ip pool find name="'.$poolName.'"]] = 0) do={ /ip pool add name="'.$poolName.'" ranges='.$poolStart.'-'.$poolEnd.' } else={ /ip pool set [find name="'.$poolName.'"] ranges='.$poolStart.'-'.$poolEnd.' }';
+        $lines[] = ':if ([:len [/ppp profile find name="'.$profileName.'"]] = 0) do={ /ppp profile add name="'.$profileName.'" local-address='.$localAddress.' remote-address="'.$poolName.'" dns-server="'.$escapedDnsServers.'" use-encryption=no only-one=no } else={ /ppp profile set [find name="'.$profileName.'"] local-address='.$localAddress.' remote-address="'.$poolName.'" dns-server="'.$escapedDnsServers.'" use-encryption=no only-one=no }';
+        $lines[] = ':if ([:len [/interface pppoe-server server find interface="'.$escapedServiceInterface.'"]] = 0) do={ /interface pppoe-server server add interface="'.$escapedServiceInterface.'" service-name="wifi-billing-pppoe" default-profile="'.$profileName.'" authentication=pap max-mtu=1480 max-mru=1480 disabled=no } else={ /interface pppoe-server server set [find interface="'.$escapedServiceInterface.'"] service-name="wifi-billing-pppoe" default-profile="'.$profileName.'" authentication=pap max-mtu=1480 max-mru=1480 disabled=no }';
+        $lines[] = '/ppp aaa set use-radius=yes accounting=yes interim-update=1m';
+        if (! $router->enable_hotspot) {
+            $lines[] = ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$serverAddress.'" src-address="'.$sourceAddress.'" secret="'.$escapedSecret.'" service=ppp authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$serverAddress.'" src-address="'.$sourceAddress.'" secret="'.$escapedSecret.'" service=ppp authentication-port=1812 accounting-port=1813 timeout=1s }';
+        }
+
+        return implode("\r\n", $lines)."\r\n";
+    }
+
     private function hotspotNetworkDetails(string $network, string $gatewayIp): array
     {
-        [$networkAddress, $prefix] = $this->validateIpv4Cidr($network, 'Hotspot network');
+        return $this->networkAddressDetails($network, $gatewayIp, 'Hotspot network');
+    }
+
+    private function networkAddressDetails(string $network, string $gatewayIp, string $label): array
+    {
+        [$networkAddress, $prefix] = $this->validateIpv4Cidr($network, $label);
         if ($prefix < 8 || $prefix >= 31 || filter_var($gatewayIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
-            throw new \InvalidArgumentException('Hotspot network must have a usable IPv4 host range and gateway.');
+            throw new \InvalidArgumentException($label.' must have a usable IPv4 host range and gateway.');
         }
 
         $gateway = (int) sprintf('%u', ip2long($gatewayIp));
@@ -367,19 +452,33 @@ class RouterProvisioningService
         $subnetStart = $networkStart & $mask;
         $broadcast = $subnetStart | (~$mask & 0xFFFFFFFF);
         if ($networkStart !== $subnetStart) {
-            throw new \InvalidArgumentException('Hotspot network must use the network address for its CIDR prefix.');
+            throw new \InvalidArgumentException($label.' must use the network address for its CIDR prefix.');
         }
         if (($gateway & $mask) !== $subnetStart) {
-            throw new \InvalidArgumentException('Hotspot gateway must be inside the configured hotspot network.');
+            throw new \InvalidArgumentException('Gateway must be inside the configured '.$label.'.');
         }
 
         $poolStart = max($subnetStart + 10, $gateway + 1);
         $poolEnd = $broadcast - 1;
         if ($poolStart > $poolEnd) {
-            throw new \InvalidArgumentException('Hotspot network is too small for the selected gateway and DHCP pool.');
+            throw new \InvalidArgumentException($label.' is too small for the selected gateway and address pool.');
         }
 
         return [$prefix, long2ip($poolStart), long2ip($poolEnd)];
+    }
+
+    public function networksOverlap(string $first, string $second): bool
+    {
+        [$firstAddress, $firstPrefix] = $this->validateIpv4Cidr($first, 'First network');
+        [$secondAddress, $secondPrefix] = $this->validateIpv4Cidr($second, 'Second network');
+        $firstMask = (0xFFFFFFFF << (32 - $firstPrefix)) & 0xFFFFFFFF;
+        $secondMask = (0xFFFFFFFF << (32 - $secondPrefix)) & 0xFFFFFFFF;
+        $firstStart = ((int) sprintf('%u', ip2long($firstAddress))) & $firstMask;
+        $secondStart = ((int) sprintf('%u', ip2long($secondAddress))) & $secondMask;
+        $firstEnd = $firstStart | (~$firstMask & 0xFFFFFFFF);
+        $secondEnd = $secondStart | (~$secondMask & 0xFFFFFFFF);
+
+        return $firstStart <= $secondEnd && $secondStart <= $firstEnd;
     }
 
     public function isValidHotspotGateway(string $network, string $gatewayIp): bool

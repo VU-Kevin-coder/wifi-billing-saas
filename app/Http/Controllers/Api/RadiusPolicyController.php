@@ -17,15 +17,26 @@ class RadiusPolicyController extends Controller
             'nas_identifier' => ['required', 'string', 'max:255', 'not_regex:/[\x00-\x20\x7f]/'],
             'nas_session_id' => ['nullable', 'string', 'max:255', 'not_regex:/[\x00-\x1f\x7f]/'],
             'voucher_code' => ['required', 'string', 'max:128'],
+            'service_type' => ['nullable', 'string', 'max:32'],
         ]);
 
-        $decision = $accounting->authorizeForPeer(
-            (int) $request->attributes->get('authenticated_router_id'),
-            (string) $request->attributes->get('authenticated_peer_ip'),
-            $validated['nas_identifier'],
-            $validated['nas_session_id'] ?? '',
-            $validated['voucher_code'],
-        );
+        $routerId = (int) $request->attributes->get('authenticated_router_id');
+        $peerIp = (string) $request->attributes->get('authenticated_peer_ip');
+        $decision = ($validated['service_type'] ?? '') === 'Framed-User'
+            ? $accounting->authorizePppoeForPeer(
+                $routerId,
+                $peerIp,
+                $validated['nas_identifier'],
+                $validated['nas_session_id'] ?? '',
+                $validated['voucher_code'],
+            )
+            : $accounting->authorizeForPeer(
+                $routerId,
+                $peerIp,
+                $validated['nas_identifier'],
+                $validated['nas_session_id'] ?? '',
+                $validated['voucher_code'],
+            );
 
         if ($decision['decision'] !== 'accept') {
             return response()->json(['message' => 'Access rejected.'], 401, [
@@ -36,7 +47,7 @@ class RadiusPolicyController extends Controller
         $policy = $decision['policy'];
         $response = [
             'control:Cleartext-Password' => [
-                'value' => [$validated['voucher_code']],
+                'value' => [$decision['cleartext_password'] ?? $validated['voucher_code']],
                 'do_xlat' => false,
             ],
             'reply:Session-Timeout' => $policy['session_timeout_seconds'],
@@ -67,12 +78,19 @@ class RadiusPolicyController extends Controller
             'output_octets' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'output_gigawords' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'termination_cause' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9._ -]*$/D'],
+            'username' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'service_type' => ['nullable', 'string', 'max:32'],
         ]);
 
-        $accounting->recordLabAccountingObservation($validated + [
+        $authenticatedIdentity = [
             'authenticated_router_id' => (int) $request->attributes->get('authenticated_router_id'),
             'authenticated_peer_ip' => (string) $request->attributes->get('authenticated_peer_ip'),
-        ]);
+        ];
+        if (($validated['service_type'] ?? '') === 'Framed-User') {
+            $accounting->recordPppoeAccountingEvent($validated + $authenticatedIdentity);
+        } else {
+            $accounting->recordLabAccountingObservation($validated + $authenticatedIdentity);
+        }
 
         return response()->noContent();
     }

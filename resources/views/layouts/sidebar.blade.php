@@ -177,6 +177,15 @@
                         </svg>
                         <span x-show="!sidebarCollapsed">Customers</span>
                     </a>
+                    @if (auth()->user()->hasRole('operator_admin'))
+                    <a aria-label="PPPoE subscribers" title="PPPoE subscribers" href="{{ route('operator.subscribers.index') }}"
+                       class="{{ request()->routeIs('operator.subscribers.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <svg class="h-4 w-4 shrink-0 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2m-2-4h.01M17 16h.01"/>
+                        </svg>
+                        <span x-show="!sidebarCollapsed">PPPoE subscribers</span>
+                    </a>
+                    @endif
 
                     <!-- SaaS billing -->
                     @if(auth()->user()->hasAnyRole(['operator_admin', 'operator_finance']) || (auth()->user()->hasRole('platform_admin') && session()->has('impersonate_tenant')))

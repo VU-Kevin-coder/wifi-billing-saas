@@ -1,6 +1,6 @@
 # Production readiness
 
-Status date: 2026-11-13
+Status date: 2026-11-18
 
 This document records repository changes and validation evidence. A passing
 automated test is not a substitute for testing RouterOS firmware or verifying
@@ -10,7 +10,7 @@ the production proxy chain.
 
 | Finding | Status | Change / evidence |
 |---|---|---|
-| RADIUS and guided router onboarding | In progress; not yet ready for arbitrary physical-router testing | A guided WireGuard bootstrap and HotSpot service-setup stage now exist, but have not been accepted on CHR or physical hardware. FreeRADIUS still has one environment-configured lab client; onboarding does not dynamically register per-router clients, so the lab client must be manually matched to the router peer and stored secret. PPPoE service setup and PPPoE subscriber authorization are not implemented. Accounting is sanitized observation only; reconciliation, CoA, and production deployment remain out of scope. See [RADIUS-CHR-LAB.md](./RADIUS-CHR-LAB.md). |
+| RADIUS and guided router onboarding | Application implementation extended; physical acceptance and production readiness pending | Guided WireGuard onboarding now supports separate HotSpot and PPPoE setup. PPPoE subscriber credentials are tenant-scoped, encrypted at rest, and authorized through the policy API; PAP authentication and usage accounting are wired into the local service path. Subscriber suspension rejects new authentications but does not disconnect an already active PPPoE session (CoA/disconnect is not implemented). FreeRADIUS still has one environment-configured client; onboarding does not dynamically register per-router clients, so each supervised test must manually match that client to the router ID, tunnel IP, NAS identity, and stored shared secret. RouterOS PAP behavior, accounting counters/limits, and physical recovery have not been accepted on hardware; CHAP/MSCHAP are not configured. Do not treat this implementation as production-ready. See [RADIUS-CHR-LAB.md](./RADIUS-CHR-LAB.md). |
 | D1 — Misleading router health | In progress | Added site-agent telemetry commands for uptime, CPU, memory, and active hotspot users. Router detail status distinguishes recent telemetry from last-known state and displays separate agent/telemetry timestamps. Successful profile sync alone no longer marks a router online. Automated coverage added; physical-agent/router run pending. |
 | D2 — Captive-portal credentials | In progress | Generated profile removes `http-pap` and keeps `http-chap`; login URLs no longer carry voucher codes, which remain on the application success page for manual entry into the router login form. RouterOS HTTPS captive login still requires a trusted router certificate and is not configured by the script. |
 | D2 — Router API account | In progress | Removed `test` and `password` from the generated account policy and retained API/read/write. RouterOS group policies grant write at configuration scope; this script cannot restrict it to `/ip hotspot` alone. Do not describe this account as subtree-scoped. |
@@ -39,7 +39,7 @@ those features have passed on physical hardware.
 
 ## Validation evidence
 
-| Check | Result as of 2026-11-13 |
+| Check | Result as of 2026-11-18 |
 |---|---|
 | Full local application suite (`php artisan test`, PHP 8.2/SQLite) | Passed: 490 tests, 2,496 assertions |
 | Full SQLite / MySQL / PostgreSQL CI suite | SQLite passed locally; MySQL/PostgreSQL and GitHub Actions run pending |
@@ -57,6 +57,9 @@ those features have passed on physical hardware.
 | CHR script import / end-to-end acceptance | Not run; no RouterOS configuration was changed |
 | Physical router acceptance | Not run |
 | Render proxy chain / forwarded-header overwrite | Not verified against a deployed service |
+| PPPoE policy, subscriber credentials, accounting, generated provisioning script, and network separation (`php artisan test --filter="RadiusPolicyBoundaryTest|RadiusRuntimeReadinessTest|RouterRadiusCredentialDeliveryTest|RouterProvisioningSafetyTest|RouterGuidedProvisioningTest|PppoeSubscriberRadiusTest"`) | Passed: 36 tests, 286 assertions; test environment emitted temporary dotenv-file warnings |
+| RADIUS policy bridge security (`python -m unittest discover -s tests\security -p "test_radius*.py"`) | Passed: 23 tests |
+| Physical PPPoE/RADIUS acceptance | Not run |
 
 ## Deferred work
 
@@ -70,4 +73,4 @@ those features have passed on physical hardware.
 | Render proxy verification | Deferred with deployment prerequisite | Configure exact proxy CIDRs and confirm forwarded-header overwrite behavior in the live Render service before production traffic; target 2026-11-18. |
 | Real email delivery | Deferred with deployment prerequisite | Configure and verify SMTP delivery for registration codes and welcome messages before accepting public signups; target 2026-11-18. |
 | Production database backup / restore rehearsal | Pending with deployment prerequisite | The local Docker MySQL service is healthy and its migrations are current. Before production testing, confirm the production target, take and verify a backup, inspect its schema/data, then apply approved migrations; do not run `migrate:fresh` against persistent data. |
-| Physical router acceptance | Candidate for a supervised HotSpot-only lab test after manual RADIUS-client preflight; not yet tested | Use an isolated, recoverable RouterOS 7.x test router, not a production router. The host must expose/forward only the WireGuard UDP endpoint required by this test; RADIUS UDP ports remain private. Manually match the single FreeRADIUS lab client to the router's tunnel IP, RADIUS NAS identity, and encrypted database secret before testing. Verify the WireGuard handshake and test HotSpot voucher login, rejection, limits, and sanitized accounting observations. PPPoE is not included. Record the model, exact RouterOS version, application commit, outcomes, and sanitized evidence in [HARDWARE-MATRIX.md](./HARDWARE-MATRIX.md). Do not label production readiness from a successful lab test. |
+| Physical router acceptance | Not run; a supervised single-router lab test remains possible after manual RADIUS-client preflight | Use an isolated, recoverable RouterOS 7.x test router, not a production router. The host must expose/forward only the WireGuard UDP endpoint required by this test; RADIUS UDP ports remain private. Manually match the single FreeRADIUS lab client to the router ID, tunnel IP, NAS identity, and encrypted database secret before testing. Verify the WireGuard handshake, HotSpot voucher login/rejection/limits, then PPPoE PAP subscriber login/rejection/limits/accounting on a separate physical interface or VLAN. Also verify failure recovery and no overlap with HotSpot addressing. Dynamic multi-router client registration, CHAP/MSCHAP acceptance, and the complete production network design remain blockers to general rollout. Record model, exact RouterOS version, application commit, outcomes, and sanitized evidence in [HARDWARE-MATRIX.md](./HARDWARE-MATRIX.md). Do not label production readiness from a successful lab test. |

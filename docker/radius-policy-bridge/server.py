@@ -69,6 +69,7 @@ def policy_payload(path, form):
 
     if path == "/authorize":
         payload["voucher_code"] = safe_value(form.get("voucher_code", ""), "voucher code", 128)
+        payload["service_type"] = safe_value(form.get("service_type", ""), "service type", 32, required=False)
         return payload
 
     status_type = safe_value(form.get("status_type", ""), "accounting status", 32)
@@ -76,6 +77,8 @@ def policy_payload(path, form):
         raise ValueError("Invalid RADIUS accounting event")
 
     payload.update({
+        "username": safe_value(form.get("username", ""), "username", 64, required=False),
+        "service_type": safe_value(form.get("service_type", ""), "service type", 32, required=False),
         "status_type": status_type,
         "event_time": safe_value(form.get("event_time", ""), "event time", 64, required=False),
         "session_time": safe_value(form.get("session_time", ""), "session time", 16, required=False),

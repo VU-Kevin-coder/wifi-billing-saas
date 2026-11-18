@@ -50,6 +50,7 @@ class RouterOnboardingController extends Controller
                 && preg_match('/^ether\d+$/', $name) === 1
                 && $name !== $wanInterface)
             ->values();
+        $pppoeDefaults = $this->pppoeDefaults();
 
         return response()
             ->view('operator.routers.onboarding-services', [
@@ -58,6 +59,9 @@ class RouterOnboardingController extends Controller
                 'interfaces' => $interfaces,
                 'availablePorts' => $availablePorts,
                 'wanInterface' => $wanInterface,
+                'pppoeNetwork' => $pppoeDefaults['network'],
+                'pppoeGateway' => $pppoeDefaults['gateway'],
+                'pppoeDnsServers' => $pppoeDefaults['dns'],
             ])
             ->withHeaders($this->noStoreHeaders());
     }
@@ -90,18 +94,27 @@ class RouterOnboardingController extends Controller
             ->all();
         $validated = $request->validate([
             'enable_hotspot' => ['required', 'boolean'],
+            'enable_pppoe' => ['required', 'boolean'],
             'hotspot_network' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:50'],
             'gateway_ip' => ['required_if:enable_hotspot,1', 'nullable', 'ipv4'],
             'dns_servers' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:100'],
             'hotspot_domain' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/'],
             'ethernet_ports' => ['required_if:enable_hotspot,1', 'array', 'min:1'],
             'ethernet_ports.*' => ['string', Rule::in($availablePorts), Rule::notIn([$wanInterface])],
+            'pppoe_interface' => ['required_if:enable_pppoe,1', 'nullable', 'string', Rule::in($availablePorts)],
+            'pppoe_vlan_id' => ['nullable', 'integer', 'between:1,4094'],
             'confirm_dedicated_router' => ['accepted'],
         ]);
 
-        if (! $validated['enable_hotspot']) {
+        if (! $validated['enable_hotspot'] && ! $validated['enable_pppoe']) {
             return back()->withInput()->withErrors([
-                'enable_hotspot' => 'Enable HotSpot to complete setup. PPPoE service setup is not available in this onboarding flow yet.',
+                'enable_hotspot' => 'Enable HotSpot, PPPoE, or both to complete service setup.',
+            ]);
+        }
+
+        if ($validated['enable_pppoe'] && stripos((string) $routerModel->hardware_model, 'chr') !== false) {
+            return back()->withInput()->withErrors([
+                'enable_pppoe' => 'PPPoE provisioning is not available for CHR lab routers.',
             ]);
         }
 
@@ -110,6 +123,39 @@ class RouterOnboardingController extends Controller
             if (filter_var($dnsServer, FILTER_VALIDATE_IP) === false) {
                 return back()->withInput()->withErrors(['dns_servers' => 'DNS servers must be comma-separated IP addresses.']);
             }
+        }
+
+        $pppoeConfig = [];
+        if ($validated['enable_pppoe']) {
+            $pppoeDefaults = $this->pppoeDefaults();
+            $pppoeNetwork = $pppoeDefaults['network'];
+            $pppoeGateway = $pppoeDefaults['gateway'];
+            $pppoeDns = $pppoeDefaults['dns'];
+            if (! $provisioning->isValidHotspotGateway($pppoeNetwork, $pppoeGateway)) {
+                return back()->withInput()->withErrors(['enable_pppoe' => 'Platform PPPoE network settings are invalid.']);
+            }
+            foreach (explode(',', $pppoeDns) as $dnsServer) {
+                if (filter_var(trim($dnsServer), FILTER_VALIDATE_IP) === false) {
+                    return back()->withInput()->withErrors(['enable_pppoe' => 'Platform PPPoE DNS settings are invalid.']);
+                }
+            }
+            if ($validated['enable_hotspot']
+                && $provisioning->networksOverlap((string) $validated['hotspot_network'], $pppoeNetwork)) {
+                return back()->withInput()->withErrors(['enable_pppoe' => 'The platform PPPoE network must not overlap the HotSpot network.']);
+            }
+
+            if ($validated['enable_hotspot']
+                && in_array($validated['pppoe_interface'], $validated['ethernet_ports'] ?? [], true)) {
+                return back()->withInput()->withErrors(['pppoe_interface' => 'PPPoE must use a separate interface from the HotSpot client bridge.']);
+            }
+
+            $pppoeConfig = [
+                'interface' => $validated['pppoe_interface'],
+                'vlan_id' => isset($validated['pppoe_vlan_id']) ? (int) $validated['pppoe_vlan_id'] : null,
+                'network' => $pppoeNetwork,
+                'gateway' => $pppoeGateway,
+                'dns' => $pppoeDns,
+            ];
         }
 
         $hotspotConfig = $routerModel->hotspot_config ?? [];
@@ -128,12 +174,6 @@ class RouterOnboardingController extends Controller
                 'wan_interface' => $wanInterface,
             ];
         }
-
-        $routerModel->forceFill([
-            'enable_hotspot' => (bool) $validated['enable_hotspot'],
-            'hotspot_config' => $hotspotConfig,
-            'ethernet_ports' => array_values($validated['ethernet_ports'] ?? []),
-        ])->saveOrFail();
 
         if ($routerModel->access_backend !== 'radius') {
             return back()->withInput()->withErrors([
@@ -159,6 +199,14 @@ class RouterOnboardingController extends Controller
                 return back()->withInput()->withErrors(['provisioning' => $exception->getMessage()]);
             }
         }
+
+        $routerModel->forceFill([
+            'enable_hotspot' => (bool) $validated['enable_hotspot'],
+            'enable_pppoe' => (bool) $validated['enable_pppoe'],
+            'hotspot_config' => $hotspotConfig,
+            'pppoe_config' => $pppoeConfig,
+            'ethernet_ports' => array_values($validated['ethernet_ports'] ?? []),
+        ])->saveOrFail();
 
         $result = $provisioning->deployGuided($routerModel->fresh(), (bool) $validated['confirm_dedicated_router']);
         if (! $result['ok']) {
@@ -277,6 +325,31 @@ class RouterOnboardingController extends Controller
             'Referrer-Policy' => 'no-referrer',
             'X-Content-Type-Options' => 'nosniff',
             'X-Robots-Tag' => 'noindex, nofollow',
+        ];
+    }
+
+    /**
+     * @return array{network: string, gateway: string, dns: string}
+     */
+    private function pppoeDefaults(): array
+    {
+        $dnsServers = PlatformSetting::get(
+            'pppoe.default_dns',
+            config('services.mikrotik.pppoe_dns_servers'),
+        );
+
+        return [
+            'network' => (string) PlatformSetting::get(
+                'pppoe.default_network',
+                config('services.mikrotik.pppoe_network'),
+            ),
+            'gateway' => (string) PlatformSetting::get(
+                'pppoe.default_gateway',
+                config('services.mikrotik.pppoe_gateway'),
+            ),
+            'dns' => is_array($dnsServers)
+                ? implode(',', array_map('strval', $dnsServers))
+                : (string) $dnsServers,
         ];
     }
 }
