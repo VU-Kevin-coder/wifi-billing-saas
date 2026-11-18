@@ -32,13 +32,13 @@ class SiteAgentSecretSafetyTest extends TestCase
         $output = new BufferedOutput;
         $worker = new class extends RunSiteAgent
         {
-            public function test_command(SiteAgentRouterService $router, PendingRequest $http, BufferedOutput $output): void
+            public function invokeProcessCommand(SiteAgentRouterService $router, PendingRequest $http, BufferedOutput $output): void
             {
                 $this->components = new Factory(new OutputStyle(new ArrayInput([]), $output));
                 $this->processCommand($router, $http, 'https://example.test', ['id' => 7, 'router_id' => 4, 'operation' => 'test_connection']);
             }
         };
-        $worker->testCommand($router, Http::acceptJson(), $output);
+        $worker->invokeProcessCommand($router, Http::acceptJson(), $output);
         $console = $output->fetch();
         $this->assertStringNotContainsString($secret, $console);
         $this->assertStringContainsString('Router command failed.', $console);
