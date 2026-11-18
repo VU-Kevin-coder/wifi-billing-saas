@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\RadiusAccountingService;
+use App\Services\RadiusReadiness;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -76,17 +78,29 @@ class AuthenticateRadiusPolicyService
             return $this->unauthorized();
         }
 
-        // A valid service HMAC authenticates the adapter, not the router that
-        // sent a RADIUS packet. NAS-Identifier in that packet (or in an HTTP
-        // header/body) is a claim, not proof of router identity. Until a
-        // trusted transport supplies and verifies a router binding, none of
-        // these endpoints may authorize, mutate accounting, or issue/ack
-        // disconnects. There is deliberately no configuration bypass.
-        return response()->json(['message' => 'RADIUS policy unavailable.'], 503, [
-            'Cache-Control' => 'no-store, private',
-            'Pragma' => 'no-cache',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        if (! RadiusReadiness::available()) {
+            return $this->unavailable();
+        }
+
+        if (! in_array($request->getPathInfo(), [
+            '/internal/radius/v1/authorize',
+            '/internal/radius/v1/accounting-events',
+        ], true)) {
+            return $this->unavailable();
+        }
+
+        $routerId = filter_var($request->input('authenticated_router_id'), FILTER_VALIDATE_INT);
+        $peerIp = $request->input('authenticated_peer_ip');
+        $nasIdentifier = $request->input('nas_identifier');
+        if (! $routerId || ! is_string($peerIp) || ! is_string($nasIdentifier)
+            || ! app(RadiusAccountingService::class)->routerBoundToPeer($routerId, $peerIp, $nasIdentifier)) {
+            return $this->unauthorized();
+        }
+
+        $request->attributes->set('authenticated_router_id', $routerId);
+        $request->attributes->set('authenticated_peer_ip', $peerIp);
+
+        return $next($request);
     }
 
     private function sourceIsAllowed(Request $request): bool
@@ -142,6 +156,15 @@ class AuthenticateRadiusPolicyService
     private function unauthorized(): Response
     {
         return response()->json(['message' => 'Unauthorized.'], 401, [
+            'Cache-Control' => 'no-store, private',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    private function unavailable(): Response
+    {
+        return response()->json(['message' => 'RADIUS policy unavailable.'], 503, [
             'Cache-Control' => 'no-store, private',
             'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',

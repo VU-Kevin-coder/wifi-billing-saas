@@ -1,10 +1,22 @@
-# Detached RADIUS admission guard — WIP, not a secure adapter
+# RADIUS admission and adapter status
 
-This branch adds `security/radius_admission.py` and offline tests. **It is not
-connected to Laravel, a RADIUS listener, a router, or the policy API.** It does
-not implement RADIUS authentication, encryption, a network service, or a
-policy client. No opt-in, runtime, readiness or policy shutdown was changed.
-Do not deploy or use this code as evidence that a router is authenticated.
+The application now has a FreeRADIUS 3.x listener and signed Laravel REST
+policy bridge for an explicitly enabled, local CHR lab. See
+[RADIUS-CHR-LAB.md](./RADIUS-CHR-LAB.md). This is not a production-ready
+deployment and has not been validated against a running CHR or physical
+router. Production readiness remains disabled by default.
+
+The Python `security/radius_admission.py` guard described below remains a
+detached prototype; it is not used by the FreeRADIUS listener. FreeRADIUS
+performs RADIUS packet verification for this lab.
+
+The listener is configured for one exact WireGuard client address and a
+router-specific secret. A private bridge signs only allowlisted request fields
+for Laravel, which verifies that the router ID, NAS identifier, and packet
+source IP match the router's enabled WireGuard peer. FreeRADIUS has no direct
+database access. Lab accounting is append-only sanitized logging and does not
+reconcile application sessions or counters. Direct router API deployment,
+CoA, and Disconnect-Request remain disabled.
 
 ## What is implemented
 
@@ -47,45 +59,35 @@ accepted result nor a signed policy request establishes tenant/router identity.
 The guard performs no cryptography and intentionally cannot accept, reject or
 respond to an access request on the network.
 
-## Requirements before any runtime or session work can depend on this
+## Requirements before production or accounting reconciliation
 
-- Select a maintained, independently reviewed RADIUS server/library with the
-  needed protocol support and an explicitly reviewed legacy profile. Have that
-  verifier validate the Message-Authenticator in constant time with the
-  candidate secret, using the exact received packet and the protocol-defined
-  substitutions for the Message-Authenticator and other relevant fields for
-  the packet type and legacy profile. Do not simply hash the unchanged packet.
-  Validate Accounting Request Authenticator and all required authenticators
-  for the packet type and profile;
-  authenticate and encode responses using the applicable standards. Handle
-  invalid, missing or duplicate authenticators fail-closed. Do not implement
-  custom cryptography or infer authenticity from attribute presence.
-- Establish a trusted, non-packet-supplied mapping from transport peer and
-  verified unique per-router credential to immutable router and tenant identity.
-  Shared secrets, ambiguous NAT/source addresses, revoked/disabled peers,
-  stale configuration, failed credential lookup, spoofed sources and rotation
-  races need explicit fail-closed treatment. Never use NAS-Identifier or an
-  adapter HMAC alone as proof. Make sure the policy service independently
-  enforces this identity binding; the current middleware intentionally always
-  returns 503 after adapter authentication and has no bypass.
+- Independently verify the chosen FreeRADIUS version, packet verification,
+  RouterOS Message-Authenticator compatibility, exact client IP handling,
+  and response attribute mapping against supported CHR and physical hardware.
+- Define and verify production private networking and TLS on the REST policy
+  path. A signed request, a Docker-private network, or source allowlisting
+  alone is not a production deployment boundary.
+- Add safe per-router client provisioning, rotation, revocation, and
+  operational recovery before managing more than the single lab client.
 - Protect transport and service-to-service communications (including verified
   TLS/private connectivity as appropriate), key generation/storage, rotation,
   revocation, least privilege, and source provenance. Select and test a real
   trust boundary; source IP filtering alone does not provide integrity.
-- Add bounded concurrency, request/rate limits, replay and duplicate handling
-  suitable for retransmissions, safe response construction and crash recovery.
-  Do not accidentally discard legitimate retried accounting or replay a
-  rejected event as new. Define secure logging/metrics without secrets,
-  vouchers, raw packets, or high-cardinality sensitive labels.
+- Keep accounting reconciliation disabled until multi-device limits,
+  generation lifecycle, ordering, duplicates, counter completeness,
+  concurrency, and database lock ordering are addressed. Do not mistake the
+  sanitized lab log for reliable usage accounting.
+- Add disconnect/CoA only with durable per-device state, replay protection,
+  command recovery, and verified RouterOS responses.
 - Restore and expand integration coverage for authorization, accounting and
   sessions, disconnect commands, replay/concurrency, tenant isolation,
   credential rotation/revocation, failure paths and payment recovery. Verify
   forged/tampered packets, incompatible peer configuration and deliberately
   invalid authenticators cannot reach state-changing code. Include isolated
   database tests and an independently controlled router lab only after review.
-- Review the entire adapter, policy identity propagation and operational setup
-  before considering removal of any shutdown. No production or physical-router
-  security claim follows from the current tests.
+- Review the entire adapter, policy identity propagation, production network,
+  and operational setup before enabling production. Lab tests and a
+  configuration file do not establish production or physical-router security.
 
 ## Offline tests
 

@@ -1,0 +1,6 @@
+client router-${RADIUS_LAB_ROUTER_ID} {
+    ipaddr = ${RADIUS_LAB_CLIENT_IP}
+    secret = ${RADIUS_LAB_CLIENT_SECRET}
+    shortname = router-${RADIUS_LAB_ROUTER_ID}
+    require_message_authenticator = yes
+}

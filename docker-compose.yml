@@ -15,6 +15,7 @@ services:
       - wireguard-data:/var/lib/wireguard
     environment:
       # Override any .env values that must match Docker service names
+      APP_ENV: ${APP_ENV:-local}
       DB_CONNECTION: mysql
       DB_HOST: db
       DB_PORT: 3306
@@ -34,6 +35,13 @@ services:
       WIREGUARD_ENDPOINT: ${WIREGUARD_ENDPOINT:-}
       WIREGUARD_LISTEN_PORT: ${WIREGUARD_LISTEN_PORT:-51820}
       WIREGUARD_KEEPALIVE: ${WIREGUARD_KEEPALIVE:-25}
+      RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
+      RADIUS_PRODUCTION_ENABLED: ${RADIUS_PRODUCTION_ENABLED:-false}
+      RADIUS_LARAVEL_SERVICE_SECRET: ${RADIUS_LARAVEL_SERVICE_SECRET:-}
+      RADIUS_POLICY_ALLOWED_SOURCE_CIDRS: ${RADIUS_POLICY_ALLOWED_SOURCE_CIDRS:-}
+      RADIUS_POLICY_NONCE_CACHE_STORE: ${RADIUS_POLICY_NONCE_CACHE_STORE:-redis}
+      RADIUS_LAB_ACCOUNTING_LOG: ${RADIUS_LAB_ACCOUNTING_LOG:-true}
+      ROUTER_LAB_PROVISIONING_ENABLED: ${ROUTER_LAB_PROVISIONING_ENABLED:-false}
     cap_add:
       - NET_ADMIN
     devices:
@@ -64,6 +72,7 @@ services:
     volumes:
       - ./:/var/www/html:delegated
     environment:
+      APP_ENV: ${APP_ENV:-local}
       DB_CONNECTION: mysql
       DB_HOST: db
       DB_PORT: 3306
@@ -77,6 +86,12 @@ services:
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
+      RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
+      RADIUS_PRODUCTION_ENABLED: ${RADIUS_PRODUCTION_ENABLED:-false}
+      RADIUS_LARAVEL_SERVICE_SECRET: ${RADIUS_LARAVEL_SERVICE_SECRET:-}
+      RADIUS_POLICY_ALLOWED_SOURCE_CIDRS: ${RADIUS_POLICY_ALLOWED_SOURCE_CIDRS:-}
+      RADIUS_POLICY_NONCE_CACHE_STORE: ${RADIUS_POLICY_NONCE_CACHE_STORE:-redis}
+      RADIUS_LAB_ACCOUNTING_LOG: ${RADIUS_LAB_ACCOUNTING_LOG:-true}
     depends_on:
       db:
         condition: service_healthy
@@ -166,6 +181,56 @@ services:
     restart: unless-stopped
     networks:
       - wifi-net   # <-- THIS IS THE CRUCIAL FIX
+
+  radius-policy-bridge:
+    profiles:
+      - radius-lab
+    build:
+      context: .
+      dockerfile: docker/radius-policy-bridge/Dockerfile
+    image: wifi-billing-radius-policy-bridge:dev
+    container_name: wifi-billing-radius-policy-bridge
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      RADIUS_POLICY_API_URL: ${RADIUS_POLICY_API_URL:-http://web}
+      RADIUS_POLICY_SERVICE_SECRET: ${RADIUS_LARAVEL_SERVICE_SECRET:-}
+      RADIUS_BRIDGE_TOKEN: ${RADIUS_BRIDGE_TOKEN:-}
+      RADIUS_BRIDGE_ALLOW_HTTP: ${RADIUS_BRIDGE_ALLOW_HTTP:-true}
+    depends_on:
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks:
+      - wifi-net
+
+  radius:
+    profiles:
+      - radius-lab
+    build:
+      context: .
+      dockerfile: docker/radius/Dockerfile
+    image: wifi-billing-radius:3.2
+    container_name: wifi-billing-radius
+    restart: unless-stopped
+    network_mode: "service:app"
+    environment:
+      WIREGUARD_INTERFACE: ${WIREGUARD_INTERFACE:-wg0}
+      RADIUS_LISTEN_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:-10.8.0.1}
+      RADIUS_LAB_ROUTER_ID: ${RADIUS_LAB_ROUTER_ID:-}
+      RADIUS_LAB_CLIENT_IP: ${RADIUS_LAB_CLIENT_IP:-}
+      RADIUS_LAB_CLIENT_SECRET: ${RADIUS_LAB_CLIENT_SECRET:-}
+      RADIUS_BRIDGE_TOKEN: ${RADIUS_BRIDGE_TOKEN:-}
+    depends_on:
+      app:
+        condition: service_started
+      radius-policy-bridge:
+        condition: service_healthy
 
 # ─────────────────────────────────────────────────────────────
 # Volumes (persist across container restarts)

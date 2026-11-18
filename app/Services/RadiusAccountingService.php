@@ -12,9 +12,11 @@ use App\Models\Router;
 use App\Models\Session;
 use App\Models\SiteAgentCommand;
 use App\Models\Voucher;
+use App\Models\VpnPeer;
 use App\Support\DataLimit;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -37,6 +39,89 @@ class RadiusAccountingService
             return ['decision' => 'reject'];
         }
 
+        return $this->authorizeForRouter($router, $nasSessionId, $voucherCode);
+    }
+
+    public function authorizeForPeer(
+        int $routerId,
+        string $peerIp,
+        string $nasIdentifier,
+        string $nasSessionId,
+        string $voucherCode,
+    ): array {
+        if (! RadiusReadiness::available()) {
+            return ['decision' => 'reject'];
+        }
+
+        $router = $this->routerBoundToPeer($routerId, $peerIp, $nasIdentifier);
+        if (! $router) {
+            return ['decision' => 'reject'];
+        }
+
+        return $this->authorizeForRouter($router, $nasSessionId, $voucherCode);
+    }
+
+    public function routerBoundToPeer(int $routerId, string $peerIp, string $nasIdentifier): ?Router
+    {
+        if (filter_var($peerIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || $nasIdentifier === '' || strlen($nasIdentifier) > 255) {
+            return null;
+        }
+
+        $router = Router::withoutTenancy()
+            ->whereKey($routerId)
+            ->where('access_backend', 'radius')
+            ->where('radius_nas_identifier', $nasIdentifier)
+            ->whereNotNull('radius_shared_secret')
+            ->first();
+
+        if (! $router || ! $router->hasUsableRadiusConfiguration()) {
+            return null;
+        }
+
+        return VpnPeer::withoutGlobalScopes()
+            ->where('tenant_id', $router->tenant_id)
+            ->where('router_id', $router->id)
+            ->where('tunnel_ip', $peerIp)
+            ->where('enabled', true)
+            ->exists()
+            ? $router
+            : null;
+    }
+
+    public function recordLabAccountingObservation(array $input): void
+    {
+        if (! RadiusReadiness::available() || ! (bool) config('radius.lab_accounting_log', false)) {
+            throw new RadiusUnavailableException('RADIUS accounting observation is unavailable.');
+        }
+
+        $router = $this->routerBoundToPeer(
+            (int) ($input['authenticated_router_id'] ?? 0),
+            (string) ($input['authenticated_peer_ip'] ?? ''),
+            (string) ($input['nas_identifier'] ?? ''),
+        );
+        if (! $router) {
+            throw new RadiusUnavailableException('RADIUS accounting router identity could not be verified.');
+        }
+
+        $sessionId = (string) ($input['nas_session_id'] ?? '');
+        Log::channel('radius')->info('RADIUS accounting observation', [
+            'router_id' => $router->id,
+            'tenant_id' => $router->tenant_id,
+            'session_fingerprint' => hash_hmac('sha256', $sessionId, (string) config('app.key')),
+            'status_type' => $input['status_type'],
+            'event_time' => $input['event_time'] ?? null,
+            'session_time' => $input['session_time'] ?? null,
+            'input_octets' => $input['input_octets'] ?? null,
+            'input_gigawords' => $input['input_gigawords'] ?? null,
+            'output_octets' => $input['output_octets'] ?? null,
+            'output_gigawords' => $input['output_gigawords'] ?? null,
+            'termination_cause' => $input['termination_cause'] ?? null,
+        ]);
+    }
+
+    private function authorizeForRouter(Router $router, string $nasSessionId, string $voucherCode): array
+    {
         $voucher = Voucher::withoutTenancy()
             ->where('tenant_id', $router->tenant_id)
             ->where('code', $voucherCode)
@@ -104,7 +189,7 @@ class RadiusAccountingService
      */
     public function ingestAccountingEvent(array $input): array
     {
-        if (! RadiusReadiness::available()) {
+        if (! RadiusReadiness::available() || ! config('radius_policy.accounting_reconciliation_enabled', false)) {
             return ['accepted' => false, 'quarantined' => true, 'reason' => 'radius_unavailable'];
         }
 

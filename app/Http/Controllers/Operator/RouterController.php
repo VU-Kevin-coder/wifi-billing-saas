@@ -15,6 +15,7 @@ use App\Services\RouterProvisioningService;
 use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -141,6 +142,7 @@ class RouterController extends Controller
                 Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
             ],
             'hardware_model' => ['nullable', 'string', 'max:255'],
+            'access_backend' => ['sometimes', 'required', Rule::in(['radius', 'site_agent'])],
             'management_ip' => ['nullable', 'string', 'max:255'],
             'management_subnet' => [
                 'nullable',
@@ -259,36 +261,44 @@ class RouterController extends Controller
             (array) config('services.mikrotik.client_ports', ['ether2', 'ether3', 'ether4', 'ether5']),
             fn (string $port): bool => $port !== $wanInterface,
         ));
-        $router = Router::create([
-            'tenant_id' => $tenantId,
-            'site_id' => $site?->id,
-            'name' => $validated['name'],
-            'wifi_ssid' => $wifiSsid,
-            'site' => $site?->name ?? ($validated['site'] ?? null),
-            'hardware_model' => $validated['hardware_model'] ?? null,
-            'management_ip' => $validated['management_ip'] ?? null,
-            'status' => 'provisioning',
-            'cpu_usage' => 0,
-            'memory_usage' => 0,
-            'active_users' => 0,
-            'last_seen_at' => null,
-            'api_username' => $apiUsername,
-            'api_password' => $apiPassword,
-            'api_port' => $validated['api_port'] ?? (
-                PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port')
-            ),
-            'has_wireless' => $hasWireless,
-            'enable_hotspot' => $request->boolean('enable_hotspot', true),
-            'hotspot_config' => [
-                'network' => $validated['hotspot_network'] ?? PlatformSetting::get('hotspot.default_network', config('services.mikrotik.hotspot_network')),
-                'gateway' => $validated['gateway_ip'] ?? config('services.mikrotik.gateway'),
-                'dns' => $validated['dns_servers'] ?? implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
-                'domain' => $validated['hotspot_domain'] ?? config('services.mikrotik.hotspot_domain'),
-                'management_subnet' => $validated['management_subnet'] ?? null,
-                'wan_interface' => $wanInterface,
-            ],
-            'ethernet_ports' => $request->input('ethernet_ports', $defaultClientPorts),
-        ]);
+        $router = DB::transaction(function () use ($validated, $tenantId, $site, $wifiSsid, $hasWireless, $apiUsername, $apiPassword, $defaultClientPorts, $wanInterface, $request): Router {
+            $router = Router::create([
+                'tenant_id' => $tenantId,
+                'site_id' => $site?->id,
+                'name' => $validated['name'],
+                'wifi_ssid' => $wifiSsid,
+                'site' => $site?->name ?? ($validated['site'] ?? null),
+                'hardware_model' => $validated['hardware_model'] ?? null,
+                'management_ip' => $validated['management_ip'] ?? null,
+                'status' => 'provisioning',
+                'cpu_usage' => 0,
+                'memory_usage' => 0,
+                'active_users' => 0,
+                'last_seen_at' => null,
+                'api_username' => $apiUsername,
+                'api_password' => $apiPassword,
+                'api_port' => $validated['api_port'] ?? (
+                    PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port')
+                ),
+                'has_wireless' => $hasWireless,
+                'enable_hotspot' => $request->boolean('enable_hotspot', true),
+                'hotspot_config' => [
+                    'network' => $validated['hotspot_network'] ?? PlatformSetting::get('hotspot.default_network', config('services.mikrotik.hotspot_network')),
+                    'gateway' => $validated['gateway_ip'] ?? config('services.mikrotik.gateway'),
+                    'dns' => $validated['dns_servers'] ?? implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
+                    'domain' => $validated['hotspot_domain'] ?? config('services.mikrotik.hotspot_domain'),
+                    'management_subnet' => $validated['management_subnet'] ?? null,
+                    'wan_interface' => $wanInterface,
+                ],
+                'ethernet_ports' => $request->input('ethernet_ports', $defaultClientPorts),
+            ]);
+
+            $router->forceFill([
+                'access_backend' => $validated['access_backend'] ?? 'radius',
+            ])->saveOrFail();
+
+            return $router;
+        });
 
         AuditLog::record('router.created', $router, ['name' => $router->name, 'site_id' => $router->site_id]);
 

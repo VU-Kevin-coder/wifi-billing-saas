@@ -161,7 +161,8 @@ class VoucherIsolationTest extends TestCase
             ]);
         });
 
-        $router = Router::create(['tenant_id' => $this->acme->id, 'name' => 'Acme router', 'access_backend' => 'site_agent']);
+        $router = Router::create(['tenant_id' => $this->acme->id, 'name' => 'Acme router']);
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
 
         // 1. Redeem voucher through captive portal
         $response = $this->post('http://acme.localhost/portal/redeem', [

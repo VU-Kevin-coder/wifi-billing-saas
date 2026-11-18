@@ -7,7 +7,6 @@ use App\Models\Router;
 use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Voucher;
-use App\Services\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -18,8 +17,7 @@ use Throwable;
 class AccessRevoker
 {
     public function __construct(
-        private readonly SiteAgentCommandService $commands,
-        private readonly TenantContext $context,
+        private readonly RouterAccessStrategyResolver $strategies,
     ) {}
 
     /**
@@ -66,21 +64,13 @@ class AccessRevoker
             $tenant = Tenant::find($voucher->tenant_id);
 
             if ($router && $tenant) {
-                if ($router->access_backend === 'radius') {
-                    return app(RadiusAccountingService::class)->requestDisconnect(
-                        $session,
-                        "revocation:{$session->id}:{$finalSessionStatus}",
-                    );
-                }
-
-                $this->context->runAs($tenant, fn () => $this->commands->expire(
+                return $this->strategies->resolve($router)->revoke(
+                    $tenant,
                     $router,
                     $session,
                     $voucher,
                     $finalSessionStatus,
-                ));
-
-                return true;
+                );
             }
         } catch (Throwable $exception) {
             Log::error('Unable to queue the removal of a revoked voucher from the router.', [

@@ -535,10 +535,10 @@ and the end-to-end acceptance checklist, and
 [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md) for current audit
 status and validation evidence.
 
-### WireGuard router management
+### WireGuard router management and RADIUS lab
 
-WireGuard is an optional management tunnel; it does not provide RADIUS or carry
-customer hotspot data. In local Docker Compose development, enable it with
+WireGuard is an optional management and local RADIUS policy tunnel; it does not
+carry customer hotspot data. In local Docker Compose development, enable it with
 `WIREGUARD_ENABLED=true` and set `WIREGUARD_ENDPOINT=wifi-billing-app` for a
 RouterOS CHR on the Compose network. The app container creates `wg0` at startup,
 retains its server key in the `wireguard-data` volume, and restores enabled peers
@@ -548,6 +548,14 @@ testing beyond the Compose network. For a real router, configure a public DNS
 name or IP in `WIREGUARD_ENDPOINT`, bind/publish the UDP port appropriately,
 and forward it through the host firewall/NAT. Do not use the Docker service name
 as an endpoint for routers outside the Compose network.
+
+The local CHR RADIUS listener is available only through the `radius-lab` Compose
+profile. It shares the app network namespace to bind to the WireGuard address;
+RADIUS UDP ports are not published on the host. Laravel remains the policy
+authority, the FreeRADIUS container has no database credentials, and accounting
+is logged as sanitized observations without session reconciliation. See
+[docs/RADIUS-CHR-LAB.md](docs/RADIUS-CHR-LAB.md) for setup and known production
+blockers. This path is not a production deployment.
 
 The Compose app service needs `NET_ADMIN` to manage its interface. This is a
 local-development setup; do not grant that capability to a public-facing

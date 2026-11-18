@@ -45,6 +45,57 @@ class RouterProvisioningService
             throw new \LogicException(self::SAFETY_BLOCK);
         }
 
+        return $this->buildScript($router, null);
+    }
+
+    /**
+     * Generate a one-time RADIUS-only RouterOS script for an explicitly
+     * enabled local CHR lab. This does not enable direct API deployment.
+     */
+    public function generateRadiusLabScript(Router $router, string $sharedSecret): string
+    {
+        if (! config('router.lab_provisioning_enabled')
+            || ! app()->environment('local', 'testing')
+            || ! config('wireguard.enabled')
+            || ! RadiusReadiness::available()
+            || $router->hardware_model !== 'CHR'
+            || $router->access_backend !== 'radius'
+            || ! $router->hasUsableRadiusConfiguration()
+            || ! preg_match('/^[a-f0-9]{64,}$/i', $sharedSecret)
+            || ! hash_equals((string) $router->radius_shared_secret, $sharedSecret)) {
+            throw new \LogicException('The one-time RADIUS script is available only for a configured local CHR lab router.');
+        }
+
+        $router->loadMissing('vpnPeer');
+        if (! $router->vpnPeer || ! $router->vpnPeer->enabled) {
+            throw new \LogicException('An enabled WireGuard peer is required before generating the CHR RADIUS script.');
+        }
+
+        $serverAddress = (string) config('wireguard.server_address');
+        if (filter_var($serverAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || filter_var($router->vpnPeer->tunnel_ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            throw new \InvalidArgumentException('Valid WireGuard IPv4 addresses are required for the RADIUS script.');
+        }
+
+        $nasIdentifier = $this->escapeRouterOs((string) $router->radius_nas_identifier);
+        $secret = $this->escapeRouterOs($sharedSecret);
+        $server = $this->escapeRouterOs($serverAddress);
+        $source = $this->escapeRouterOs((string) $router->vpnPeer->tunnel_ip);
+
+        return implode("\r\n", [
+            '# One-time RADIUS-only configuration for the local CHR lab.',
+            '# The listener is reachable only through the assigned WireGuard tunnel.',
+            '# Review the existing HotSpot profile before importing this script.',
+            "/system identity set name=\"{$nasIdentifier}\"",
+            ':if ([:len [/ip hotspot profile find name=prof-billing]] = 0) do={ :error "Required HotSpot profile prof-billing does not exist." }',
+            ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$server.'" src-address="'.$source.'" secret="'.$secret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$server.'" src-address="'.$source.'" secret="'.$secret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s }',
+            '/ip hotspot profile set [find name=prof-billing] use-radius=yes radius-accounting=yes radius-interim-update=1m',
+            '',
+        ]);
+    }
+
+    private function buildScript(Router $router, ?string $radiusSecret): string
+    {
         $tenant = $router->tenant ?? Tenant::find($router->tenant_id);
         $hotspotConfig = $router->hotspot_config ?? [];
 
@@ -218,7 +269,7 @@ class RouterProvisioningService
         $lines[] = '';
 
         // 7. Hotspot User Profiles for Tenant Packages (Idempotent)
-        if ($packages->isNotEmpty()) {
+        if ($radiusSecret === null && $packages->isNotEmpty()) {
             $lines[] = '# --- Bandwidth and Device Limit Profiles for Packages ---';
             foreach ($packages as $pkg) {
                 $profile = $pkg->routerProfileSettings();

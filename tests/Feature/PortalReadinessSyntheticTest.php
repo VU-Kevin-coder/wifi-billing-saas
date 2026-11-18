@@ -28,8 +28,9 @@ class PortalReadinessSyntheticTest extends TestCase
         config(['site_agent.required'=>false]);
         $activate = fn (array $ctx = []) => app(TenantContext::class)->runAs($t, fn () => app(VoucherActivationService::class)->activate($t, $v, Request::create('/'), null, $ctx));
         try { $activate(); $this->fail('Missing router must fail closed'); } catch (RadiusUnavailableException $e) { $this->assertSame('unused', $v->fresh()->status); }
-        $r = Router::create(['tenant_id'=>$t->id, 'name'=>'duplicate', 'access_backend'=>'site_agent']);
-        Router::create(['tenant_id'=>$t->id, 'name'=>'duplicate', 'access_backend'=>'site_agent']);
+        $r = Router::create(['tenant_id'=>$t->id, 'name'=>'duplicate']);
+        $r->forceFill(['access_backend'=>'site_agent'])->saveOrFail();
+        Router::create(['tenant_id'=>$t->id, 'name'=>'duplicate'])->forceFill(['access_backend'=>'site_agent'])->saveOrFail();
         foreach ([[], ['router'=>'duplicate'], ['router_id'=>99999]] as $context) {
             try { $activate($context); $this->fail('Ambiguous or invalid router must fail'); } catch (RadiusUnavailableException $e) { $this->assertSame('unused', $v->fresh()->status); }
         }
@@ -41,7 +42,8 @@ class PortalReadinessSyntheticTest extends TestCase
     public function test_missing_router_never_reports_paid_access_ready(): void
     {
         [$t,$p,$v] = $this->fixture();
-        $r = Router::create(['tenant_id'=>$t->id, 'name'=>'synthetic', 'access_backend'=>'site_agent']);
+        $r = Router::create(['tenant_id'=>$t->id, 'name'=>'synthetic']);
+        $r->forceFill(['access_backend'=>'site_agent'])->saveOrFail();
         $s = app(TenantContext::class)->runAs($t, fn () => app(VoucherActivationService::class)->activate($t, $v, Request::create('/'), null, ['router_id'=>$r->id]));
         $sale = Transaction::create(['tenant_id'=>$t->id, 'type'=>'voucher_sale', 'amount'=>1000, 'status'=>'completed', 'reference'=>'SYNTH', 'payment_token_hash'=>hash('sha256','synthetic-token'), 'meta'=>['voucher_id'=>$v->id]]);
         $v->forceFill(['sale_transaction_id'=>$sale->id])->save();

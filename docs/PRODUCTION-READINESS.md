@@ -10,6 +10,7 @@ the production proxy chain.
 
 | Finding | Status | Change / evidence |
 |---|---|---|
+| RADIUS | Local CHR lab path implemented; production deferred | FreeRADIUS is private to the Compose/WireGuard network namespace and calls Laravel through a signed REST bridge. New routers default to RADIUS while existing site-agent records are preserved. Accounting is sanitized logging only; reconciliation, CoA, production networking, and CHR/physical acceptance remain unverified. See [RADIUS-CHR-LAB.md](./RADIUS-CHR-LAB.md). |
 | D1 — Misleading router health | In progress | Added site-agent telemetry commands for uptime, CPU, memory, and active hotspot users. Router detail status distinguishes recent telemetry from last-known state and displays separate agent/telemetry timestamps. Successful profile sync alone no longer marks a router online. Automated coverage added; physical-agent/router run pending. |
 | D2 — Captive-portal credentials | In progress | Generated profile removes `http-pap` and keeps `http-chap`; login URLs no longer carry voucher codes, which remain on the application success page for manual entry into the router login form. RouterOS HTTPS captive login still requires a trusted router certificate and is not configured by the script. |
 | D2 — Router API account | In progress | Removed `test` and `password` from the generated account policy and retained API/read/write. RouterOS group policies grant write at configuration scope; this script cannot restrict it to `/ip hotspot` alone. Do not describe this account as subtree-scoped. |
@@ -62,7 +63,7 @@ those features have passed on physical hardware.
 | Item | Status | Reason / target |
 |---|---|---|
 | VPN UI polish | Deferred | Not required for the core router control path; revisit by 2026-12-11. |
-| RADIUS | Deferred | Not implemented in this deployment; revisit by 2026-12-11 after captive-portal acceptance. |
+| RADIUS production deployment | Deferred | Local CHR listener and policy integration are implemented, but no production network/TLS design, multi-router credential lifecycle, accounting reconciliation, CoA, or RouterOS acceptance has been completed. Do not set `RADIUS_PRODUCTION_ENABLED` in production. |
 | WireGuard key rotation UX | Deferred | Current recovery requires support intervention; define and test rotation before wider production rollout, target 2026-12-11. |
 | RouterOS subtree-only write permissions | Deferred with security limitation | Native RouterOS user-group policy is global; a separate constrained command boundary is required before claiming least-privilege hotspot-only write. Reassess by 2026-11-18. |
 | Router HTTPS captive portal | Deferred with configuration prerequisite | Requires a valid trusted certificate on each router and a customer-reachable hostname. Keep CHAP-only login until certificate provisioning and validation are implemented; reassess by 2026-11-18. |

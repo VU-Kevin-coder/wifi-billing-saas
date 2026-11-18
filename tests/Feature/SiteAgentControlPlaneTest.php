@@ -684,6 +684,7 @@ class SiteAgentControlPlaneTest extends TestCase
             'name' => 'North Router',
             'status' => 'online',
         ]);
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         $agent = SiteAgent::create([
             'tenant_id' => $tenant->id,
             'site_id' => $site->id,

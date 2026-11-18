@@ -85,6 +85,7 @@ class ExpireSessionsTest extends TestCase
             'api_username' => 'expiry-user',
             'api_password' => 'expiry-password',
         ]);
+        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
         $voucher = Voucher::create([
             'tenant_id' => $tenant->id,
             'voucher_batch_id' => $batch->id,

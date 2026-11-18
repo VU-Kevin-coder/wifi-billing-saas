@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Router;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Models\VpnPeer;
 use App\Services\RouterProvisioningService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
@@ -73,5 +74,42 @@ class RouterProvisioningSafetyTest extends TestCase
         } catch (\LogicException $e) {
             $this->assertSame(RouterProvisioningService::SAFETY_BLOCK, $e->getMessage());
         }
+    }
+
+    public function test_radius_script_is_limited_to_an_enabled_local_chr_and_does_not_deploy(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'router.lab_provisioning_enabled' => true,
+            'wireguard.enabled' => true,
+            'wireguard.server_address' => '10.8.0.1',
+        ]);
+        $tenant = Tenant::create(['name' => 'CHR Lab', 'slug' => 'chr-lab', 'status' => 'active']);
+        $router = Router::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Lab CHR',
+            'hardware_model' => 'CHR',
+        ]);
+        $secret = str_repeat('a', 64);
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'chr-lab-nas',
+            'radius_shared_secret' => $secret,
+        ])->saveOrFail();
+        VpnPeer::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'name' => 'Lab peer',
+            'public_key' => base64_encode(random_bytes(32)),
+            'tunnel_ip' => '10.8.1.20',
+            'enabled' => true,
+        ]);
+
+        $script = app(RouterProvisioningService::class)->generateRadiusLabScript($router->fresh(), $secret);
+        $this->assertStringContainsString('secret="'.$secret.'"', $script);
+        $this->assertStringContainsString('src-address="10.8.1.20"', $script);
+        $this->assertStringContainsString('use-radius=yes radius-accounting=yes', $script);
+        $this->assertStringNotContainsString('/user add', $script);
+        $this->assertFalse(app(RouterProvisioningService::class)->deploy($router)['ok']);
     }
 }

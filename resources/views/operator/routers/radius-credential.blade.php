@@ -15,7 +15,7 @@
                     This secret is shown once. Copy it to the approved secure configuration process now; it cannot be viewed again from this application.
                 </p>
                 <p class="mt-2 text-sm text-gray-600">
-                    If it is lost, use a separately authorized credential-rotation procedure. This action only configures this router record; it does not change a physical router or FreeRADIUS.
+                    If it is lost, use a separately authorized credential-rotation procedure. This page does not apply changes to a physical router or FreeRADIUS.
                 </p>
 
                 <dl class="mt-6 divide-y divide-gray-100 rounded-lg border border-gray-200 px-4">
@@ -34,6 +34,36 @@
                         </dd>
                     </div>
                 </dl>
+
+                @if(isset($labScript) && $labScript)
+                    <section class="mt-6 space-y-3 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+                        <h2 class="font-semibold text-indigo-950">One-time CHR lab script</h2>
+                        <p class="text-sm text-indigo-900">
+                            This script configures only the RADIUS server and the existing <code>prof-billing</code> HotSpot profile. It is generated only for an explicitly enabled local CHR lab; it does not deploy automatically.
+                        </p>
+                        <p class="text-sm text-indigo-900">
+                            Set <code>RADIUS_LAB_ROUTER_ID</code> to <code>{{ $router->id }}</code>,
+                            <code>RADIUS_LAB_CLIENT_IP</code> to <code>{{ $router->vpnPeer?->tunnel_ip }}</code>,
+                            and <code>RADIUS_LAB_CLIENT_SECRET</code> to the shared secret shown above before starting the private RADIUS listener.
+                        </p>
+                        <button type="button" id="download-radius-rsc"
+                                class="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800">
+                            Download one-time .rsc
+                        </button>
+                        <pre id="radius-lab-script" class="max-h-96 overflow-auto rounded bg-white p-3 text-xs">{{ $labScript }}</pre>
+                    </section>
+                    <script>
+                        document.getElementById('download-radius-rsc').addEventListener('click', function () {
+                            const blob = new Blob([document.getElementById('radius-lab-script').textContent], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = 'router-radius-lab.rsc';
+                            link.click();
+                            URL.revokeObjectURL(url);
+                        });
+                    </script>
+                @endif
 
                 <a href="{{ route('operator.routers.show', ['tenant' => $tenant->slug, 'router' => $router->id]) }}"
                    class="mt-6 inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">

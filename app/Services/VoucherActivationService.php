@@ -17,6 +17,8 @@ use LogicException;
 
 class VoucherActivationService
 {
+    public function __construct(private readonly RouterAccessStrategyResolver $strategies) {}
+
     public function activate(
         Tenant $tenant,
         Voucher $voucher,
@@ -44,7 +46,7 @@ class VoucherActivationService
                     throw new RadiusUnavailableException('Access cannot be confirmed. Contact the operator; please do not pay again.');
                 }
                 if ($existingRouter->access_backend === 'radius') {
-                    RadiusReadiness::requireAvailable();
+                    $this->strategies->resolve($existingRouter)->assertReady($existingRouter, null);
                 }
                 if (! in_array($session->status, ['active', 'provisioning'], true)
                     || $session->expires_at?->isPast()) {
@@ -79,14 +81,6 @@ class VoucherActivationService
                 throw new RadiusUnavailableException('This router has an unsupported access backend. Contact the operator; please do not pay again.');
             }
 
-            $usesRadius = $accessBackend === 'radius';
-            if ($usesRadius) {
-                RadiusReadiness::requireAvailable();
-            }
-            if ($usesRadius && ! $router->hasUsableRadiusConfiguration()) {
-                throw new LogicException('This RADIUS router is not fully configured. Access was not activated.');
-            }
-
             $siteAgent = $router?->site_id
                 ? SiteAgent::query()
                     ->where('tenant_id', $tenant->id)
@@ -95,9 +89,8 @@ class VoucherActivationService
                     ->first()
                 : null;
 
-            if (config('site_agent.required') && (! $router || (! $usesRadius && ! $siteAgent))) {
-                throw new LogicException('This site is not connected to a paired site agent. Access was not activated.');
-            }
+            $strategy = $this->strategies->resolve($router);
+            $strategy->assertReady($router, $siteAgent);
 
             $phone = $customerPhone ?: $voucher->redeemed_by ?: 'Walk-in';
             $customer = Customer::firstOrCreate(
@@ -132,16 +125,14 @@ class VoucherActivationService
                 'voucher_id' => $voucher->id,
                 'package_id' => $package->id,
                 'router_id' => $router?->id,
-                'status' => ($usesRadius || $siteAgent) ? 'provisioning' : 'active',
+                'status' => $strategy->initialSessionStatus($router, $siteAgent),
                 'started_at' => $startedAt,
                 'expires_at' => $package->expiresAt($startedAt),
                 'ip_address' => $clientIp,
                 'mac_address' => $clientMac,
             ]);
 
-            if (! $usesRadius && $siteAgent) {
-                app(SiteAgentCommandService::class)->provision($router, $session, $voucher);
-            }
+            $strategy->provision($router, $session, $voucher, $siteAgent);
 
             return $session;
         });
