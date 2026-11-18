@@ -33,7 +33,9 @@ class FlutterwaveConfigurationTest extends TestCase
     {
         parent::setUp();
 
-        Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
+        foreach (['platform_admin', 'operator_admin', 'operator_finance', 'operator_network', 'operator_support'] as $role) {
+            Role::findOrCreate($role, 'web');
+        }
     }
 
     public function test_flutterwave_secrets_are_not_rendered_in_platform_configuration(): void
@@ -43,9 +45,9 @@ class FlutterwaveConfigurationTest extends TestCase
         $admin->assignRole('platform_admin');
 
         $this->actingAs($admin)
-            ->get(route('platform.configuration.index'))
+            ->get(route('platform.configuration.control', ['section' => 'payments']))
             ->assertOk()
-            ->assertSee('Flutterwave payout compatibility')
+            ->assertSee('Flutterwave')
             ->assertDontSee('test-secret-value');
     }
 
@@ -210,10 +212,10 @@ class FlutterwaveConfigurationTest extends TestCase
         $admin->assignRole('platform_admin');
 
         $this->actingAs($admin)
-            ->get(route('platform.configuration.index'))
+            ->get(route('platform.configuration.control', ['section' => 'payments']))
             ->assertOk()
-            ->assertSee('MTN MoMo collections')
-            ->assertSee('Airtel Money collections')
+            ->assertSee('MTN Mobile Money')
+            ->assertSee('Airtel Money')
             ->assertDontSee('hidden-mtn-secret')
             ->assertDontSee('hidden-mtn-user')
             ->assertDontSee('hidden-mtn-key')
@@ -232,7 +234,7 @@ class FlutterwaveConfigurationTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->get(route('platform.configuration.index'))
+            ->get(route('platform.configuration.control', ['section' => 'payments']))
             ->assertOk()
             ->assertSee('https://callbacks.example.test/mtn')
             ->assertSee('https://callbacks.example.test/airtel');
@@ -242,7 +244,7 @@ class FlutterwaveConfigurationTest extends TestCase
             'services.airtel_money.webhook_url' => null,
         ]);
 
-        $this->get(route('platform.configuration.index'))
+        $this->get(route('platform.configuration.control', ['section' => 'payments']))
             ->assertOk()
             ->assertSee(route('api.webhooks.mtn'))
             ->assertSee(route('api.webhooks.airtel'));

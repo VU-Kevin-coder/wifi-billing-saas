@@ -116,7 +116,7 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
         Route::post('/plans', [BillingController::class, 'storePlan'])->name('plans.store');
         Route::put('/plans/{plan}', [BillingController::class, 'updatePlan'])->name('plans.update');
         Route::delete('/plans/{plan}', [BillingController::class, 'destroyPlan'])->name('plans.destroy');
-        Route::get('/configuration', [ConfigurationController::class, 'index'])->name('configuration.index');
+        Route::get('/configuration', fn () => redirect()->route('platform.configuration.control'))->name('configuration.index');
         Route::get('/configuration/control', [ControlSettingsController::class, 'index'])->name('configuration.control');
         Route::put('/configuration/control', [ControlSettingsController::class, 'update'])->middleware('mfa.recent')->name('configuration.control.update');
         Route::get('/configuration/export', [ControlSettingsController::class, 'export'])->name('configuration.export');

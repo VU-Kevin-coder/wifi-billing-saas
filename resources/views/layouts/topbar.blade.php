@@ -6,8 +6,10 @@
     $tenantName = $currentTenant?->name ?? ($isPlatform ? 'Platform Admin' : config('app.name'));
     
     $breadcrumbTitle = 'Dashboard';
-    if (str_contains($routeName, 'platform.configuration')) {
-        $breadcrumbTitle = 'Platform Configuration';
+    if (str_contains($routeName, 'platform.policies')) {
+        $breadcrumbTitle = 'Platform Policies';
+    } elseif (str_contains($routeName, 'platform.configuration')) {
+        $breadcrumbTitle = 'Control Settings';
     } elseif (str_contains($routeName, 'platform.billing')) {
         $breadcrumbTitle = 'Platform Billing';
     } elseif (str_contains($routeName, 'tenants')) {

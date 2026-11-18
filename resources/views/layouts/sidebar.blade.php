@@ -125,14 +125,13 @@
                         <span x-show="!sidebarCollapsed">Refund requests</span>
                     </a>
 
-                    <!-- Platform Configuration -->
-                    <a aria-label="Configuration" title="Configuration" href="{{ route('platform.configuration.index') }}"
-                       class="{{ request()->routeIs('platform.configuration.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
-                        <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.configuration.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <a aria-label="Policies" title="Policies" href="{{ route('platform.policies.index') }}"
+                       class="{{ request()->routeIs('platform.policies.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.policies.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                         </svg>
-                        <span x-show="!sidebarCollapsed">Configuration</span>
+                        <span x-show="!sidebarCollapsed">Policies</span>
                     </a>
                     <a aria-label="Control settings" title="Control settings" href="{{ route('platform.configuration.control') }}"
                        class="{{ request()->routeIs('platform.configuration.control*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">

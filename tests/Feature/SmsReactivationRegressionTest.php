@@ -36,7 +36,7 @@ class SmsReactivationRegressionTest extends TestCase
         $this->assertSame('africastalking', PlatformSetting::get('sms_credential_provider'));
         $this->assertFalse(SmsService::send('0700000000', 'test')['success']);
         Http::assertNothingSent();
-        $this->get(route('platform.configuration.index'))->assertOk()->assertSee('Status: Disabled');
+        $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertSee('SMS status: Disabled');
         $this->putJson(route('platform.configuration.sms.update'), ['sms_provider' => 'twilio', 'sms_environment' => 'sandbox', 'sms_api_key' => 'original-secret'])->assertUnprocessable();
         $this->putJson(route('platform.configuration.control.update'), ['reason' => 'Switch SMS provider', 'settings' => ['sms.provider' => 'twilio', 'sms.api_key' => '']])->assertUnprocessable();
         $this->put(route('platform.configuration.sms.update'), ['sms_provider' => 'africastalking', 'sms_environment' => 'sandbox', 'sms_api_key' => ''])->assertSessionHasNoErrors();
@@ -58,17 +58,17 @@ class SmsReactivationRegressionTest extends TestCase
         PlatformSetting::set('sms_username', 'sandbox');
         PlatformSetting::set('sms_api_key', 'legacy-secret');
         PlatformSetting::set('sms_status', 'Connected');
-        $this->get(route('platform.configuration.index'))->assertOk()->assertSee('Status: Credential re-entry required')->assertDontSee('Status: Connected')->assertSee('Upgrade warning')->assertDontSee('legacy-secret');
+        $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertSee('SMS status: Credential re-entry required')->assertDontSee('SMS status: Connected')->assertSee('Upgrade warning')->assertDontSee('legacy-secret');
         $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertSee('SMS status: Credential re-entry required')->assertSee('Upgrade warning')->assertDontSee('legacy-secret');
         $this->post(route('platform.configuration.sms.test'), ['test_phone' => '0700000000'])->assertSessionHas('error');
         Http::assertNothingSent();
-        $this->get(route('platform.configuration.index'))->assertOk()->assertSee('Status: Failed — Credential re-entry required');
+        $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertSee('SMS status: Failed — Credential re-entry required');
         $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertSee('SMS status: Failed — Credential re-entry required');
         $this->put(route('platform.configuration.sms.update'), ['sms_provider' => 'africastalking', 'sms_environment' => 'sandbox', 'sms_api_key' => 'legacy-secret'])->assertSessionHasNoErrors();
         $this->post(route('platform.configuration.sms.test'), ['test_phone' => '0700000000'])->assertSessionHas('status');
         Http::assertSentCount(1);
         Http::assertSent(fn ($request) => $request->url() === 'https://api.sandbox.africastalking.com/version1/messaging' && $request->hasHeader('apiKey', 'legacy-secret') && $request['to'] === '+256700000000');
-        $this->get(route('platform.configuration.index'))->assertOk()->assertSee('Status: Connected')->assertDontSee('legacy-secret');
+        $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertSee('SMS status: Connected')->assertDontSee('legacy-secret');
     }
 
     public function test_disabled_unbound_secret_cannot_be_reused_for_an_unknown_provider(): void

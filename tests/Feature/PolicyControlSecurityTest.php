@@ -38,6 +38,18 @@ class PolicyControlSecurityTest extends TestCase
         return PolicySetting::where('key', $key)->firstOrFail()->value;
     }
 
+    public function test_general_configuration_route_leads_to_control_settings_and_admin_nav_keeps_only_policy_and_controls(): void
+    {
+        $this->get(route('platform.configuration.index'))
+            ->assertRedirect(route('platform.configuration.control'));
+
+        $this->get(route('platform.configuration.control'))
+            ->assertOk()
+            ->assertSee(route('platform.policies.index'), false)
+            ->assertSee(route('platform.configuration.control'), false)
+            ->assertDontSee('title="Configuration"', false);
+    }
+
     public function test_controls_are_typed_and_full_section_submission_preserves_unchanged_values(): void
     {
         $page = $this->get(route('platform.configuration.control', ['section' => 'wallet']))->assertOk()->getContent();

@@ -81,6 +81,9 @@ class RouterManagementTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('Add MikroTik Device');
+        $response->assertSee('bg-gray-50', false);
+        $response->assertSee('bg-white', false);
+        $response->assertDontSee('bg-gray-950', false);
         $response->assertSee('Access backend');
         $response->assertSee('Operating site');
         $response->assertSee('Central Office');

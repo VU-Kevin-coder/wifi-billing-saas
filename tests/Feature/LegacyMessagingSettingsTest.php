@@ -26,7 +26,9 @@ class LegacyMessagingSettingsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Role::create(['name' => 'platform_admin', 'guard_name' => 'web']);
+        foreach (['platform_admin', 'operator_admin', 'operator_finance', 'operator_network', 'operator_support'] as $role) {
+            Role::findOrCreate($role, 'web');
+        }
         $this->admin = User::factory()->create(['tenant_id' => null]);
         $this->admin->assignRole('platform_admin');
         $this->actingAs($this->admin);
@@ -37,7 +39,7 @@ class LegacyMessagingSettingsTest extends TestCase
         PlatformSetting::set('smtp_password', 'old-smtp-secret');
         PlatformSetting::set('sms_api_key', 'old-sms-secret');
         PlatformSetting::set('sms_provider', 'twilio');
-        $this->get(route('platform.configuration.index'))->assertOk()
+        $this->get(route('platform.configuration.control', ['section' => 'email']))->assertOk()
             ->assertDontSee('old-smtp-secret')->assertDontSee('old-sms-secret');
 
         $this->put(route('platform.configuration.email.update'), ['smtp_host' => 'smtp.example', 'smtp_password' => ''])->assertRedirect();
@@ -51,7 +53,7 @@ class LegacyMessagingSettingsTest extends TestCase
             $stored = PlatformSetting::where('key', $key)->value('value');
             $this->assertNotSame($secret, $stored);
             $this->assertSame($secret, PlatformSetting::getSecret($key));
-            $this->get(route('platform.configuration.index'))->assertOk()->assertDontSee($secret)->assertDontSee($stored);
+            $this->get(route('platform.configuration.control', ['section' => 'email']))->assertOk()->assertDontSee($secret)->assertDontSee($stored);
         }
         $this->put(route('platform.configuration.email.update'), ['smtp_password' => ''])->assertRedirect();
         $this->put(route('platform.configuration.sms.update'), ['sms_provider' => 'twilio', 'sms_environment' => 'sandbox', 'sms_api_key' => ''])->assertRedirect();
@@ -205,7 +207,7 @@ class LegacyMessagingSettingsTest extends TestCase
         Http::assertSentCount(1);
         Http::assertSent(fn ($r) => $r->url() === 'https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json' && $r->hasHeader('Authorization', 'Basic '.base64_encode('AC123:sms-secret-value')));
         $this->assertStringNotContainsString('sms-secret-value', session('error'));
-        $this->get(route('platform.configuration.index'))->assertOk()->assertSee('Status: Failed')->assertDontSee('sms-secret-value');
+        $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertSee('SMS status: Failed')->assertDontSee('sms-secret-value');
         $this->assertSame('Failed', PlatformSetting::get('sms_status'));
         $this->assertSame('sms-secret-value', PlatformSetting::getSecret('sms_api_key'));
     }

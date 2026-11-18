@@ -21,7 +21,9 @@ class IntegrationReviewRegressionTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Role::findOrCreate('platform_admin', 'web');
+        foreach (['platform_admin', 'operator_admin', 'operator_finance', 'operator_network', 'operator_support'] as $role) {
+            Role::findOrCreate($role, 'web');
+        }
         $admin = User::factory()->create(['tenant_id' => null]);
         $admin->assignRole('platform_admin');
         $this->actingAs($admin);
@@ -62,7 +64,7 @@ class IntegrationReviewRegressionTest extends TestCase
         PlatformSetting::set('sms_provider', 'africastalking');
         PlatformSetting::set('sms_api_key', 'legacy-key');
         PlatformSetting::set('sms_status', 'Connected');
-        $this->get(route('platform.configuration.index'))->assertOk()->assertDontSee('Status: Connected');
+        $this->get(route('platform.configuration.control', ['section' => 'sms']))->assertOk()->assertDontSee('SMS status: Connected');
         $this->assertFalse(SmsService::send('0700000000', 'test')['success']);
         Http::assertNothingSent();
         $this->put(route('platform.configuration.sms.update'), ['sms_provider' => 'africastalking', 'sms_environment' => 'sandbox', 'sms_api_key' => 'legacy-key'])->assertSessionHasNoErrors();

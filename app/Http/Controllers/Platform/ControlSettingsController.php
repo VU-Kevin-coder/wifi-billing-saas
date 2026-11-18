@@ -250,6 +250,8 @@ class ControlSettingsController extends Controller
         if ($field['type'] === 'readonly') {
             return match ($key) {
                 'pay.pesapal.ipn' => route('api.webhooks.pesapal'),
+                'pay.mtn.webhook' => config('services.mtn_momo.webhook_url') ?: route('api.webhooks.mtn'),
+                'pay.airtel.webhook' => config('services.airtel_money.webhook_url') ?: route('api.webhooks.airtel'),
                 default => (string) ($field['default'] ?? ''),
             };
         }
