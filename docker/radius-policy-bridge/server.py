@@ -52,6 +52,15 @@ def parse_form(body):
 
 
 def policy_payload(path, form):
+    if path == "/client-lookup":
+        try:
+            peer_ip = ipaddress.ip_address(safe_value(form.get("peer_ip", ""), "peer IP", 45))
+        except ValueError as exception:
+            raise ValueError("Invalid RADIUS client lookup identity") from exception
+        if peer_ip.version != 4:
+            raise ValueError("Invalid RADIUS client lookup identity")
+        return {"authenticated_peer_ip": str(peer_ip)}
+
     try:
         router = router_id(form.get("router_id", ""))
         peer_ip = str(ipaddress.ip_address(safe_value(form.get("peer_ip", ""), "peer IP", 45)))
@@ -141,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_body(404, b"")
 
     def do_POST(self):
-        if self.path not in {"/authorize", "/accounting"}:
+        if self.path not in {"/authorize", "/accounting", "/client-lookup"}:
             self.send_body(404, b"")
             return
 
@@ -160,7 +169,11 @@ class Handler(BaseHTTPRequestHandler):
 
             form = parse_form(self.rfile.read(body_length))
             payload = policy_payload(self.path, form)
-            endpoint = "/accounting-events" if self.path == "/accounting" else "/authorize"
+            endpoint = {
+                "/authorize": "/authorize",
+                "/accounting": "/accounting-events",
+                "/client-lookup": "/client-lookup",
+            }[self.path]
             path = "/internal/radius/v1" + endpoint
             body, headers = signed_policy_request(path, payload, required_secret("RADIUS_POLICY_SERVICE_SECRET"))
             headers["Content-Length"] = str(len(body))

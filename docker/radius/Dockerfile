@@ -12,6 +12,7 @@ RUN apt-get update \
 COPY docker/radius/clients.conf.template /opt/radius/clients.conf.template
 COPY docker/radius/mods-available/rest /etc/freeradius/3.0/mods-available/rest
 COPY docker/radius/sites-available/default /opt/radius/default.template
+COPY docker/radius/sites-available/dynamic-clients /opt/radius/dynamic-clients.template
 COPY docker/radius/entrypoint.sh /usr/local/bin/radius-entrypoint
 
 RUN chmod 0755 /usr/local/bin/radius-entrypoint \

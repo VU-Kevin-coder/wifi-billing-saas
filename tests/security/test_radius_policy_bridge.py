@@ -13,6 +13,17 @@ import server
 
 
 class PolicyBridgeTests(unittest.TestCase):
+    def test_dynamic_client_lookup_payload_contains_only_an_ipv4_peer_address(self):
+        payload = server.policy_payload("/client-lookup", {
+            "peer_ip": "10.8.17.24",
+            "router_id": "untrusted",
+            "nas_identifier": "untrusted",
+        })
+
+        self.assertEqual(payload, {"authenticated_peer_ip": "10.8.17.24"})
+        with self.assertRaises(ValueError):
+            server.policy_payload("/client-lookup", {"peer_ip": "2001:db8::1"})
+
     def test_authorization_payload_accepts_only_configured_router_identity(self):
         payload = server.policy_payload("/authorize", {
             "router_id": "router-17",

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Router;
 use App\Services\RadiusAccountingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,6 +12,37 @@ use Illuminate\Validation\Rule;
 
 class RadiusPolicyController extends Controller
 {
+    public function clientLookup(Request $request): JsonResponse
+    {
+        $router = $request->attributes->get('authenticated_router');
+        $peerIp = $request->attributes->get('authenticated_peer_ip');
+        if (! $router instanceof Router || ! is_string($peerIp)) {
+            return response()->json(['message' => 'RADIUS client not found.'], 404, [
+                'Cache-Control' => 'no-store, private',
+            ]);
+        }
+
+        $sharedSecret = $router->radius_shared_secret;
+        if (! is_string($sharedSecret) || $sharedSecret === '') {
+            return response()->json(['message' => 'RADIUS client not found.'], 404, [
+                'Cache-Control' => 'no-store, private',
+            ]);
+        }
+
+        $attribute = static fn (string $value): array => [
+            'value' => [$value],
+            'do_xlat' => false,
+        ];
+
+        return response()->json([
+            'control:FreeRADIUS-Client-IP-Address' => $attribute($peerIp),
+            'control:FreeRADIUS-Client-Secret' => $attribute($sharedSecret),
+            'control:FreeRADIUS-Client-Shortname' => $attribute('router-'.$router->id),
+            'control:FreeRADIUS-Client-NAS-Type' => $attribute('other'),
+            'control:FreeRADIUS-Client-Require-MA' => $attribute('yes'),
+        ], 200, ['Cache-Control' => 'no-store, private']);
+    }
+
     public function authorize(Request $request, RadiusAccountingService $accounting): JsonResponse
     {
         $validated = $request->validate([

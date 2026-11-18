@@ -10,13 +10,17 @@ The Python `security/radius_admission.py` guard described below remains a
 detached prototype; it is not used by the FreeRADIUS listener. FreeRADIUS
 performs RADIUS packet verification for this lab.
 
-The listener is configured for one exact WireGuard client address and a
-router-specific secret. A private bridge signs only allowlisted request fields
-for Laravel, which verifies that the router ID, NAS identifier, and packet
-source IP match the router's enabled WireGuard peer. FreeRADIUS has no direct
-database access. Lab accounting is append-only sanitized logging and does not
-reconcile application sessions or counters. Direct router API deployment,
-CoA, and Disconnect-Request remain disabled.
+The listener uses a dynamic client block scoped to the WireGuard peer range.
+For an unknown peer, a private bridge signs a lookup containing only its IPv4
+address; Laravel returns a router-specific secret only when that address maps
+to an enabled peer of a RADIUS-enabled router. The resulting client record is
+cached for 30 seconds. Subsequent policy requests still verify that the router
+ID, NAS identifier, and packet source IP match the enabled peer. FreeRADIUS
+has no direct database access. The configuration passes `freeradius -XC` on
+FreeRADIUS 3.2.1; end-to-end dynamic attribute resolution and hardware
+compatibility remain unverified. Lab accounting is append-only sanitized
+logging and does not reconcile application sessions or counters. Direct
+router API deployment, CoA, and Disconnect-Request remain disabled.
 
 ## What is implemented
 
@@ -67,8 +71,8 @@ respond to an access request on the network.
 - Define and verify production private networking and TLS on the REST policy
   path. A signed request, a Docker-private network, or source allowlisting
   alone is not a production deployment boundary.
-- Add safe per-router client provisioning, rotation, revocation, and
-  operational recovery before managing more than the single lab client.
+- Validate dynamic per-router client provisioning, then define and test
+  credential rotation, revocation, and operational recovery.
 - Protect transport and service-to-service communications (including verified
   TLS/private connectivity as appropriate), key generation/storage, rotation,
   revocation, least privilege, and source provenance. Select and test a real

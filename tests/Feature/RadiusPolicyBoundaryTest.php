@@ -191,6 +191,39 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->signedCall('POST', '/internal/radius/v1/authorize', $payload)->assertUnauthorized();
     }
 
+    public function test_signed_dynamic_client_lookup_returns_only_the_enabled_radius_peer_record(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'radius_policy.service_secret' => self::SERVICE_SECRET,
+            'radius_policy.nonce_cache_store' => null,
+            'radius_policy.allowed_source_cidrs' => [],
+        ]);
+        [, $router] = $this->createRadiusAccess();
+        $peer = $this->createVpnPeer($router, '10.8.1.20');
+        $secret = $router->radius_shared_secret;
+
+        $this->signedCall('POST', '/internal/radius/v1/client-lookup', [
+            'authenticated_peer_ip' => '10.8.1.20',
+            'authenticated_router_id' => 99999,
+        ])->assertOk()
+            ->assertJsonPath('control:FreeRADIUS-Client-IP-Address.value.0', '10.8.1.20')
+            ->assertJsonPath('control:FreeRADIUS-Client-Secret.value.0', $secret)
+            ->assertJsonPath('control:FreeRADIUS-Client-Shortname.value.0', 'router-'.$router->id)
+            ->assertJsonPath('control:FreeRADIUS-Client-NAS-Type.value.0', 'other')
+            ->assertJsonPath('control:FreeRADIUS-Client-Require-MA.value.0', 'yes')
+            ->assertHeader('Cache-Control', 'no-store, private');
+
+        $this->signedCall('POST', '/internal/radius/v1/client-lookup', [
+            'authenticated_peer_ip' => '10.8.1.21',
+        ])->assertUnauthorized();
+
+        $peer->update(['enabled' => false]);
+        $this->signedCall('POST', '/internal/radius/v1/client-lookup', [
+            'authenticated_peer_ip' => '10.8.1.20',
+        ])->assertUnauthorized();
+    }
+
     public function test_accounting_endpoint_logs_sanitized_observations_without_reconciling_sessions(): void
     {
         config([

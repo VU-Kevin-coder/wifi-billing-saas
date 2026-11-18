@@ -82,11 +82,31 @@ class AuthenticateRadiusPolicyService
             return $this->unavailable();
         }
 
-        if (! in_array($request->getPathInfo(), [
+        $path = $request->getPathInfo();
+        if (! in_array($path, [
             '/internal/radius/v1/authorize',
             '/internal/radius/v1/accounting-events',
+            '/internal/radius/v1/client-lookup',
         ], true)) {
             return $this->unavailable();
+        }
+
+        if ($path === '/internal/radius/v1/client-lookup') {
+            $peerIp = $request->input('authenticated_peer_ip');
+            if (! is_string($peerIp)) {
+                return $this->unauthorized();
+            }
+
+            $router = app(RadiusAccountingService::class)->radiusRouterForPeerIp($peerIp);
+            if (! $router) {
+                return $this->unauthorized();
+            }
+
+            $request->attributes->set('authenticated_router_id', (int) $router->id);
+            $request->attributes->set('authenticated_peer_ip', $peerIp);
+            $request->attributes->set('authenticated_router', $router);
+
+            return $next($request);
         }
 
         $routerId = filter_var($request->input('authenticated_router_id'), FILTER_VALIDATE_INT);

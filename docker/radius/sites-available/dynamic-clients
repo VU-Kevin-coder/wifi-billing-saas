@@ -1,0 +1,9 @@
+server dynamic_clients {
+    authorize {
+        update control {
+            REST-HTTP-Header := "Authorization: Bearer ${RADIUS_BRIDGE_TOKEN}"
+        }
+
+        radius_client_lookup
+    }
+}

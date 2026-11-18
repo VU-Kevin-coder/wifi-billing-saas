@@ -1,6 +1,7 @@
-client router-${RADIUS_LAB_ROUTER_ID} {
-    ipaddr = ${RADIUS_LAB_CLIENT_IP}
-    secret = ${RADIUS_LAB_CLIENT_SECRET}
-    shortname = router-${RADIUS_LAB_ROUTER_ID}
+# Matches the WireGuard peer allocation in WireGuardService.
+client wireguard_peers {
+    ipaddr = 10.8.0.0/16
+    dynamic_clients = dynamic_clients
     require_message_authenticator = yes
+    lifetime = 30
 }

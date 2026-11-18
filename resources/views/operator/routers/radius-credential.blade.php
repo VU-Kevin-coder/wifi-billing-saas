@@ -42,9 +42,7 @@
                             This script configures only the RADIUS server and the existing <code>prof-billing</code> HotSpot profile. It is generated only for an explicitly enabled local CHR lab; it does not deploy automatically.
                         </p>
                         <p class="text-sm text-indigo-900">
-                            Set <code>RADIUS_LAB_ROUTER_ID</code> to <code>{{ $router->id }}</code>,
-                            <code>RADIUS_LAB_CLIENT_IP</code> to <code>{{ $router->vpnPeer?->tunnel_ip }}</code>,
-                            and <code>RADIUS_LAB_CLIENT_SECRET</code> to the shared secret shown above before starting the private RADIUS listener.
+                            The private listener discovers this router through its enabled WireGuard peer and retrieves this unique secret using the authenticated dynamic-client lookup. No per-router FreeRADIUS client entry or <code>RADIUS_LAB_*</code> settings are needed.
                         </p>
                         <button type="button" id="download-radius-rsc"
                                 class="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800">

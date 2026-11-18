@@ -1,7 +1,9 @@
 # Local CHR RADIUS lab
 
-This is a local integration path for one RouterOS CHR and one router credential.
-It is not a production deployment or an external UDP RADIUS service.
+This is a local integration path for a RouterOS CHR. FreeRADIUS discovers
+eligible routers dynamically by their WireGuard peer IP while retaining a
+unique RADIUS secret per router. It is not a production deployment or an
+external UDP RADIUS service.
 
 ## Trust and data path
 
@@ -12,10 +14,12 @@ CHR -- RADIUS over WireGuard --> FreeRADIUS -- private REST --> policy bridge
 
 - FreeRADIUS shares the app container's network namespace and binds only to
   `WIREGUARD_SERVER_ADDRESS`; Compose publishes no UDP 1812/1813 ports.
-- The lab client is pinned to one RouterOS WireGuard tunnel IP and a
-  router-specific shared secret. Laravel independently maps the signed router
-  ID, NAS identifier, and packet source IP to that router's enabled WireGuard
-  peer before authorizing.
+- A dynamic FreeRADIUS client block is limited to the application's
+  `10.8.0.0/16` WireGuard peer range. Unknown peers are looked up through the
+  private bridge; Laravel returns a client record only for an enabled peer
+  belonging to a RADIUS-enabled router with a usable unique secret. FreeRADIUS
+  caches the record for at most 30 seconds. Policy requests are independently
+  bound to the signed router shortname, NAS identifier, and packet source IP.
 - Laravel remains authoritative for voucher eligibility and package policy.
   FreeRADIUS has no application database credentials.
 - Accounting is validated and written as sanitized local log observations.
@@ -45,10 +49,10 @@ CHR -- RADIUS over WireGuard --> FreeRADIUS -- private REST --> policy bridge
    import it manually into the intended CHR. The script expects an existing
    HotSpot profile named `prof-billing`; it does not apply itself or alter
    RouterOS API settings.
-5. Before starting the RADIUS profile, set `RADIUS_LAB_ROUTER_ID` to the
-   router ID, `RADIUS_LAB_CLIENT_IP` to its WireGuard tunnel IP, and
-   `RADIUS_LAB_CLIENT_SECRET` to the one-time shared secret. Then start the
-   listener and bridge:
+5. Start the listener and bridge. No per-router FreeRADIUS client entry or
+   `RADIUS_LAB_*` client settings are needed; the listener resolves the router
+   from its enabled WireGuard peer and fetches its unique secret over the
+   authenticated private lookup:
 
    ```powershell
    docker compose --profile radius-lab up -d --build radius-policy-bridge radius
@@ -59,10 +63,9 @@ CHR -- RADIUS over WireGuard --> FreeRADIUS -- private REST --> policy bridge
    written to `storage/logs/radius-accounting.log`; no voucher code, raw
    packet, username, client IP/MAC, or raw NAS session ID is recorded there.
 
-The FreeRADIUS entrypoint fails if the WireGuard address is absent, any lab
-client setting is missing, or either lab secret is not at least 32 bytes of
-hexadecimal. The API policy bridge fails closed outside local/testing unless
-its upstream uses HTTPS.
+The FreeRADIUS entrypoint fails if the WireGuard listen address is absent or
+the bridge token is not at least 32 bytes of hexadecimal. The API policy
+bridge fails closed outside local/testing unless its upstream uses HTTPS.
 
 ## Explicit non-goals and production blockers
 
@@ -76,12 +79,12 @@ its upstream uses HTTPS.
 - Accounting reconciliation remains disabled because multi-device session
   state, event ordering, counter completeness, and database lock ordering are
   unresolved. A local observation is not proof of billable usage.
-- There is no CoA/Disconnect implementation, production FreeRADIUS client
-  provisioning/rotation path, production private-network deployment, or
-  production TLS/proxy acceptance evidence.
-- The current listener config provisions exactly one lab RADIUS client at
-  container startup. Do not copy this pattern as a production router inventory
-  or expose UDP ports publicly.
+- There is no CoA/Disconnect implementation, production secret rotation and
+  revocation workflow, production private-network deployment, or production
+  TLS/proxy acceptance evidence. The configuration passes `freeradius -XC` on
+  FreeRADIUS 3.2.1, but dynamic client attribute resolution and cache/revocation
+  behavior still require end-to-end and RouterOS hardware validation.
+- Do not expose RADIUS UDP ports publicly.
 - Production readiness requires a separate security review, verified network
   boundaries, shared-cache replay controls, MySQL concurrency tests, operator
   rotation/revocation workflows, and end-to-end RouterOS acceptance.

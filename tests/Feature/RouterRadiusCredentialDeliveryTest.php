@@ -117,8 +117,8 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         ]);
         $response->assertOk()
             ->assertSee('Download one-time .rsc')
-            ->assertSee('RADIUS_LAB_CLIENT_IP')
-            ->assertSee('10.8.1.31')
+            ->assertSee('authenticated dynamic-client lookup')
+            ->assertDontSee('RADIUS_LAB_CLIENT_IP')
             ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store, private');
         $secret = $router->fresh()->radius_shared_secret;
         $this->assertIsString($secret);

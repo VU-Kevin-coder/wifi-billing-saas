@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware([AuthenticateRadiusPolicyService::class, 'throttle:120,1'])
     ->prefix('internal/radius/v1')
     ->group(function (): void {
+        Route::post('/client-lookup', [RadiusPolicyController::class, 'clientLookup']);
         Route::post('/authorize', [RadiusPolicyController::class, 'authorize']);
         Route::post('/accounting-events', [RadiusPolicyController::class, 'accountingEvent']);
         Route::get('/disconnect-commands', [RadiusPolicyController::class, 'disconnectCommands']);

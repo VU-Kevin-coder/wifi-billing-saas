@@ -22,3 +22,19 @@ rest {
         do_xlat = no
     }
 }
+
+rest radius_client_lookup {
+    connect_uri = "http://radius-policy-bridge:8080"
+    connect_timeout = 2.0
+    timeout = 5.0
+    read_timeout = 5.0
+
+    authorize {
+        uri = "${..connect_uri}/client-lookup"
+        method = "post"
+        body = "post"
+        data = "peer_ip=%{urlencode:%{Packet-Src-IP-Address}}"
+        force_to = "json"
+        do_xlat = no
+    }
+}

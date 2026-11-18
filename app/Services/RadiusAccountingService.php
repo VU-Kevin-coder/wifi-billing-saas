@@ -268,6 +268,31 @@ class RadiusAccountingService
             : null;
     }
 
+    public function radiusRouterForPeerIp(string $peerIp): ?Router
+    {
+        if (filter_var($peerIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            return null;
+        }
+
+        $peer = VpnPeer::withoutGlobalScopes()
+            ->where('tunnel_ip', $peerIp)
+            ->where('enabled', true)
+            ->first();
+        if (! $peer) {
+            return null;
+        }
+
+        $router = Router::withoutTenancy()
+            ->whereKey($peer->router_id)
+            ->where('tenant_id', $peer->tenant_id)
+            ->where('access_backend', 'radius')
+            ->first();
+
+        return $router && $router->hasUsableRadiusConfiguration()
+            ? $router
+            : null;
+    }
+
     public function recordLabAccountingObservation(array $input): void
     {
         if (! RadiusReadiness::available() || ! (bool) config('radius.lab_accounting_log', false)) {
