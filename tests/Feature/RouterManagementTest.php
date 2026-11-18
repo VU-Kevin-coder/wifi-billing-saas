@@ -88,6 +88,7 @@ class RouterManagementTest extends TestCase
         $response->assertSee('value="'.$site->id.'"', false);
         $response->assertSee('Wi-Fi name (SSID)');
         $response->assertSee('Service setup');
+        $response->assertSee('value="8729"', false);
     }
 
     public function test_operator_can_create_new_router(): void
@@ -119,7 +120,8 @@ class RouterManagementTest extends TestCase
         $this->assertNotNull($router);
         $this->assertEquals($this->acme->id, $router->tenant_id);
         $this->assertEquals('provisioning', $router->status);
-        $this->assertEquals('CCR2004', $router->hardware_model);
+        $this->assertNull($router->hardware_model);
+        $this->assertNull($router->identity_verified_at);
         $this->assertSame('10.20.1.10', $router->management_ip);
         $this->assertEquals(8729, $router->api_port);
         $this->assertSame('router-api', $router->api_username);
@@ -280,10 +282,10 @@ class RouterManagementTest extends TestCase
 
         $router->refresh();
         $this->assertSame('Updated router', $router->name);
-        $this->assertSame('SN-123', $router->serial_number);
+        $this->assertNull($router->serial_number);
         $this->assertSame($site->id, $router->site_id);
         $this->assertSame('Updated site', $router->site);
-        $this->assertSame('RB4011', $router->hardware_model);
+        $this->assertNull($router->hardware_model);
         $this->assertSame('hamnet-chr', $router->management_ip);
         $this->assertSame('updated-api', $router->api_username);
         $this->assertSame('existing-secret', $router->api_password);

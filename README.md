@@ -501,7 +501,15 @@ Router connectivity checks also run through the paired agent in this mode.
 Router detail pages distinguish the site-agent heartbeat from router telemetry.
 Use **Request telemetry from site agent** to collect uptime, CPU, memory, and
 active hotspot users; a profile-sync acknowledgement alone is not displayed as
-an online health check.
+an online health check. Update the agent from this application version before
+testing writes: the API only delivers write commands to agents that identify as
+identity-guard version 2. Older agents may receive read-only checks, but cannot
+receive router mutations.
+Before a write, the agent reads the router's board name and serial number. An
+operator must explicitly enroll the detected identity; writes remain blocked
+when the identity is missing or differs from the enrolled router. Do not disable
+TLS peer verification to accommodate a self-signed certificate: install its
+issuing CA and configure `MIKROTIK_CA_CERT_PATH` on the connecting host.
 RouterOS API port 8729 automatically selects API-SSL. In production, certificate
 verification defaults to enabled; install the issuing CA on the host running
 the app or agent and set `MIKROTIK_CA_CERT_PATH` to its PEM bundle. The router

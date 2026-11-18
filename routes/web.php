@@ -207,6 +207,11 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                 Route::middleware('role:operator_admin')->group(function () {
                     Route::resource('packages', PackageController::class)->only(['index', 'store', 'update']);
 
+                    Route::post('routers/{router}/identity/enroll', [RouterController::class, 'enrollIdentity'])
+                        ->whereNumber('router')
+                        ->middleware(['mfa.recent', 'throttle:5,1'])
+                        ->name('routers.identity.enroll');
+
                     Route::post('routers/{router}/radius-credential', [RadiusRouterCredentialController::class, 'store'])
                         ->whereNumber('router')
                         ->middleware(['mfa.recent', 'throttle:5,1'])

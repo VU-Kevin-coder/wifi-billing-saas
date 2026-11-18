@@ -57,7 +57,15 @@ class ProvisioningWatchdogTest extends TestCase
         $this->admin->assignRole('operator_admin');
 
         $site = Site::create(['tenant_id' => $this->tenant->id, 'name' => 'North Site']);
-        Router::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'North Router', 'status' => 'online']);
+        $router = Router::create([
+            'tenant_id' => $this->tenant->id,
+            'site_id' => $site->id,
+            'name' => 'North Router',
+            'status' => 'online',
+            'hardware_model' => 'CHR',
+            'serial_number' => 'WATCHDOG-CHR-'.$this->tenant->id,
+        ]);
+        $router->forceFill(['identity_verified_at' => now()])->saveOrFail();
         $this->agent = SiteAgent::create([
             'tenant_id' => $this->tenant->id,
             'site_id' => $site->id,
@@ -260,7 +268,10 @@ class ProvisioningWatchdogTest extends TestCase
 
     public function test_a_late_agent_confirmation_cannot_revive_an_expired_session(): void
     {
-        $this->withHeader('Authorization', 'Bearer '.self::TOKEN)->getJson('/api/site-agent/commands')->assertOk();
+        $this->withHeader('Authorization', 'Bearer '.self::TOKEN)
+            ->withHeader('X-Site-Agent-Version', '2')
+            ->getJson('/api/site-agent/commands')
+            ->assertOk();
         $this->assertSame('claimed', $this->command->fresh()->status);
         $this->session->update(['expires_at' => now()->subMinute()]);
 
@@ -276,9 +287,19 @@ class ProvisioningWatchdogTest extends TestCase
 
     private function claimAndComplete(): void
     {
-        $this->withHeader('Authorization', 'Bearer '.self::TOKEN)->getJson('/api/site-agent/commands')->assertOk();
         $this->withHeader('Authorization', 'Bearer '.self::TOKEN)
-            ->postJson("/api/site-agent/commands/{$this->command->id}/complete", ['success' => true])
+            ->withHeader('X-Site-Agent-Version', '2')
+            ->getJson('/api/site-agent/commands')
+            ->assertOk();
+        $this->withHeader('Authorization', 'Bearer '.self::TOKEN)
+            ->postJson("/api/site-agent/commands/{$this->command->id}/complete", [
+                'success' => true,
+                'result' => [
+                    'hardware_model' => 'CHR',
+                    'serial_number' => 'WATCHDOG-CHR-'.$this->tenant->id,
+                    'identity_state' => 'verified',
+                ],
+            ])
             ->assertOk();
     }
 

@@ -56,7 +56,7 @@ return [
     ],
 
     'mikrotik' => [
-        'api_port' => (int) env('MIKROTIK_DEFAULT_API_PORT', 8728),
+        'api_port' => (int) env('MIKROTIK_DEFAULT_API_PORT', 8729),
         'api_username' => env('MIKROTIK_DEFAULT_API_USERNAME', 'billing_api'),
         'hotspot_domain' => env('MIKROTIK_HOTSPOT_DOMAIN', 'hotspot.local'),
         'hotspot_network' => env('MIKROTIK_DEFAULT_HOTSPOT_NETWORK', '10.10.0.0/16'),

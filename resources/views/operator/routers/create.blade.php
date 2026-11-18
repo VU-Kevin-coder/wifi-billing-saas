@@ -132,7 +132,7 @@
                             <input id="api_port" name="api_port" type="number" min="1" max="65535"
                                    value="{{ old('api_port', $apiPort) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            <p class="mt-1 text-xs text-gray-500">8728 uses the unencrypted API; 8729 uses API-SSL. Restrict its allowed source subnet.</p>
+                            <p class="mt-1 text-xs text-gray-500">Use API-SSL (8729 or a custom TLS port). Plaintext API on 8728 is blocked. Restrict access to the management subnet.</p>
                             @error('api_port') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
 

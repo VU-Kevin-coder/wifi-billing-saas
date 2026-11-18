@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Tenant;
+use App\Models\Router;
 use App\Services\Tenancy\TenantContext;
 use RuntimeException;
 use ZillEAli\MikrotikLaravel\Facades\MikroTik;
@@ -38,7 +39,7 @@ class RouterService
      */
     public function getActiveSessions(): array
     {
-        return $this->getHotspotManager()->getActiveHosts();
+        return $this->getHotspotManager(requireEnrolledIdentity: false)->getActiveHosts();
     }
 
     /**
@@ -66,7 +67,7 @@ class RouterService
     /**
      * Resolve the HotspotManager with dynamic per-tenant configuration.
      */
-    protected function getHotspotManager()
+    protected function getHotspotManager(bool $requireEnrolledIdentity = true)
     {
         if (config('site_agent.required') || ! config('site_agent.allow_direct_router_connection')) {
             throw new RuntimeException('Legacy direct router operations are disabled. Use the paired site agent or a router WireGuard peer.');
@@ -81,13 +82,24 @@ class RouterService
         }
 
         $this->configureTenantRouter();
+        if ($requireEnrolledIdentity) {
+            $router = Router::withoutTenancy()
+                ->where('tenant_id', $this->tenant->id)
+                ->where('management_ip', $this->tenant->mikrotik_host)
+                ->first();
+            if (! $router) {
+                throw new RuntimeException('Legacy direct router writes require an enrolled router record for this exact management host.');
+            }
+
+            app(RouterIdentityService::class)->assertMatchesRouter($router, $this->tenant->slug);
+        }
 
         return MikroTik::router($this->tenant->slug)->hotspot();
     }
 
     private function configureTenantRouter(): void
     {
-        $port = (int) ($this->tenant->mikrotik_port ?? 8728);
+        $port = (int) ($this->tenant->mikrotik_port ?? config('services.mikrotik.api_port'));
         DynamicMikrotikRouterConfig::set($this->tenant->slug, [
             'username' => $this->tenant->mikrotik_username ?? 'admin',
             'password' => $this->tenant->mikrotik_password ?? '',

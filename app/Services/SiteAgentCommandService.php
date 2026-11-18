@@ -188,6 +188,15 @@ class SiteAgentCommandService
         return $this->queueRouterCheck($router, 'test_connection');
     }
 
+    public function enrollIdentity(Router $router): SiteAgentCommand
+    {
+        if ($router->identity_verified_at) {
+            throw new \LogicException('An enrolled router identity cannot be replaced.');
+        }
+
+        return $this->queueRouterCheck($router, 'enroll_identity');
+    }
+
     public function telemetry(Router $router): SiteAgentCommand
     {
         return $this->queueRouterCheck($router, 'telemetry');

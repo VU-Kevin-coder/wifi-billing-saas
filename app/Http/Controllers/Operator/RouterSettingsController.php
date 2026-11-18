@@ -55,7 +55,7 @@ class RouterSettingsController extends Controller
         $updateData = [
             'mikrotik_host' => $validated['mikrotik_host'] ?? null,
             'mikrotik_username' => $validated['mikrotik_username'] ?? null,
-            'mikrotik_port' => $validated['mikrotik_port'] ?? 8728,
+            'mikrotik_port' => $validated['mikrotik_port'] ?? config('services.mikrotik.api_port'),
         ];
 
         // Only update password if a new one was provided
@@ -150,7 +150,7 @@ class RouterSettingsController extends Controller
 
         return response()->json([
             'success' => false,
-            'message' => 'Unable to connect to router. Check IP address, API service port (8728/8729), and user credentials.',
+            'message' => 'Unable to connect to router. Check the management address, API-SSL port and certificate trust, and user credentials.',
         ], 500);
     }
 
@@ -212,7 +212,7 @@ class RouterSettingsController extends Controller
             'mikrotik_host' => null,
             'mikrotik_username' => null,
             'mikrotik_password' => null,
-            'mikrotik_port' => 8728,
+            'mikrotik_port' => config('services.mikrotik.api_port'),
         ]);
 
         return redirect()->route('operator.settings.router', ['tenant' => $tenantModel->slug])

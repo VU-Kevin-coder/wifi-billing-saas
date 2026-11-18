@@ -10,17 +10,22 @@ use App\Models\Session;
 use App\Models\SiteAgent;
 use App\Models\SiteAgentCommand;
 use App\Services\ProvisioningWatchdog;
+use App\Services\RouterIdentityEnrollmentService;
+use App\Services\RouterIdentityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SiteAgentController extends Controller
 {
+    private const IDENTITY_GUARD_AGENT_VERSION = '2';
+
     public function poll(Request $request): JsonResponse
     {
         /** @var SiteAgent $agent */
         $agent = $request->attributes->get('site_agent');
-        $commands = DB::transaction(function () use ($agent): array {
+        $identityGuardSupported = $request->header('X-Site-Agent-Version') === self::IDENTITY_GUARD_AGENT_VERSION;
+        $commands = DB::transaction(function () use ($agent, $identityGuardSupported): array {
             $agent->forceFill([
                 'last_seen_at' => now(),
                 'offline_notified_at' => null,
@@ -34,6 +39,7 @@ class SiteAgentController extends Controller
                                 ->where('claimed_at', '<=', now()->subMinutes(2));
                         });
                 })
+                ->when(! $identityGuardSupported, fn ($query) => $query->whereIn('operation', ['test_connection', 'telemetry']))
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->limit(20)
@@ -61,12 +67,21 @@ class SiteAgentController extends Controller
             return $rows
                 ->where('status', 'claimed')
                 ->where('attempts', '<=', 5)
-                ->map(fn (SiteAgentCommand $command): array => [
-                    'id' => $command->id,
-                    'operation' => $command->operation,
-                    'router_id' => $command->router_id,
-                    'payload' => $command->payload,
-                ])
+                ->map(function (SiteAgentCommand $command) use ($agent): array {
+                    $router = $this->routerForAgent($agent, $command);
+
+                    return [
+                        'id' => $command->id,
+                        'operation' => $command->operation,
+                        'router_id' => $command->router_id,
+                        'payload' => $command->payload,
+                        'expected_identity' => [
+                            'verified' => (bool) $router->identity_verified_at,
+                            'hardware_model' => $router->hardware_model,
+                            'serial_number' => $router->serial_number,
+                        ],
+                    ];
+                })
                 ->values()
                 ->all();
         });
@@ -74,7 +89,12 @@ class SiteAgentController extends Controller
         return response()->json(['commands' => $commands]);
     }
 
-    public function complete(Request $request, int $command): JsonResponse
+    public function complete(
+        Request $request,
+        int $command,
+        RouterIdentityEnrollmentService $enrollmentService,
+        RouterIdentityService $identityService,
+    ): JsonResponse
     {
         $validated = $request->validate([
             'success' => ['required', 'boolean'],
@@ -85,12 +105,17 @@ class SiteAgentController extends Controller
             'telemetry.active_users' => ['required_with:telemetry', 'integer', 'min:0'],
             'telemetry.uptime' => ['required_with:telemetry', 'string', 'max:64'],
             'result' => ['sometimes', 'nullable', 'array'],
-            'result.mac_address' => ['required_with:result', 'regex:/^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/'],
+            'result.mac_address' => ['nullable', 'regex:/^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/'],
+            'result.hardware_model' => ['sometimes', 'string', 'max:255'],
+            'result.serial_number' => ['sometimes', 'string', 'max:255'],
+            'result.routeros_version' => ['sometimes', 'string', 'max:64'],
+            'result.system_identity' => ['sometimes', 'string', 'max:255'],
+            'result.identity_state' => ['sometimes', 'in:verified,unverified,mismatch'],
         ]);
         /** @var SiteAgent $agent */
         $agent = $request->attributes->get('site_agent');
 
-        $result = DB::transaction(function () use ($agent, $command, $validated): array {
+        $result = DB::transaction(function () use ($agent, $command, $validated, $enrollmentService, $identityService): array {
             $job = SiteAgentCommand::query()
                 ->where('site_agent_id', $agent->id)
                 ->lockForUpdate()
@@ -119,11 +144,57 @@ class SiteAgentController extends Controller
                 return ['duplicate' => false, 'status' => $job->status];
             }
 
+            $router = $this->routerForAgent($agent, $job);
+            $observedIdentity = $validated['result'] ?? [];
+            $identityState = $observedIdentity['identity_state'] ?? null;
+            $identityMatches = (bool) $router->identity_verified_at
+                && $identityState === 'verified'
+                && $identityService->matches($observedIdentity, [
+                    'hardware_model' => $router->hardware_model,
+                    'serial_number' => $router->serial_number,
+                ]);
+            if (! in_array($job->operation, ['test_connection', 'enroll_identity', 'telemetry'], true)
+                && ! $identityMatches) {
+                $job->update([
+                    'status' => 'failed',
+                    'completed_at' => now(),
+                    'claimed_at' => null,
+                    'failure_reason' => $identityState === 'mismatch' || $router->identity_verified_at
+                        ? 'Router identity mismatch; write operation was blocked.'
+                        : 'Router identity is unverified; write operation was blocked.',
+                    'result' => $observedIdentity,
+                ]);
+                if (in_array($job->operation, ['ban_mac', 'unban_mac'], true)) {
+                    $this->markDeviceActionFailed($job, $job->failure_reason);
+                }
+                app(\App\Services\SiteAgentCommandService::class)->testConnection($router);
+
+                return ['duplicate' => false, 'status' => 'failed', 'identity_required' => true];
+            }
+
+            if ($job->operation === 'enroll_identity') {
+                $identity = $validated['result'] ?? [];
+                abort_unless(
+                    filled($identity['hardware_model'] ?? null) && filled($identity['serial_number'] ?? null),
+                    422,
+                    'Identity enrollment did not include both the board name and serial number.',
+                );
+                $router = $enrollmentService->enroll($router, $identity);
+                $router->update([
+                    'status' => 'online',
+                    'last_seen_at' => now(),
+                ]);
+                AuditLog::record('router.identity_enrolled', $router, [
+                    'hardware_model' => $router->hardware_model,
+                ]);
+            }
+
             $job->update([
                 'status' => 'completed',
                 'completed_at' => now(),
                 'claimed_at' => null,
                 'failure_reason' => null,
+                'result' => $validated['result'] ?? null,
             ]);
 
             if ($job->operation === 'telemetry') {
@@ -138,10 +209,19 @@ class SiteAgentController extends Controller
                     'uptime' => $validated['telemetry']['uptime'],
                 ]);
             } elseif ($job->operation === 'test_connection') {
-                $this->routerForAgent($agent, $job)->update([
-                    'status' => 'online',
-                    'last_seen_at' => now(),
-                ]);
+                $observed = $validated['result'] ?? [];
+                $actualIdentityState = $identityService->status($router, $observed);
+                if ($identityState !== $actualIdentityState || $actualIdentityState === 'mismatch') {
+                    $job->update([
+                        'status' => 'failed',
+                        'failure_reason' => 'Router identity mismatch; write operations remain blocked.',
+                    ]);
+                } elseif ($actualIdentityState === 'verified') {
+                    $router->update([
+                        'status' => 'online',
+                        'last_seen_at' => now(),
+                    ]);
+                }
             } elseif ($job->operation === 'expire_user') {
                 $sessionStatus = $job->payload['session_status'] ?? 'expired';
                 abort_unless(in_array($sessionStatus, ['expired', 'disconnected'], true), 422, 'Invalid session status in revocation command.');
@@ -223,7 +303,7 @@ class SiteAgentController extends Controller
                 app(ProvisioningWatchdog::class)->markProvisioned($job);
             }
 
-            return ['duplicate' => false, 'status' => 'completed'];
+            return ['duplicate' => false, 'status' => $job->status];
         });
 
         return response()->json($result);

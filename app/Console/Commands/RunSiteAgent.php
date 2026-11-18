@@ -23,7 +23,10 @@ class RunSiteAgent extends Command
             return self::FAILURE;
         }
 
-        $http = Http::acceptJson()->withToken($token)->timeout(30);
+        $http = Http::acceptJson()
+            ->withToken($token)
+            ->withHeaders(['X-Site-Agent-Version' => '2'])
+            ->timeout(30);
         $this->components->info('Site agent connected; polling for router commands.');
 
         while (true) {
@@ -63,6 +66,7 @@ class RunSiteAgent extends Command
                 (int) ($command['router_id'] ?? 0),
                 $operation,
                 is_array($command['payload'] ?? null) ? $command['payload'] : [],
+                is_array($command['expected_identity'] ?? null) ? $command['expected_identity'] : null,
             );
             $success = true;
         } catch (Throwable) {

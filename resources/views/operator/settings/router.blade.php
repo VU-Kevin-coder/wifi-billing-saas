@@ -123,10 +123,10 @@
                                     <input type="number" 
                                            id="mikrotik_port" 
                                            name="mikrotik_port" 
-                                           value="{{ old('mikrotik_port', $tenant->mikrotik_port ?? 8728) }}"
-                                           placeholder="8728"
+                                           value="{{ old('mikrotik_port', $tenant->mikrotik_port ?? config('services.mikrotik.api_port')) }}"
+                                           placeholder="8729"
                                            class="w-full rounded-xl border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
-                                    <p class="text-xs text-gray-400 mt-1">Standard RouterOS API port is <strong>8728</strong> (or <strong>8729</strong> for SSL/TLS).</p>
+                                    <p class="text-xs text-gray-400 mt-1">Use API-SSL (<strong>8729</strong> or a custom TLS port). Plaintext API on <strong>8728</strong> is blocked.</p>
                                     @error('mikrotik_port')
                                         <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
                                     @enderror
@@ -339,7 +339,7 @@
                             <li><strong>4. Import it in WinBox or RouterOS Terminal</strong>, then use <em>Test LAN API</em> on that router's page.</li>
                             <li><strong>If import stops partway:</strong> inspect <code class="rounded bg-gray-100 px-1">/log print</code>. Do not blindly rerun; inspect completed commands and restore the backup if needed. Restoring may reboot the router.</li>
                         </ol>
-                        <p class="mt-4 text-xs text-amber-700">The generated script source-restricts API access; without a management subnet, it creates the user but leaves the API service disabled. Port 8728 is unencrypted; use it only on a trusted network. Port 8729 selects API-SSL.</p>
+                        <p class="mt-4 text-xs text-amber-700">The generated script source-restricts API access; without a management subnet, it creates the user but leaves the API service disabled. Use API-SSL (port 8729 or a custom TLS port); plaintext API on 8728 is blocked by the application.</p>
                     </div>
                     <!-- Security & Architecture Card -->
                     <div class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-5">

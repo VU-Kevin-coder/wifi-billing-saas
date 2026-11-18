@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\SiteAgentRouterService;
+use App\Services\RouterIdentityService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
 use App\Support\DataLimit;
@@ -155,6 +156,7 @@ class DataLimitEnforcementTest extends TestCase
     {
         // The MikroTik facade is mocked; this opt-in is scoped to this test.
         config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
+        $this->mockVerifiedRouterIdentity();
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getUser')->once()->with('VOUCHER-1')->andReturn(null);
         $hotspot->shouldReceive('createUser')->once()->with(Mockery::on(
@@ -165,7 +167,7 @@ class DataLimitEnforcementTest extends TestCase
 
         app(SiteAgentRouterService::class)->execute(7, 'provision_user', [
             'username' => 'VOUCHER-1', 'limit_bytes_total' => 1073741824,
-        ]);
+        ], $this->expectedIdentity());
 
         $this->addToAssertionCount(1);
     }
@@ -174,14 +176,35 @@ class DataLimitEnforcementTest extends TestCase
     {
         // The MikroTik facade is mocked; this opt-in is scoped to this test.
         config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => ['host' => '10.0.0.1', 'username' => 'api', 'password' => 'secret']]);
+        $this->mockVerifiedRouterIdentity();
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getUser')->andReturn(null);
         $hotspot->shouldReceive('createUser')->once()->with(Mockery::on(fn (array $data) => ! array_key_exists('limit-bytes-total', $data)));
         MikroTik::shouldReceive('router')->once()->with('site-agent-router-7')->andReturnSelf();
         MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
 
-        app(SiteAgentRouterService::class)->execute(7, 'provision_user', ['username' => 'VOUCHER-2', 'limit_bytes_total' => null]);
+        app(SiteAgentRouterService::class)->execute(7, 'provision_user', ['username' => 'VOUCHER-2', 'limit_bytes_total' => null], $this->expectedIdentity());
 
         $this->addToAssertionCount(1);
+    }
+
+    private function mockVerifiedRouterIdentity(): void
+    {
+        $identity = Mockery::mock(RouterIdentityService::class);
+        $identity->shouldReceive('inspect')->once()->with('site-agent-router-7')->andReturn([
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
+        ]);
+        $identity->shouldReceive('statusForExpected')->once()->andReturn('verified');
+        app()->instance(RouterIdentityService::class, $identity);
+    }
+
+    private function expectedIdentity(): array
+    {
+        return [
+            'verified' => true,
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
+        ];
     }
 }

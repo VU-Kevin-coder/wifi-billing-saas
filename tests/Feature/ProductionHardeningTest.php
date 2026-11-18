@@ -130,6 +130,15 @@ class ProductionHardeningTest extends TestCase
         $this->assertStringNotContainsString('evilfreelancer/docker-routeros:latest', $compose);
         $this->assertStringContainsString('127.0.0.1:8728:8728', $compose);
         $this->assertStringContainsString('127.0.0.1:2222:22', $compose);
+        $this->assertSame(
+            3,
+            substr_count($compose, 'REDIS_PASSWORD: ${REDIS_PASSWORD:-local_dev_redis_password_change_me}'),
+            'App, scheduler, and Redis must use the same local Redis password.',
+        );
+        $this->assertStringContainsString('redis-cli --no-auth-warning -a', $compose);
+        $this->assertStringContainsString('$$REDIS_PASSWORD', $compose);
+        $this->assertStringContainsString('ping | grep -q PONG', $compose);
+        $this->assertStringContainsString('--requirepass "$$REDIS_PASSWORD"', $compose);
     }
 
     public function test_web_container_no_longer_hosts_the_scheduler(): void

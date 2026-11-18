@@ -9,7 +9,30 @@
 
     <div class="min-h-screen bg-gray-50 py-8">
         <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8"
-             x-data="{ testing: false, testResult: null, requestingTelemetry: false, telemetryResult: null }">
+             x-data="{
+                testing: false,
+                testResult: null,
+                enrollingIdentity: false,
+                requestingTelemetry: false,
+                telemetryResult: null,
+                async enrollRouter() {
+                    this.enrollingIdentity = true;
+                    try {
+                        const data = await window.apiFetch('{{ route('operator.routers.identity.enroll', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                            method: 'POST',
+                            feedback: false,
+                        });
+                        this.testResult = data;
+                        window.toast[data.queued ? 'info' : (data.ok ? 'success' : 'error')](data.message);
+                        if (data.identity_verified) window.location.reload();
+                    } catch (error) {
+                        this.testResult = { ok: false, message: error.message || 'Router identity enrollment failed.' };
+                        window.toast.error(this.testResult.message);
+                    } finally {
+                        this.enrollingIdentity = false;
+                    }
+                }
+             }">
             @if(session('status'))
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
                     {{ session('status') }}
@@ -30,7 +53,7 @@
                     <p class="text-sm text-gray-500">
                         {{ $router->management_ip ?: 'No management host configured' }}
                         <span aria-hidden="true">·</span>
-                        {{ $router->hardware_model ?: 'Unknown model' }}
+                        {{ $router->identity_verified_at ? $router->hardware_model : 'Identity not enrolled' }}
                     </p>
                 </div>
                 <div class="flex gap-2">
@@ -146,6 +169,18 @@
                             <dd class="break-all text-right text-sm font-medium text-gray-900">{{ $router->api_username ?: '—' }}</dd>
                         </div>
                         <div class="flex justify-between gap-4 py-3">
+                            <dt class="text-sm text-gray-500">Verified hardware model</dt>
+                            <dd class="text-right text-sm font-medium text-gray-900">{{ $router->identity_verified_at ? $router->hardware_model : 'Unverified' }}</dd>
+                        </div>
+                        <div class="flex justify-between gap-4 py-3">
+                            <dt class="text-sm text-gray-500">Verified serial / system ID</dt>
+                            <dd class="break-all text-right font-mono text-sm font-medium text-gray-900">{{ $router->identity_verified_at ? $router->serial_number : 'Unverified' }}</dd>
+                        </div>
+                        <div class="flex justify-between gap-4 py-3">
+                            <dt class="text-sm text-gray-500">Identity enrollment</dt>
+                            <dd class="text-right text-sm font-medium text-gray-900">{{ $router->identity_verified_at?->diffForHumans() ?? 'Required before writes' }}</dd>
+                        </div>
+                        <div class="flex justify-between gap-4 py-3">
                             <dt class="text-sm text-gray-500">Site</dt>
                             <dd class="text-right text-sm font-medium text-gray-900">{{ $assignedSite?->name ?? $router->getRawOriginal('site') ?? 'Unassigned' }}</dd>
                         </div>
@@ -181,10 +216,53 @@
                                 @endif
                             </p>
                         @endif
+                        @if(($latestConnectionTest?->result['identity_state'] ?? null) === 'mismatch')
+                            <div class="mb-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800" role="alert">
+                                The detected router does not match its enrolled model and serial. Writes are blocked; verify the router and its TLS certificate.
+                            </div>
+                        @endif
                         <div x-cloak x-show="testResult" role="status" aria-live="polite"
                              :class="testResult && testResult.ok ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'"
                              class="mb-4 rounded-lg border p-3 text-sm"
                              x-text="testResult ? testResult.message : ''"></div>
+                        <div x-cloak x-show="testResult && testResult.enrollment_required"
+                             class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+                            <p class="font-semibold">Router identity unverified.</p>
+                            <p class="mt-1">
+                                Detected Model: <span class="font-mono" x-text="testResult && testResult.router_identity ? (testResult.router_identity.hardware_model || 'Unavailable') : 'Unavailable'"></span>,
+                                Serial: <span class="font-mono" x-text="testResult && testResult.router_identity ? (testResult.router_identity.serial_number || 'Unavailable') : 'Unavailable'"></span>.
+                                Click to enroll and authorize this identity.
+                            </p>
+                            <button type="button"
+                                    @click="enrollRouter()"
+                                    x-show="testResult && testResult.router_identity && testResult.router_identity.hardware_model && testResult.router_identity.serial_number"
+                                    :disabled="enrollingIdentity"
+                                    class="mt-3 rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-60">
+                                <span x-text="enrollingIdentity ? 'Enrolling...' : 'Enroll Router'">Enroll Router</span>
+                            </button>
+                        </div>
+                        <div x-cloak x-show="testResult && testResult.identity_status === 'mismatch'"
+                             class="mb-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800" role="alert">
+                            The detected router does not match its enrolled model and serial. Writes are blocked; do not re-enroll it here.
+                        </div>
+                        @if(!$router->identity_verified_at && filled($latestConnectionTest?->result['hardware_model'] ?? null))
+                            <div class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+                                <p class="font-semibold">Router identity unverified.</p>
+                                <p class="mt-1">
+                                    Detected Model: <span class="font-mono">{{ $latestConnectionTest->result['hardware_model'] }}</span>,
+                                    Serial: <span class="font-mono">{{ $latestConnectionTest->result['serial_number'] ?? 'Unavailable' }}</span>.
+                                    Click to enroll and authorize this identity.
+                                </p>
+                                @if(filled($latestConnectionTest->result['serial_number'] ?? null))
+                                    <button type="button"
+                                            @click="enrollRouter()"
+                                            :disabled="enrollingIdentity"
+                                            class="mt-3 rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-60">
+                                        <span x-text="enrollingIdentity ? 'Enrolling...' : 'Enroll Router'">Enroll Router</span>
+                                    </button>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                     <button type="button"
                             @click="
@@ -196,7 +274,7 @@
                                 })
                                 .then(data => {
                                     testResult = data;
-                                    window.toast[data.ok ? 'success' : 'error'](data.message);
+                                    window.toast[data.ok && data.identity_status !== 'mismatch' ? 'success' : 'error'](data.message);
                                 })
                                 .catch(error => {
                                     testResult = { ok: false, message: error.message || 'The connection test could not be completed.' };

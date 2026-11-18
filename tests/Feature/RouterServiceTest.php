@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Tenant;
 use App\Services\HotspotProfileSynchronizer;
 use App\Services\RouterService;
+use App\Services\RouterIdentityService;
 use App\Services\SiteAgentRouterService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
 use Tests\TestCase;
 use ZillEAli\MikrotikLaravel\Connections\RouterosClient;
@@ -15,6 +17,8 @@ use ZillEAli\MikrotikLaravel\Testing\MikrotikFake;
 
 class RouterServiceTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -25,27 +29,72 @@ class RouterServiceTest extends TestCase
         ]);
     }
 
-    public function test_it_creates_a_hotspot_user_on_the_router()
+    public function test_legacy_direct_write_requires_a_verified_router_record()
     {
-        // 1. Set up the fake to expect a call to '/ip/hotspot/user/add'
-        $fake = MikrotikFake::fake([
-            '/ip/hotspot/user/add' => [], // Return an empty success response
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Legacy direct router writes require an enrolled router record');
+
+        (new RouterService($this->syntheticTenant()))->createHotspotUser('KL-TEST-1234', 'Daily-Express');
+    }
+
+    public function test_site_agent_write_without_enrolled_identity_does_not_mutate_router(): void
+    {
+        config([
+            'site_agent.routers.42' => [
+                'host' => '192.0.2.42',
+                'username' => 'agent',
+                'password' => 'local-secret',
+                'port' => 8729,
+            ],
         ]);
+        $fake = MikrotikFake::fake();
 
-        // 2. Call our service
-        $service = new RouterService($this->syntheticTenant());
-        $service->createHotspotUser('KL-TEST-1234', 'Daily-Express');
+        $result = (new SiteAgentRouterService(new HotspotProfileSynchronizer))
+            ->execute(42, 'provision_user', ['username' => 'voucher-1']);
 
-        // 3. Assert that the fake router was actually queried with the right command
-        $fake->assertQueried('/ip/hotspot/user/add');
-        $this->assertTrue(config('mikrotik.routers.synthetic-router.ssl'));
-        $this->assertTrue(config('mikrotik.routers.synthetic-router.verify_peer'));
+        $this->assertSame('unverified', $result['identity_state']);
+        $fake->assertNotQueried('/ip/hotspot/user/add');
+        $fake->assertNotQueried('/ip/hotspot/user/print');
+        $this->assertTrue(config('mikrotik.routers.site-agent-router-42.ssl'));
+        $this->assertTrue(config('mikrotik.routers.site-agent-router-42.verify_peer'));
+    }
+
+    public function test_chr_identity_falls_back_to_license_system_id_when_routerboard_serial_is_unavailable(): void
+    {
+        config([
+            'site_agent.routers.42' => [
+                'host' => '192.0.2.42',
+                'username' => 'agent',
+                'password' => 'local-secret',
+                'port' => 8729,
+            ],
+        ]);
+        $client = new SiteAgentTestRouterosClient([
+            '/system/resource/print' => [['board-name' => 'CHR', 'version' => '7.24.6']],
+            '/system/identity/print' => [['name' => 'test-router']],
+        ], [
+            '/system/routerboard/print' => ['!trap', '=message=not supported', '!done'],
+            '/system/license/print' => ['!re', '=system-id=CHR-123', '', '!done'],
+        ]);
+        $manager = new SiteAgentTestMikrotikManager($client);
+        app()->instance(MikrotikManager::class, $manager);
+        app()->instance('mikrotik', $manager);
+        MikroTik::clearResolvedInstance();
+
+        $identity = app(RouterIdentityService::class)->inspect('site-agent-router-42');
+
+        $this->assertSame('CHR', $identity['hardware_model']);
+        $this->assertSame('CHR-123', $identity['serial_number']);
+        $this->assertSame('7.24.6', $identity['routeros_version']);
     }
 
     public function test_it_fetches_active_sessions()
     {
         // 1. Set up the fake to return some dummy session data
         $fake = MikrotikFake::fake([
+            '/system/resource/print' => [['board-name' => 'CHR', 'version' => '7.24.6']],
+            '/system/routerboard/print' => [['serial-number' => 'TEST-SERIAL']],
+            '/system/identity/print' => [['name' => 'test-router']],
             '/ip/hotspot/active/print' => [
                 ['name' => 'user1', 'address' => '10.0.0.1'],
                 ['name' => 'user2', 'address' => '10.0.0.2'],
@@ -136,11 +185,17 @@ class RouterServiceTest extends TestCase
             '/ip/hotspot/ip-binding/add' => [],
             '/ip/hotspot/active/remove' => [],
         ]);
+        $this->mockVerifiedRouterIdentity();
 
         $result = (new SiteAgentRouterService(new HotspotProfileSynchronizer))
-            ->execute(42, 'ban_mac', ['username' => 'voucher-1']);
+            ->execute(42, 'ban_mac', ['username' => 'voucher-1'], $this->expectedIdentity());
 
-        $this->assertSame(['mac_address' => 'AA:BB:CC:DD:EE:FF'], $result);
+        $this->assertSame([
+            'mac_address' => 'AA:BB:CC:DD:EE:FF',
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
+            'identity_state' => 'verified',
+        ], $result);
         $fake->assertQueried('/ip/hotspot/ip-binding/add');
         $fake->assertQueried('/ip/hotspot/active/remove');
     }
@@ -162,11 +217,12 @@ class RouterServiceTest extends TestCase
             ],
         ]);
 
+        $this->mockVerifiedRouterIdentity();
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('multiple devices');
 
         (new SiteAgentRouterService(new HotspotProfileSynchronizer))
-            ->execute(42, 'ban_mac', ['username' => 'voucher-1']);
+            ->execute(42, 'ban_mac', ['username' => 'voucher-1'], $this->expectedIdentity());
     }
 
     public function test_site_agent_unban_removes_existing_blocked_ip_binding(): void
@@ -193,10 +249,36 @@ class RouterServiceTest extends TestCase
         app()->instance(MikrotikManager::class, $manager);
         app()->instance('mikrotik', $manager);
         MikroTik::clearResolvedInstance();
+        $this->mockVerifiedRouterIdentity();
 
-        $this->assertNull((new SiteAgentRouterService(new HotspotProfileSynchronizer))
-            ->execute(42, 'unban_mac', ['mac_address' => 'AA:BB:CC:DD:EE:FF']));
+        $result = (new SiteAgentRouterService(new HotspotProfileSynchronizer))
+            ->execute(42, 'unban_mac', ['mac_address' => 'AA:BB:CC:DD:EE:FF'], $this->expectedIdentity());
+        $this->assertSame([
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
+            'identity_state' => 'verified',
+        ], $result);
         $this->assertContains('/ip/hotspot/ip-binding/remove', $client->recordedQueries());
+    }
+
+    private function mockVerifiedRouterIdentity(): void
+    {
+        $identity = \Mockery::mock(RouterIdentityService::class);
+        $identity->shouldReceive('inspect')->once()->with('site-agent-router-42')->andReturn([
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
+        ]);
+        $identity->shouldReceive('statusForExpected')->once()->andReturn('verified');
+        app()->instance(RouterIdentityService::class, $identity);
+    }
+
+    private function expectedIdentity(): array
+    {
+        return [
+            'verified' => true,
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
+        ];
     }
 }
 

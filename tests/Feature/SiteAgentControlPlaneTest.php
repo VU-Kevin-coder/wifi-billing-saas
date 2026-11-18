@@ -223,13 +223,13 @@ class SiteAgentControlPlaneTest extends TestCase
     public function test_paired_agent_can_poll_and_acknowledge_provision_and_expiry(): void
     {
         config(['site_agent.required' => true]);
-        [$tenant, , , $agent, $voucher] = $this->createSiteSetup();
+        [$tenant, , $router, $agent, $voucher] = $this->createSiteSetup();
         $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
             ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
         $token = 'one-time-site-token';
         $agent->update(['token_hash' => hash('sha256', $token)]);
 
-        $this->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/site-agent/commands')
+        $this->withHeader('X-Site-Agent-Version', '2')->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/site-agent/commands')
             ->assertOk()
             ->assertJsonPath('commands.0.operation', 'provision_user')
             ->assertJsonPath('commands.0.payload.username', $voucher->code);
@@ -238,6 +238,11 @@ class SiteAgentControlPlaneTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)->postJson("/api/site-agent/commands/{$command->id}/complete", [
             'success' => true,
+            'result' => [
+                'hardware_model' => $router->hardware_model,
+                'serial_number' => $router->serial_number,
+                'identity_state' => 'verified',
+            ],
         ])->assertOk()->assertJsonPath('status', 'completed');
         $this->assertSame('active', Session::withoutTenancy()->findOrFail($session->id)->status);
 
@@ -246,11 +251,16 @@ class SiteAgentControlPlaneTest extends TestCase
         $expiry = SiteAgentCommand::query()->where('operation', 'expire_user')->firstOrFail();
         $this->assertSame('pending', $expiry->status);
 
-        $this->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/site-agent/commands')
+        $this->withHeader('X-Site-Agent-Version', '2')->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/site-agent/commands')
             ->assertOk()
             ->assertJsonPath('commands.0.operation', 'expire_user');
         $this->withHeader('Authorization', 'Bearer '.$token)->postJson("/api/site-agent/commands/{$expiry->id}/complete", [
             'success' => true,
+            'result' => [
+                'hardware_model' => $router->hardware_model,
+                'serial_number' => $router->serial_number,
+                'identity_state' => 'verified',
+            ],
         ])->assertOk()->assertJsonPath('status', 'completed');
 
         $this->assertSame('expired', Session::withoutTenancy()->findOrFail($session->id)->status);
@@ -259,7 +269,7 @@ class SiteAgentControlPlaneTest extends TestCase
     public function test_manual_session_disconnect_voids_voucher_and_waits_for_router_confirmation(): void
     {
         config(['site_agent.required' => true]);
-        [$tenant, , , $agent, $voucher] = $this->createSiteSetup();
+        [$tenant, , $router, $agent, $voucher] = $this->createSiteSetup();
         $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)
             ->activate($tenant, $voucher, Request::create('/'), '0771234567'));
         $operator = User::factory()->create(['tenant_id' => $tenant->id]);
@@ -280,10 +290,18 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertSame('disconnected', $command->payload['session_status']);
 
         $this->withHeader('Authorization', 'Bearer manual-disconnect-token')
+            ->withHeader('X-Site-Agent-Version', '2')
             ->getJson('/api/site-agent/commands')
             ->assertOk();
         $this->withHeader('Authorization', 'Bearer manual-disconnect-token')
-            ->postJson("/api/site-agent/commands/{$command->id}/complete", ['success' => true])
+            ->postJson("/api/site-agent/commands/{$command->id}/complete", [
+                'success' => true,
+                'result' => [
+                    'hardware_model' => $router->hardware_model,
+                    'serial_number' => $router->serial_number,
+                    'identity_state' => 'verified',
+                ],
+            ])
             ->assertOk()
             ->assertJsonPath('status', 'completed');
 
@@ -314,12 +332,18 @@ class SiteAgentControlPlaneTest extends TestCase
         $this->assertSame($router->id, $command->router_id);
 
         $this->withHeader('Authorization', 'Bearer mac-ban-token')
+            ->withHeader('X-Site-Agent-Version', '2')
             ->getJson('/api/site-agent/commands')
             ->assertOk();
         $this->withHeader('Authorization', 'Bearer mac-ban-token')
             ->postJson("/api/site-agent/commands/{$command->id}/complete", [
                 'success' => true,
-                'result' => ['mac_address' => 'AA:BB:CC:DD:EE:FF'],
+                'result' => [
+                    'mac_address' => 'AA:BB:CC:DD:EE:FF',
+                    'hardware_model' => $router->hardware_model,
+                    'serial_number' => $router->serial_number,
+                    'identity_state' => 'verified',
+                ],
             ])
             ->assertOk()
             ->assertJsonPath('status', 'completed');
@@ -465,13 +489,21 @@ class SiteAgentControlPlaneTest extends TestCase
             ->assertSee('Pending — awaiting site-agent result');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
+            ->withHeader('X-Site-Agent-Version', '2')
             ->getJson('/api/site-agent/commands')
             ->assertOk()
             ->assertJsonPath('commands.0.operation', 'sync_profile')
             ->assertJsonPath('commands.0.payload.profiles.0.rate-limit', '10M/10M');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson("/api/site-agent/commands/{$command->id}/complete", ['success' => true])
+            ->postJson("/api/site-agent/commands/{$command->id}/complete", [
+                'success' => true,
+                'result' => [
+                    'hardware_model' => $router->hardware_model,
+                    'serial_number' => $router->serial_number,
+                    'identity_state' => 'verified',
+                ],
+            ])
             ->assertOk()
             ->assertJsonPath('status', 'completed');
         $this->assertSame('offline', $router->fresh()->status);
@@ -492,6 +524,7 @@ class SiteAgentControlPlaneTest extends TestCase
             ->assertRedirect();
         $command = SiteAgentCommand::query()->where('operation', 'sync_profile')->sole();
         $this->withHeader('Authorization', 'Bearer failed-profile-token')
+            ->withHeader('X-Site-Agent-Version', '2')
             ->getJson('/api/site-agent/commands')
             ->assertOk();
         $command->forceFill(['attempts' => 5])->save();
@@ -553,15 +586,86 @@ class SiteAgentControlPlaneTest extends TestCase
         $command = SiteAgentCommand::query()->where('operation', 'test_connection')->sole();
         $this->assertSame('offline', $router->fresh()->status);
         $this->withHeader('Authorization', 'Bearer '.$token)
+            ->withHeader('X-Site-Agent-Version', '2')
             ->getJson('/api/site-agent/commands')
             ->assertOk()
             ->assertJsonPath('commands.0.operation', 'test_connection');
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson("/api/site-agent/commands/{$command->id}/complete", ['success' => true])
+            ->postJson("/api/site-agent/commands/{$command->id}/complete", [
+                'success' => true,
+                'result' => [
+                    'hardware_model' => $router->hardware_model,
+                    'serial_number' => $router->serial_number,
+                    'identity_state' => 'verified',
+                ],
+            ])
             ->assertOk()
             ->assertJsonPath('status', 'completed');
         $this->assertSame('online', $router->fresh()->status);
         $this->assertNotNull($router->fresh()->last_seen_at);
+    }
+
+    public function test_unverified_router_write_is_given_only_to_identity_aware_agent(): void
+    {
+        config(['site_agent.required' => true]);
+        [, , $router, $agent] = $this->createSiteSetup();
+        $router->forceFill([
+            'hardware_model' => null,
+            'serial_number' => null,
+            'identity_verified_at' => null,
+        ])->saveOrFail();
+
+        $command = app(\App\Services\SiteAgentCommandService::class)->syncProfiles($router);
+        $token = 'identity-aware-agent-token';
+        $agent->update(['token_hash' => hash('sha256', $token)]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->withHeader('X-Site-Agent-Version', '2')
+            ->getJson('/api/site-agent/commands')
+            ->assertOk()
+            ->assertJsonPath('commands.0.operation', 'sync_profile')
+            ->assertJsonPath('commands.0.expected_identity.verified', false);
+        $this->assertSame('claimed', $command->fresh()->status);
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson("/api/site-agent/commands/{$command->id}/complete", [
+                'success' => true,
+                'result' => [
+                    'hardware_model' => 'CHR',
+                    'serial_number' => 'DETECTED-CHR-SERIAL',
+                    'identity_state' => 'unverified',
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('status', 'failed')
+            ->assertJsonPath('identity_required', true);
+        $this->assertSame('failed', $command->fresh()->status);
+        $this->assertSame('test_connection', SiteAgentCommand::query()
+            ->where('operation', 'test_connection')
+            ->sole()
+            ->operation);
+    }
+
+    public function test_agent_without_identity_guard_version_never_receives_write_commands(): void
+    {
+        config(['site_agent.required' => true]);
+        [, , $router, $agent] = $this->createSiteSetup();
+        SiteAgentCommand::create([
+            'site_agent_id' => $agent->id,
+            'tenant_id' => $router->tenant_id,
+            'router_id' => $router->id,
+            'operation' => 'sync_profile',
+            'payload' => ['profiles' => []],
+            'status' => 'pending',
+        ]);
+        $token = 'old-site-agent-token';
+        $agent->update(['token_hash' => hash('sha256', $token)]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/site-agent/commands')
+            ->assertOk()
+            ->assertJsonPath('commands', []);
+
+        $this->assertSame('pending', SiteAgentCommand::query()->sole()->status);
     }
 
     public function test_agent_telemetry_reports_router_metrics_and_drives_health_status(): void
@@ -581,6 +685,7 @@ class SiteAgentControlPlaneTest extends TestCase
 
         $command = SiteAgentCommand::query()->where('operation', 'telemetry')->sole();
         $this->withHeader('Authorization', 'Bearer '.$token)
+            ->withHeader('X-Site-Agent-Version', '2')
             ->getJson('/api/site-agent/commands')
             ->assertOk()
             ->assertJsonPath('commands.0.operation', 'telemetry');
@@ -683,7 +788,10 @@ class SiteAgentControlPlaneTest extends TestCase
             'site_id' => $site->id,
             'name' => 'North Router',
             'status' => 'online',
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-CHR-'.$tenant->id,
         ]);
+        $router->forceFill(['identity_verified_at' => now()])->saveOrFail();
         $agent = SiteAgent::create([
             'tenant_id' => $tenant->id,
             'site_id' => $site->id,

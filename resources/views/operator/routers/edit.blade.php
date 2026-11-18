@@ -39,10 +39,8 @@
                             <input id="name" name="name" required maxlength="255" value="{{ old('name', $router->name) }}"
                                    class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
-                        <div>
-                            <label for="serial_number" class="mb-1 block text-sm font-medium text-gray-700">Serial number</label>
-                            <input id="serial_number" name="serial_number" maxlength="255" value="{{ old('serial_number', $router->serial_number) }}"
-                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <div class="sm:col-span-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                            Router model and serial are enrolled from a read-only RouterOS API response and cannot be edited here.
                         </div>
                         <div>
                             <label for="site_id" class="mb-1 block text-sm font-medium text-gray-700">Operating site</label>
@@ -52,11 +50,6 @@
                                     <option value="{{ $site->id }}" @selected(old('site_id', $router->site_id) == $site->id)>{{ $site->name }}</option>
                                 @endforeach
                             </select>
-                        </div>
-                        <div>
-                            <label for="hardware_model" class="mb-1 block text-sm font-medium text-gray-700">Hardware model</label>
-                            <input id="hardware_model" name="hardware_model" maxlength="255" value="{{ old('hardware_model', $router->hardware_model) }}"
-                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
                         <div>
                             <label for="management_ip" class="mb-1 block text-sm font-medium text-gray-700">Management IP / hostname</label>
@@ -76,6 +69,7 @@
                             <label for="api_port" class="mb-1 block text-sm font-medium text-gray-700">API port</label>
                             <input id="api_port" name="api_port" type="number" min="1" max="65535" required value="{{ old('api_port', $router->api_port ?: config('services.mikrotik.api_port')) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <p class="mt-1 text-xs text-gray-500">Use API-SSL (8729 or a custom TLS port). Plaintext API on 8728 is blocked.</p>
                         </div>
                         <div>
                             <label for="api_username" class="mb-1 block text-sm font-medium text-gray-700">API username</label>

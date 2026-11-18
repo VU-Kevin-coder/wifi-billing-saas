@@ -107,7 +107,10 @@ class RouterProvisioningService
         $this->validateHostname((string) $baseDomain, 'Tenant base domain');
         $escapedBaseDomain = $this->escapeRouterOs((string) $baseDomain);
         $apiPort = (int) ($router->api_port ?: config('services.mikrotik.api_port'));
-        $apiService = $apiPort === 8729 ? 'api-ssl' : 'api';
+        if ($apiPort === 8728) {
+            throw new \InvalidArgumentException('Plaintext RouterOS API is blocked; configure API-SSL on port 8729 or another TLS port.');
+        }
+        $apiService = 'api-ssl';
         $idleTimeout = max(1, (int) PlatformSetting::get('hotspot.idle_timeout', 2));
         $tenantName = preg_replace('/[\r\n\x00-\x1F]/', ' ', $tenant?->name ?? 'Default');
         $gatewayWithPrefix = "{$gatewayIp}/{$prefix}";

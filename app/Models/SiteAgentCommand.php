@@ -14,6 +14,7 @@ class SiteAgentCommand extends Model
         'session_id',
         'operation',
         'payload',
+        'result',
         'status',
         'attempts',
         'claimed_at',
@@ -23,6 +24,7 @@ class SiteAgentCommand extends Model
 
     protected $casts = [
         'payload' => 'array',
+        'result' => 'array',
         'claimed_at' => 'datetime',
         'completed_at' => 'datetime',
         'attempts' => 'integer',

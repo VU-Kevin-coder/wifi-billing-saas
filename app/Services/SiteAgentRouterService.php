@@ -9,7 +9,7 @@ class SiteAgentRouterService
 {
     public function __construct(private HotspotProfileSynchronizer $profiles) {}
 
-    public function execute(int $routerId, string $operation, array $payload): ?array
+    public function execute(int $routerId, string $operation, array $payload, ?array $expectedIdentity = null): ?array
     {
         $router = config('site_agent.routers.'.$routerId);
         if (! is_array($router)
@@ -25,19 +25,25 @@ class SiteAgentRouterService
             'password' => $router['password'],
             ...RouterTransportConfig::forRouter(
                 (string) $router['host'],
-                (int) ($router['port'] ?? 8728),
+                (int) ($router['port'] ?? config('services.mikrotik.api_port')),
                 $routerId,
             ),
             'timeout' => 5,
         ]);
 
-        if ($operation === 'test_connection') {
+        if (in_array($operation, ['test_connection', 'enroll_identity'], true)) {
             $resources = MikroTik::router($key)->system()->getResources();
             if (! is_array($resources) || $resources === []) {
                 throw new RuntimeException('Router API returned no system resource data.');
             }
 
-            return null;
+            $identity = app(RouterIdentityService::class)->inspect($key, $resources);
+
+            return $operation === 'test_connection'
+                ? $identity + [
+                    'identity_state' => app(RouterIdentityService::class)->statusForExpected($identity, $expectedIdentity),
+                ]
+                : $identity;
         }
 
         if ($operation === 'telemetry') {
@@ -70,6 +76,12 @@ class SiteAgentRouterService
             ];
         }
 
+        $identityService = app(RouterIdentityService::class);
+        $identity = $identityService->inspect($key);
+        $identityState = $identityService->statusForExpected($identity, $expectedIdentity);
+        if ($identityState !== 'verified') {
+            return $identity + ['identity_state' => $identityState];
+        }
         $hotspot = MikroTik::router($key)->hotspot();
 
         if ($operation === 'ban_mac') {
@@ -133,7 +145,7 @@ class SiteAgentRouterService
 
             $this->queryRouter($key, '/ip/hotspot/active/remove', ['.id' => $hostId]);
 
-            return ['mac_address' => $macAddress];
+            return ['mac_address' => $macAddress] + $identity + ['identity_state' => 'verified'];
         }
 
         if ($operation === 'unban_mac') {
@@ -158,7 +170,7 @@ class SiteAgentRouterService
                 $this->queryRouter($key, '/ip/hotspot/ip-binding/remove', ['.id' => $bindingId]);
             }
 
-            return null;
+            return $identity + ['identity_state' => 'verified'];
         }
 
         if ($operation === 'sync_profile') {
@@ -175,7 +187,7 @@ class SiteAgentRouterService
                 $this->profiles->sync($key, $hotspot, $settings);
             }
 
-            return null;
+            return $identity + ['identity_state' => 'verified'];
         }
 
         $username = $payload['username'] ?? null;
@@ -203,7 +215,7 @@ class SiteAgentRouterService
                 $hotspot->createUser($data);
             }
 
-            return null;
+            return $identity + ['identity_state' => 'verified'];
         }
 
         if ($operation === 'expire_user') {
@@ -217,7 +229,7 @@ class SiteAgentRouterService
                 $hotspot->kickHost($username);
             }
 
-            return null;
+            return $identity + ['identity_state' => 'verified'];
         }
 
         throw new RuntimeException("Unsupported site-agent operation '{$operation}'.");

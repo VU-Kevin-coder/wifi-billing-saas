@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\SiteAgentRouterService;
+use App\Services\RouterIdentityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -23,6 +24,7 @@ class HotspotProfileSyncTest extends TestCase
             'username' => 'api',
             'password' => 'secret',
         ]]);
+        $this->mockVerifiedRouterIdentity();
         $profile = $this->profileSettings();
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getProfiles')->once()->andReturn([]);
@@ -30,7 +32,7 @@ class HotspotProfileSyncTest extends TestCase
         MikroTik::shouldReceive('router')->once()->with('site-agent-router-7')->andReturnSelf();
         MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
 
-        app(SiteAgentRouterService::class)->execute(7, 'sync_profile', ['profiles' => [$profile]]);
+        app(SiteAgentRouterService::class)->execute(7, 'sync_profile', ['profiles' => [$profile]], $this->expectedIdentity());
 
         $this->addToAssertionCount(1);
     }
@@ -43,6 +45,7 @@ class HotspotProfileSyncTest extends TestCase
             'username' => 'api',
             'password' => 'secret',
         ]]);
+        $this->mockVerifiedRouterIdentity();
         $profile = $this->profileSettings();
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getProfiles')->once()->andReturn([
@@ -59,7 +62,7 @@ class HotspotProfileSyncTest extends TestCase
         MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
         MikroTik::shouldReceive('getPool')->once()->andReturn($pool);
 
-        app(SiteAgentRouterService::class)->execute(7, 'sync_profile', ['profiles' => [$profile]]);
+        app(SiteAgentRouterService::class)->execute(7, 'sync_profile', ['profiles' => [$profile]], $this->expectedIdentity());
 
         $this->addToAssertionCount(1);
     }
@@ -72,6 +75,7 @@ class HotspotProfileSyncTest extends TestCase
             'username' => 'api',
             'password' => 'secret',
         ]]);
+        $this->mockVerifiedRouterIdentity();
         $profile = $this->profileSettings();
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getProfiles')->once()->ordered()->andReturn([]);
@@ -89,7 +93,7 @@ class HotspotProfileSyncTest extends TestCase
             'username' => 'VOUCHER-7',
             'profile' => $profile['name'],
             'profile_settings' => $profile,
-        ]);
+        ], $this->expectedIdentity());
 
         $this->addToAssertionCount(1);
     }
@@ -100,6 +104,26 @@ class HotspotProfileSyncTest extends TestCase
             'name' => 'package-7',
             'rate-limit' => '10M/10M',
             'shared-users' => 3,
+        ];
+    }
+
+    private function mockVerifiedRouterIdentity(): void
+    {
+        $identity = Mockery::mock(RouterIdentityService::class);
+        $identity->shouldReceive('inspect')->once()->with('site-agent-router-7')->andReturn([
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
+        ]);
+        $identity->shouldReceive('statusForExpected')->once()->andReturn('verified');
+        app()->instance(RouterIdentityService::class, $identity);
+    }
+
+    private function expectedIdentity(): array
+    {
+        return [
+            'verified' => true,
+            'hardware_model' => 'CHR',
+            'serial_number' => 'TEST-SERIAL',
         ];
     }
 }

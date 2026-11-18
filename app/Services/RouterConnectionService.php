@@ -41,16 +41,26 @@ class RouterConnectionService
 
         try {
             $key = $this->configureRouter($router, $host);
-            // This is deliberately read-only: it proves API reachability
-            // without changing hotspot, users, profiles or firewall rules.
-            $resource = MikroTik::router($key)->system()->getResources();
+            $client = MikroTik::router($key);
+            $resource = $client->system()->getResources();
+            $identity = app(RouterIdentityService::class)->inspect($key, $resource);
+            $identityStatus = app(RouterIdentityService::class)->status($router, $identity);
+            $identityMessage = match ($identityStatus) {
+                'verified' => '',
+                'mismatch' => ' The detected router identity does not match the enrolled device; all writes remain blocked.',
+                default => ' Router identity must be enrolled and verified before writes are allowed.',
+            };
 
             return [
                 'ok' => filled($resource),
                 'message' => filled($resource)
-                    ? 'Router API responded successfully.'
+                    ? 'Router API responded successfully.'.$identityMessage
                     : 'Router API returned no system resource data.',
                 'resource' => $resource,
+                'router_identity' => $identity,
+                'identity_status' => $identityStatus,
+                'enrollment_required' => $identityStatus === 'unverified',
+                'write_authorized' => $identityStatus === 'verified',
             ];
         } catch (\Throwable $exception) {
             // Client exceptions may contain credentials or other private data.
@@ -63,7 +73,10 @@ class RouterConnectionService
             $diagnostic = $exception instanceof RouterTransportException
                 && in_array($exception->getMessage(), $safeTransportMessages, true)
                 ? $exception->getMessage()
-                : 'Connection or authentication failed.';
+                : (str_contains(mb_strtolower($exception->getMessage()), 'certificate')
+                    || str_contains(mb_strtolower($exception->getMessage()), 'ssl')
+                    ? 'Router API-SSL certificate validation failed. Trust the matching router certificate or its CA; peer verification is required.'
+                    : 'Connection or authentication failed.');
 
             Log::warning('MikroTik LAN demo connection failed', [
                 'router_id' => $router->getKey(),
@@ -158,6 +171,26 @@ class RouterConnectionService
         return $status;
     }
 
+    public function inspectIdentity(Router $router): array
+    {
+        if (config('site_agent.required')) {
+            throw new RuntimeException('Direct router connections are disabled. Use the paired site agent.');
+        }
+
+        $host = $this->hostForRouter($router);
+        if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
+            throw new RuntimeException('Router API connection settings are incomplete.');
+        }
+
+        $key = $this->configureRouter($router, $host);
+        $resources = MikroTik::router($key)->system()->getResources();
+        if ($resources === []) {
+            throw new RuntimeException('Router API returned no system resource data.');
+        }
+
+        return app(RouterIdentityService::class)->inspect($key, $resources);
+    }
+
     public function disconnectUser(Router $router, string $voucherCode): bool
     {
         if (config('site_agent.required')) {
@@ -173,6 +206,7 @@ class RouterConnectionService
         $key = $this->configureRouter($router, $host);
 
         try {
+            app(RouterIdentityService::class)->assertMatchesRouter($router, $key);
             $hotspot = MikroTik::router($key)->hotspot();
             $isActive = collect($hotspot->getActiveHosts())
                 ->contains(fn (array $host): bool => ($host['user'] ?? null) === $voucherCode);
@@ -201,7 +235,7 @@ class RouterConnectionService
         DynamicMikrotikRouterConfig::set($key, [
             'username' => $router->api_username,
             'password' => $router->api_password,
-            ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: 8728), $router->getKey()),
+            ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: config('services.mikrotik.api_port')), $router->getKey()),
             'timeout' => 5,
         ]);
 

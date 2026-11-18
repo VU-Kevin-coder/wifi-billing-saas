@@ -11,6 +11,7 @@ use App\Models\Site;
 use App\Models\SiteAgentCommand;
 use App\Services\ActivityNotifier;
 use App\Services\RouterConnectionService;
+use App\Services\RouterIdentityEnrollmentService;
 use App\Services\RouterProvisioningService;
 use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
@@ -110,7 +111,7 @@ class RouterController extends Controller
             'dns' => implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
             'domain' => config('services.mikrotik.hotspot_domain'),
         ];
-        $apiPort = PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port');
+        $apiPort = PlatformSetting::get('router.api_ssl', true) ? 8729 : config('services.mikrotik.api_port');
 
         return view('operator.routers.create', compact(
             'tenant', 'defaultName', 'sites', 'wanInterface', 'defaultClientPorts', 'hotspotDefaults', 'apiPort',
@@ -140,7 +141,6 @@ class RouterController extends Controller
                 'integer',
                 Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
             ],
-            'hardware_model' => ['nullable', 'string', 'max:255'],
             'management_ip' => ['nullable', 'string', 'max:255'],
             'management_subnet' => [
                 'nullable',
@@ -265,7 +265,6 @@ class RouterController extends Controller
             'name' => $validated['name'],
             'wifi_ssid' => $wifiSsid,
             'site' => $site?->name ?? ($validated['site'] ?? null),
-            'hardware_model' => $validated['hardware_model'] ?? null,
             'management_ip' => $validated['management_ip'] ?? null,
             'status' => 'provisioning',
             'cpu_usage' => 0,
@@ -275,7 +274,7 @@ class RouterController extends Controller
             'api_username' => $apiUsername,
             'api_password' => $apiPassword,
             'api_port' => $validated['api_port'] ?? (
-                PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port')
+                PlatformSetting::get('router.api_ssl', true) ? 8729 : config('services.mikrotik.api_port')
             ),
             'has_wireless' => $hasWireless,
             'enable_hotspot' => $request->boolean('enable_hotspot', true),
@@ -316,9 +315,7 @@ class RouterController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'serial_number' => ['nullable', 'string', 'max:255'],
             'site_id' => ['nullable', 'integer', Rule::exists('sites', 'id')->where('tenant_id', $tenantId)],
-            'hardware_model' => ['nullable', 'string', 'max:255'],
             'management_ip' => ['nullable', 'string', 'max:255'],
             'management_subnet' => [
                 'nullable',
@@ -435,10 +432,8 @@ class RouterController extends Controller
 
         $router->fill([
             'name' => $validated['name'],
-            'serial_number' => $validated['serial_number'] ?? null,
             'site_id' => $site?->id,
             'site' => $site?->name,
-            'hardware_model' => $validated['hardware_model'] ?? null,
             'management_ip' => $validated['management_ip'] ?? null,
             'wifi_ssid' => $wifiSsid,
             'api_username' => $validated['api_username'] ?? null,
@@ -617,6 +612,66 @@ class RouterController extends Controller
             : (($result['failure_type'] ?? null) === 'missing_configuration' ? 422 : 503);
 
         return response()->json($result, $statusCode);
+    }
+
+    public function enrollIdentity(
+        Request $request,
+        RouterConnectionService $connectionService,
+        RouterIdentityEnrollmentService $enrollmentService,
+        SiteAgentCommandService $commandService,
+        ...$args,
+    ) {
+        $router = $this->resolveTenantRouter($args, app(TenantContext::class));
+        if ($router->identity_verified_at) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'This router identity is already enrolled and cannot be replaced here.',
+            ], 409);
+        }
+
+        if (config('site_agent.required')) {
+            try {
+                $command = $commandService->enrollIdentity($router);
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'A paired site agent is required to read this router identity.',
+                ], 422);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'queued' => true,
+                'command_id' => $command->id,
+                'message' => 'Read-only identity enrollment was queued for the paired site agent.',
+            ], 202);
+        }
+
+        try {
+            $identity = $connectionService->inspectIdentity($router);
+            $router = $enrollmentService->enroll($router, $identity);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Router identity could not be enrolled. Verify API-SSL connectivity and certificate trust.',
+            ], 422);
+        }
+
+        AuditLog::record('router.identity_enrolled', $router, [
+            'hardware_model' => $router->hardware_model,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'identity_verified' => true,
+            'hardware_model' => $router->hardware_model,
+            'serial_number' => $router->serial_number,
+            'message' => 'Router identity enrolled. Future writes require this exact model and serial.',
+        ]);
     }
 
     public function telemetry(Request $request, SiteAgentCommandService $commandService, ...$args)

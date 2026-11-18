@@ -41,6 +41,7 @@ class Router extends Model
     protected $casts = [
         'api_password' => 'encrypted',
         'radius_shared_secret' => 'encrypted',
+        'identity_verified_at' => 'datetime',
         'last_seen_at' => 'datetime',
         'telemetry_at' => 'datetime',
         'has_wireless' => 'boolean',
