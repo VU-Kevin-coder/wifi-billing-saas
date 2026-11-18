@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Router;
+use App\Models\VpnPeer;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use RuntimeException;
 use ZillEAli\MikrotikLaravel\Facades\MikroTik;
 
@@ -40,7 +42,10 @@ class RouterConnectionService
         }
 
         try {
-            $key = $this->configureRouter($router, $host);
+            $router->loadMissing('vpnPeer');
+            $key = $router->vpnPeer?->enabled && $router->vpnPeer->tunnel_ip === $host
+                ? $this->configureRouter($router, $host, $router->vpnPeer)
+                : $this->configureRouter($router, $host);
             // This is deliberately read-only: it proves API reachability
             // without changing hotspot, users, profiles or firewall rules.
             $resource = MikroTik::router($key)->system()->getResources();
@@ -76,6 +81,111 @@ class RouterConnectionService
                 'message' => 'Router API test failed. '.$diagnostic,
                 'diagnostic' => $diagnostic,
             ];
+        }
+    }
+
+    public function testOnboardingWireGuard(Router $router): array
+    {
+        $router->loadMissing('vpnPeer');
+        $peer = $router->vpnPeer;
+        if (! $peer || ! $peer->enabled || blank($router->api_username) || blank($router->api_password)) {
+            return [
+                'ok' => false,
+                'message' => 'The router has not completed its WireGuard and API bootstrap.',
+            ];
+        }
+
+        try {
+            $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
+            $resource = MikroTik::router($key)->system()->getResources();
+
+            return [
+                'ok' => filled($resource),
+                'message' => filled($resource)
+                    ? 'Router WireGuard and API connection verified.'
+                    : 'Router API returned no system resource data.',
+                'resource' => $resource,
+            ];
+        } catch (\Throwable $exception) {
+            Log::notice('Router onboarding API verification failed.', [
+                'router_id' => $router->getKey(),
+                'exception' => $exception::class,
+            ]);
+
+            return [
+                'ok' => false,
+                'message' => 'Waiting for the router API to become reachable through WireGuard.',
+            ];
+        }
+    }
+
+    public function onboardingInterfaces(Router $router): array
+    {
+        $router->loadMissing('vpnPeer');
+        $peer = $router->vpnPeer;
+        if (! $peer || ! $peer->enabled) {
+            throw new RouterTransportException('An enabled WireGuard peer is required.');
+        }
+
+        $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
+
+        try {
+            return MikroTik::router($key)->interfaces()->getInterfaces();
+        } catch (\Throwable $exception) {
+            Log::notice('Router onboarding could not read interface inventory.', [
+                'router_id' => $router->id,
+                'exception' => $exception::class,
+            ]);
+
+            throw new RouterTransportException('Unable to read router interfaces through the verified WireGuard connection.');
+        }
+    }
+
+    public function executeOnboardingScript(Router $router, string $source): void
+    {
+        $router->loadMissing(['vpnPeer', 'onboarding']);
+        $peer = $router->vpnPeer;
+        if (! $peer || ! $peer->enabled || $router->onboarding?->status !== 'connected') {
+            throw new RouterTransportException('Only a connected, verified WireGuard onboarding session may configure a router.');
+        }
+
+        $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
+        $scripts = MikroTik::router($key)->scripts();
+        $name = 'wifi-billing-onboard-'.$router->id.'-'.strtolower(Str::random(8));
+        $added = false;
+        $runError = null;
+        $cleanupError = null;
+
+        try {
+            $scripts->addScript($name, $source, 'read,write,api', 'Temporary Wi-Fi Billing onboarding');
+            $added = true;
+            $scripts->runScript($name);
+        } catch (\Throwable $exception) {
+            $runError = $exception;
+        } finally {
+            if ($added) {
+                try {
+                    $scripts->removeScript($name);
+                } catch (\Throwable $exception) {
+                    $cleanupError = $exception;
+                }
+            }
+        }
+
+        if ($cleanupError) {
+            Log::critical('Temporary router onboarding script could not be removed.', [
+                'router_id' => $router->id,
+                'exception' => $cleanupError::class,
+            ]);
+            throw new RouterTransportException('Router provisioning ran but its temporary script could not be removed. Inspect the router before retrying.');
+        }
+
+        if ($runError) {
+            Log::warning('Router onboarding script execution failed.', [
+                'router_id' => $router->id,
+                'exception' => $runError::class,
+            ]);
+            throw new RouterTransportException('Router provisioning failed. Check RouterOS logs before retrying.');
         }
     }
 
@@ -190,7 +300,7 @@ class RouterConnectionService
         }
     }
 
-    private function configureRouter(Router $router, ?string $host = null): string
+    private function configureRouter(Router $router, ?string $host = null, ?VpnPeer $wireGuardPeer = null): string
     {
         $host ??= $this->hostForRouter($router);
         if (blank($host)) {
@@ -201,7 +311,9 @@ class RouterConnectionService
         DynamicMikrotikRouterConfig::set($key, [
             'username' => $router->api_username,
             'password' => $router->api_password,
-            ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: 8728), $router->getKey()),
+            ...($wireGuardPeer
+                ? RouterTransportConfig::forVerifiedWireGuardPeer($host, (int) ($router->api_port ?: 8728), $wireGuardPeer, $router->getKey())
+                : RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: 8728), $router->getKey())),
             'timeout' => 5,
         ]);
 
@@ -216,5 +328,4 @@ class RouterConnectionService
             ? $router->vpnPeer->tunnel_ip
             : (config('site_agent.allow_direct_router_connection') ? $router->management_ip : null);
     }
-
 }

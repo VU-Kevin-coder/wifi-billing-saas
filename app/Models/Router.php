@@ -77,6 +77,11 @@ class Router extends Model
         return $this->hasOne(VpnPeer::class);
     }
 
+    public function onboarding(): HasOne
+    {
+        return $this->hasOne(RouterOnboarding::class);
+    }
+
     /**
      * The secret is intentionally not mass assignable or serializable. Callers
      * that opt a router in must use RadiusRouterCredentialService and deliver

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\FlutterwaveWebhookController;
 use App\Http\Controllers\Api\MobileMoneyWebhookController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PesapalWebhookController;
+use App\Http\Controllers\Api\RouterOnboardingBootstrapController;
 use App\Http\Controllers\Api\SiteAgentController;
 use App\Http\Controllers\PortalController;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::middleware('throttle:public-api')->group(function () {
+
+    Route::post('/router-onboarding/bootstrap', RouterOnboardingBootstrapController::class)
+        ->middleware('throttle:10,1')
+        ->name('api.router-onboarding.bootstrap');
 
     Route::prefix('webhooks')->group(function () {
         Route::match(['get', 'post'], '/pesapal', [PesapalWebhookController::class, 'handle'])

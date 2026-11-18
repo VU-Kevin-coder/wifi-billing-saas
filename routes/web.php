@@ -9,6 +9,7 @@ use App\Http\Controllers\Operator\LiveSessionController;
 use App\Http\Controllers\Operator\PackageController;
 use App\Http\Controllers\Operator\PortalSettingsController;
 use App\Http\Controllers\Operator\RadiusRouterCredentialController;
+use App\Http\Controllers\Operator\RouterOnboardingController;
 use App\Http\Controllers\Operator\RouterController;
 use App\Http\Controllers\Operator\RouterSettingsController;
 use App\Http\Controllers\Operator\SettingsController;
@@ -241,6 +242,20 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::post('/routers', [RouterController::class, 'store'])
                         ->middleware('idempotency')
                         ->name('routers.store');
+                    Route::get('routers/{router}/onboarding', [RouterOnboardingController::class, 'show'])
+                        ->whereNumber('router')
+                        ->name('routers.onboarding');
+                    Route::get('routers/{router}/onboarding/status', [RouterOnboardingController::class, 'status'])
+                        ->whereNumber('router')
+                        ->middleware('throttle:60,1')
+                        ->name('routers.onboarding.status');
+                    Route::get('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'services'])
+                        ->whereNumber('router')
+                        ->name('routers.onboarding.services');
+                    Route::post('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'configure'])
+                        ->whereNumber('router')
+                        ->middleware('idempotency')
+                        ->name('routers.onboarding.services.configure');
                     Route::post('/sessions/{session}/disconnect', [LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
                     Route::post('/sessions/{session}/ban-device', [LiveSessionController::class, 'banDevice'])->name('sessions.ban-device');
                     Route::post('/blocked-devices/{blockedDevice}/unban', [LiveSessionController::class, 'unbanDevice'])

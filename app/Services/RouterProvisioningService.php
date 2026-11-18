@@ -17,6 +17,7 @@ class RouterProvisioningService
     private const PROVISIONING_BLOCKED = true;
 
     public const SAFETY_BLOCK = 'Router provisioning is disabled: the target device identity and existing configuration cannot be verified, and the script may overwrite bridge, DHCP, firewall or RADIUS settings. Do not use previously downloaded scripts.';
+
     /**
      * Escape a string value for safe insertion into RouterOS .rsc scripts.
      * Escapes backslashes, double quotes, and dollar signs (variable expansion).
@@ -94,12 +95,57 @@ class RouterProvisioningService
         ]);
     }
 
+    public function deployGuided(Router $router, bool $confirmedDedicatedRouter): array
+    {
+        if (! $confirmedDedicatedRouter) {
+            return ['ok' => false, 'message' => 'Confirm that this is a fresh, dedicated router before provisioning.'];
+        }
+
+        $router->loadMissing(['vpnPeer', 'onboarding']);
+        if (! $router->vpnPeer?->enabled || $router->onboarding?->status !== 'connected') {
+            return ['ok' => false, 'message' => 'Verify the router connection through WireGuard before provisioning services.'];
+        }
+
+        if ($router->access_backend !== 'radius') {
+            return ['ok' => false, 'message' => 'Guided router provisioning requires the RADIUS backend.'];
+        }
+
+        if ($router->access_backend === 'radius') {
+            if (! RadiusReadiness::available() || ! $router->hasUsableRadiusConfiguration()) {
+                return ['ok' => false, 'message' => RadiusRouterCredentialService::UNAVAILABLE_MESSAGE];
+            }
+        }
+
+        try {
+            $radiusSecret = $router->access_backend === 'radius' ? $router->radius_shared_secret : null;
+            $script = $this->buildScript($router, $radiusSecret);
+            app(RouterConnectionService::class)->executeOnboardingScript($router, $script);
+        } catch (\InvalidArgumentException|\LogicException $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        } catch (RouterTransportException $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'Router service configuration was applied successfully.',
+        ];
+    }
+
     private function buildScript(Router $router, ?string $radiusSecret): string
     {
         $tenant = $router->tenant ?? Tenant::find($router->tenant_id);
         $hotspotConfig = $router->hotspot_config ?? [];
 
         $routerName = $router->name ?: 'MikroTik-Router';
+        if (! $router->enable_hotspot) {
+            $identity = $router->access_backend === 'radius'
+                ? (string) $router->radius_nas_identifier
+                : $routerName;
+
+            return '/system identity set name="'.$this->escapeRouterOs($identity)."\"\r\n";
+        }
+
         $escapedRouterName = $this->escapeRouterOs($routerName);
         $wifiSsid = trim((string) $router->wifi_ssid);
         if ($router->has_wireless && $wifiSsid === '') {
@@ -166,6 +212,14 @@ class RouterProvisioningService
         $packages = $tenant ? Package::withoutGlobalScopes()->where('tenant_id', $tenant->id)->get() : collect();
 
         $lines = [];
+        $radiusEnabled = $radiusSecret !== null;
+        if ($radiusEnabled) {
+            $router->loadMissing('vpnPeer');
+            if (! $router->vpnPeer?->enabled || ! $router->hasUsableRadiusConfiguration()) {
+                throw new \LogicException('A configured RADIUS credential and enabled WireGuard peer are required.');
+            }
+        }
+
         $lines[] = '# =================================================================';
         $lines[] = '# Wi-Fi Billing SaaS - Automated MikroTik Provisioning Script';
         $lines[] = "# Router: {$escapedRouterName} (ID: {$router->id})";
@@ -185,7 +239,8 @@ class RouterProvisioningService
         $lines[] = '';
 
         // Clients use upstream DNS directly, so the router need not be a remote resolver.
-        $lines[] = "/system identity set name=\"{$escapedRouterName}\"";
+        $routerIdentity = $radiusEnabled ? (string) $router->radius_nas_identifier : $routerName;
+        $lines[] = '/system identity set name="'.$this->escapeRouterOs($routerIdentity).'"';
         $lines[] = "/ip dns set allow-remote-requests=no servers=\"{$escapedDnsServers}\"";
         $lines[] = '';
 
@@ -219,9 +274,21 @@ class RouterProvisioningService
         $lines[] = '';
 
         // 4. Hotspot Profile and Server (Idempotent)
-        $lines[] = ":if ([:len [/ip hotspot profile find name=prof-billing]] = 0) do={ /ip hotspot profile add name=prof-billing dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} html-directory=hotspot login-by=http-chap use-radius=no } else={ /ip hotspot profile set [find name=prof-billing] dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} login-by=http-chap use-radius=no }";
+        $radiusMode = $radiusEnabled ? 'yes' : 'no';
+        $radiusAccounting = $radiusEnabled ? 'yes' : 'no';
+        $interimUpdate = $radiusEnabled ? '1m' : '0s';
+        $lines[] = ":if ([:len [/ip hotspot profile find name=prof-billing]] = 0) do={ /ip hotspot profile add name=prof-billing dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} html-directory=hotspot login-by=http-chap use-radius={$radiusMode} radius-accounting={$radiusAccounting} radius-interim-update={$interimUpdate} } else={ /ip hotspot profile set [find name=prof-billing] dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} login-by=http-chap use-radius={$radiusMode} radius-accounting={$radiusAccounting} radius-interim-update={$interimUpdate} }";
         $lines[] = ':if ([:len [/ip hotspot find name=hs-billing]] = 0) do={ /ip hotspot add address-pool=pool-hotspot disabled=no interface=br-hotspot name=hs-billing profile=prof-billing } else={ /ip hotspot set [find name=hs-billing] address-pool=pool-hotspot interface=br-hotspot profile=prof-billing }';
         $lines[] = '';
+
+        if ($radiusEnabled) {
+            $radiusAddress = $this->escapeRouterOs((string) config('wireguard.server_address'));
+            $radiusSource = $this->escapeRouterOs((string) $router->vpnPeer->tunnel_ip);
+            $escapedRadiusSecret = $this->escapeRouterOs((string) $radiusSecret);
+            $lines[] = '# --- Private RADIUS server over WireGuard ---';
+            $lines[] = ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s }';
+            $lines[] = '';
+        }
 
         // 5. Walled Garden (Captive portal, Payment gateways - Idempotent)
         $lines[] = '# --- Walled Garden Access ---';
@@ -313,6 +380,17 @@ class RouterProvisioningService
         }
 
         return [$prefix, long2ip($poolStart), long2ip($poolEnd)];
+    }
+
+    public function isValidHotspotGateway(string $network, string $gatewayIp): bool
+    {
+        try {
+            $this->hotspotNetworkDetails($network, $gatewayIp);
+
+            return true;
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
     }
 
     private function validateIpv4Cidr(string $value, string $label): array
