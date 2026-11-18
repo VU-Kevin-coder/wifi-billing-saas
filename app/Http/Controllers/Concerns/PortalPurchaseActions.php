@@ -9,8 +9,8 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\PaymentService;
 use App\Services\PesapalOrderVerifier;
-use App\Services\RadiusReadiness;
 use App\Services\Policy\Policy;
+use App\Services\RadiusReadiness;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -59,8 +59,7 @@ trait PortalPurchaseActions
         $backends = Router::withoutGlobalScopes()
             ->where('tenant_id', $tenantModel->id)
             ->distinct()->pluck('access_backend');
-        if ($backends->isEmpty() || $backends->contains(fn ($backend) =>
-            ! in_array($backend, ['site_agent', 'radius'], true)
+        if ($backends->isEmpty() || $backends->contains(fn ($backend) => ! in_array($backend, ['site_agent', 'radius'], true)
             || ($backend === 'radius' && ! RadiusReadiness::available())
         )) {
             return back()->withErrors([

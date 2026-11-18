@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Router;
 use App\Services\RouterConnectionService;
+use App\Services\RouterService;
 use App\Services\RouterTransportConfig;
 use App\Services\RouterTransportException;
 use App\Services\SiteAgentRouterService;
@@ -98,8 +99,13 @@ class RouterTransportConfigTest extends TestCase
     {
         config(['site_agent.router_ca_cert_path' => '/synthetic/ca.pem']);
         $options = RouterTransportConfig::forRouter('router.example.test', 12345, 17);
-        $manager = new class ($options) extends MikrotikManager {
-            public function makeClient(): RouterosClient { return $this->getClient(); }
+        $manager = new class($options) extends MikrotikManager
+        {
+            public function makeClient(): RouterosClient
+            {
+                return $this->getClient();
+            }
+
             protected function connectWithRetry(RouterosClient $client, int $attempts, int $delay, string $routerName = 'default', array $cfg = []): void {}
         };
         $client = $manager->makeClient();
@@ -176,7 +182,7 @@ class RouterTransportConfigTest extends TestCase
             app()['env'] = $environment;
             config(['app.env' => $environment]);
             try {
-                (new \App\Services\RouterService())->getActiveSessions();
+                (new RouterService)->getActiveSessions();
                 $this->fail('Tenantless router access was allowed.');
             } catch (\RuntimeException $exception) {
                 $this->assertSame('A tenant router with verified API-SSL is required.', $exception->getMessage());
@@ -213,6 +219,7 @@ class RouterTransportConfigTest extends TestCase
         $router = new Router(['management_ip' => '192.0.2.1', 'api_port' => $port, 'api_username' => 'synthetic-user', 'api_password' => 'synthetic-secret']);
         $router->id = 17;
         $router->setRelation('vpnPeer', null);
+
         return $router;
     }
 }

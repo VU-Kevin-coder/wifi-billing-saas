@@ -12,6 +12,7 @@ use App\Services\RadiusRouterCredentialService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\ViewErrorBag;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -82,7 +83,7 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         $router = $this->router($tenant);
         $secret = str_repeat('b', 64);
         $this->actingAs($this->operator($tenant));
-        view()->share('errors', new \Illuminate\Support\ViewErrorBag);
+        view()->share('errors', new ViewErrorBag);
         $html = view('operator.routers.radius-credential', compact('tenant', 'router', 'secret'))->render();
         $this->assertStringContainsString('This secret is shown once.', $html);
         $this->assertSame(1, preg_match('/<code id="radius-shared-secret"[^>]*>([a-f0-9]{64})<\/code>/', $html, $matches));
@@ -175,8 +176,10 @@ class RouterRadiusCredentialDeliveryTest extends TestCase
         Router::getEventDispatcher()->listen('eloquent.saving: '.Router::class, function (Router $savingRouter) use ($router, &$saveAttempted): ?bool {
             if ($savingRouter->is($router)) {
                 $saveAttempted = true;
+
                 return false;
             }
+
             return null;
         });
         $this->actingAs($operator)->post($this->provisionUrl($tenant, $router), [

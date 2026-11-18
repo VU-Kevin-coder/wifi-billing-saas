@@ -178,6 +178,7 @@ class VoucherActivationService
             if (! $router) {
                 throw new RadiusUnavailableException('Router cannot be identified. Contact the operator; please do not pay again.');
             }
+
             return $router;
         }
 
@@ -190,6 +191,7 @@ class VoucherActivationService
             if ($routers->count() !== 1) {
                 throw new RadiusUnavailableException('Router cannot be identified uniquely. Contact the operator; please do not pay again.');
             }
+
             return $routers->first();
         }
 
@@ -202,6 +204,7 @@ class VoucherActivationService
             if ($routers->isEmpty()) {
                 throw new RadiusUnavailableException('Router cannot be identified for this site. Contact the operator; please do not pay again.');
             }
+
             return $routers->first();
         }
 
@@ -215,6 +218,7 @@ class VoucherActivationService
             if ($routers->isEmpty()) {
                 throw new RadiusUnavailableException('Router cannot be identified for this site. Contact the operator; please do not pay again.');
             }
+
             return $routers->first();
         }
 

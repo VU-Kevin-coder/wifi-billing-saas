@@ -15,9 +15,12 @@ class FlashOwnershipTest extends TestCase
         foreach (['success', 'status', 'warning', 'error'] as $key) {
             $this->app['session']->forget($key);
         }
-        foreach ($messages as $key => $value) $this->app['session']->put($key, $value);
+        foreach ($messages as $key => $value) {
+            $this->app['session']->put($key, $value);
+        }
         $errors = new ViewErrorBag;
         $errors->put('default', new MessageBag($validation));
+
         return view('partials.swal-flash', ['errors' => $errors])->render();
     }
 

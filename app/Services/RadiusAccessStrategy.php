@@ -25,9 +25,7 @@ class RadiusAccessStrategy implements RouterAccessStrategy
         return 'provisioning';
     }
 
-    public function provision(Router $router, Session $session, Voucher $voucher, ?SiteAgent $siteAgent): void
-    {
-    }
+    public function provision(Router $router, Session $session, Voucher $voucher, ?SiteAgent $siteAgent): void {}
 
     public function revoke(
         Tenant $tenant,

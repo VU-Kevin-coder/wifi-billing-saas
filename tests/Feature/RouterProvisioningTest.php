@@ -14,8 +14,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
-use ZillEAli\MikrotikLaravel\MikrotikManager;
 use ZillEAli\MikrotikLaravel\Facades\MikroTik;
+use ZillEAli\MikrotikLaravel\MikrotikManager;
 
 class RouterProvisioningTest extends TestCase
 {
@@ -250,6 +250,7 @@ class RouterProvisioningTest extends TestCase
             ->assertJsonPath('message', RouterProvisioningService::SAFETY_BLOCK);
         $this->assertSame($before, $this->router->fresh()->getRawOriginal());
     }
+
     private function assertScriptBlockedWithoutMutation(Router $router): void
     {
         $before = $router->fresh()->getRawOriginal();
@@ -261,5 +262,4 @@ class RouterProvisioningTest extends TestCase
         }
         $this->assertSame($before, $router->fresh()->getRawOriginal());
     }
-
 }

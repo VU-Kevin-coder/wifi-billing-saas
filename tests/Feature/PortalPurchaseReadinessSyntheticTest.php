@@ -20,6 +20,7 @@ class PortalPurchaseReadinessSyntheticTest extends TestCase
     {
         $tenant = Tenant::create(['name' => 'Synthetic', 'slug' => 'synthetic', 'status' => 'active', 'kyc_status' => 'verified']);
         $package = Package::create(['tenant_id' => $tenant->id, 'name' => 'Hour', 'price' => 1000, 'currency' => 'UGX', 'duration_value' => 1, 'duration_unit' => 'hours', 'speed_limit_mbps' => 10, 'device_limit' => 1]);
+
         return [$tenant, $package];
     }
 
@@ -27,6 +28,7 @@ class PortalPurchaseReadinessSyntheticTest extends TestCase
     {
         $router = Router::create(['tenant_id' => $tenant->id, 'name' => 'synthetic-router']);
         $router->forceFill(['access_backend' => $backend])->save();
+
         return $router;
     }
 

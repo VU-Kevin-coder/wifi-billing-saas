@@ -10,6 +10,7 @@ use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\RouterConnectionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class ExpireSessionsTest extends TestCase
@@ -46,7 +47,7 @@ class ExpireSessionsTest extends TestCase
                 ->withArgs(fn (Router $target, string $code): bool => $target->is($router) && $code === $voucher->code)
                 ->andThrow(new \RuntimeException('synthetic-secret synthetic-user private-data'));
         });
-        \Illuminate\Support\Facades\Log::shouldReceive('error')->once()->with(
+        Log::shouldReceive('error')->once()->with(
             'Unable to disconnect expired MikroTik session; it will be retried.',
             ['session_id' => $session->id, 'router_id' => $router->id, 'voucher_id' => $voucher->id],
         );

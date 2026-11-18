@@ -182,6 +182,7 @@ class PortalController extends Controller
         if ($paymentToken && ! Transaction::withoutTenancy()->where('tenant_id', $tenantModel->id)
             ->where('type', 'voucher_sale')->where('payment_token_hash', hash('sha256', $paymentToken))->exists()) {
             $request->session()->forget(['payment_token', 'voucher_code', 'voucher_tenant_id', 'mikrotik_url', 'radius_ready']);
+
             return redirect()->route('portal.index', ['tenant' => $tenantModel->slug]);
         }
         if (! $paymentToken && session('radius_ready') && ! RadiusReadiness::available()) {

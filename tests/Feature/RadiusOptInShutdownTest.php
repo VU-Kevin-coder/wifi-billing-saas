@@ -122,6 +122,7 @@ class RadiusOptInShutdownTest extends TestCase
         $router = Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic router']);
         $user = User::factory()->create(['tenant_id' => $tenant->id]);
         $user->assignRole('operator_admin');
+
         return [$tenant, $router, $user];
     }
 
