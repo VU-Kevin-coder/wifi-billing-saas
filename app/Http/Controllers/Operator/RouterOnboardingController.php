@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\VerifyRadiusReadinessJob;
 use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Services\RadiusReadiness;
@@ -22,6 +23,18 @@ use RuntimeException;
 
 class RouterOnboardingController extends Controller
 {
+    public function retryRadiusReadiness(TenantContext $context, int $router)
+    {
+        $routerModel = Router::query()
+            ->where('tenant_id', $context->getTenantId())
+            ->findOrFail($router);
+        abort_unless($routerModel->pending_radius_activation && ! $routerModel->radius_activation_paused_at, 404);
+
+        VerifyRadiusReadinessJob::dispatch((int) $routerModel->id);
+
+        return back()->with('status', 'RADIUS readiness check queued. The current access backend remains active.');
+    }
+
     public function services(
         TenantContext $context,
         int $router,
@@ -33,6 +46,7 @@ class RouterOnboardingController extends Controller
             ->with(['onboarding', 'vpnPeer'])
             ->findOrFail($router);
         abort_unless($tenant && $routerModel->onboarding?->status === 'connected', 404);
+        abort_unless($routerModel->enrolled, 404);
 
         try {
             $interfaces = $connection->onboardingInterfaces($routerModel);
@@ -79,6 +93,7 @@ class RouterOnboardingController extends Controller
             ->with(['onboarding', 'vpnPeer'])
             ->findOrFail($router);
         abort_unless($routerModel->onboarding?->status === 'connected', 404);
+        abort_unless($routerModel->enrolled, 404);
         $wanInterface = (string) PlatformSetting::get('hotspot.wan_interface', 'ether1');
         try {
             $interfaces = $connection->onboardingInterfaces($routerModel);
@@ -175,9 +190,16 @@ class RouterOnboardingController extends Controller
             ];
         }
 
-        if ($routerModel->access_backend !== 'radius') {
+        if ($routerModel->access_backend !== 'radius' && ! $routerModel->pending_radius_activation) {
             return back()->withInput()->withErrors([
-                'provisioning' => 'Guided onboarding requires the RADIUS router backend; site-agent routers must be configured through their paired agent.',
+                'provisioning' => 'Guided onboarding requires a pending or active RADIUS configuration.',
+            ]);
+        }
+        if ($routerModel->pending_radius_activation && $routerModel->radius_readiness_status !== 'ready') {
+            return back()->withInput()->withErrors([
+                'provisioning' => $routerModel->radius_readiness_status === 'blocked'
+                    ? 'RADIUS readiness is blocked. The current access backend remains active; resolve the RADIUS health check before enabling router services.'
+                    : 'RADIUS readiness is still being checked. The current access backend remains active.',
             ]);
         }
 
@@ -189,7 +211,7 @@ class RouterOnboardingController extends Controller
             }
 
             try {
-                app(RadiusRouterCredentialService::class)->optIn(
+                app(RadiusRouterCredentialService::class)->preparePendingActivation(
                     $routerModel,
                     'router-'.$routerModel->id.'-tenant-'.$routerModel->tenant_id,
                 );
@@ -203,6 +225,8 @@ class RouterOnboardingController extends Controller
         $routerModel->forceFill([
             'enable_hotspot' => (bool) $validated['enable_hotspot'],
             'enable_pppoe' => (bool) $validated['enable_pppoe'],
+            'radius_readiness_status' => 'not_checked',
+            'radius_readiness_checked_at' => null,
             'hotspot_config' => $hotspotConfig,
             'pppoe_config' => $pppoeConfig,
             'ethernet_ports' => array_values($validated['ethernet_ports'] ?? []),
@@ -240,6 +264,7 @@ class RouterOnboardingController extends Controller
             'router' => $routerModel,
             'onboarding' => $onboarding,
             'bootstrapCommand' => $onboarding->expires_at->isFuture()
+                && $onboarding->status === 'awaiting_bootstrap'
                 ? $onboarding->bootstrap_command
                 : null,
         ])->withHeaders($this->noStoreHeaders());
@@ -264,6 +289,12 @@ class RouterOnboardingController extends Controller
         }
         if ($onboarding->expires_at->isPast()) {
             return response()->json(['status' => 'expired', 'message' => 'The setup command expired. Restart onboarding to issue a fresh command.']);
+        }
+        if (! $routerModel->enrolled) {
+            return response()->json([
+                'status' => 'waiting',
+                'message' => 'Waiting for the router to complete its verified identity enrollment callback.',
+            ]);
         }
 
         try {

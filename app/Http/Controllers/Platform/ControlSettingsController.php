@@ -170,22 +170,15 @@ class ControlSettingsController extends Controller
                     PlatformSetting::set('email_status', 'Configured (Untested)');
                 }
             }
-            if (array_intersect([
-                'payment.active_gateway',
-                'payment.obpay.secret_key',
-                'payment.obpay.webhook_secret',
-                'payment.pawapay.api_token',
-                'payment.pawapay.environment',
-                'payment.iotec.client_id',
-                'payment.iotec.client_secret',
-                'payment.iotec.wallet_id',
-                'payment.iotec.webhook_secret',
-            ], array_keys($values)) !== []) {
+            if (array_key_exists('payment.active_gateway', $values)) {
                 $activeGateway = PlatformSetting::get('payment.active_gateway');
                 if (is_string($activeGateway) && $activeGateway !== ''
                     && ! PaymentGatewaySettings::configured($activeGateway)) {
+                    $message = PaymentGatewaySettings::label($activeGateway)
+                        .' cannot be enabled. Check: '
+                        .implode('; ', PaymentGatewaySettings::missingRequirements($activeGateway)).'.';
                     throw ValidationException::withMessages([
-                        'settings.payment.active_gateway' => 'Configure all required credentials and callback secrets before enabling this gateway.',
+                        'settings.payment.active_gateway' => $message,
                     ]);
                 }
             }
@@ -264,11 +257,15 @@ class ControlSettingsController extends Controller
 
     private function readValue(string $key, array $field): mixed
     {
+        if ($key === 'payment.obpay.callback_url') {
+            return PaymentGatewaySettings::obpayCallbackUrl();
+        }
         if (in_array($field['type'], ['policy', 'policy_select'], true)) {
             return Policy::get($field['policy_key'] ?? $key, $field['default']);
         }
         if ($field['type'] === 'readonly') {
             return match ($key) {
+                'payment.obpay.base_url' => (string) config('services.obpay.base_url', 'https://obpay.online/api/public/v1'),
                 'payment.iotec.webhook_url' => route('api.webhooks.iotec'),
                 'payment.pawapay.webhook_url' => route('api.webhooks.pawapay'),
                 default => (string) ($field['default'] ?? ''),
@@ -277,6 +274,12 @@ class ControlSettingsController extends Controller
 
         if ($field['type'] === 'secret') {
             $storageKey = $field['secret_key'] ?? $key;
+            if ($key === 'payment.obpay.secret_key') {
+                return PaymentGatewaySettings::obpaySecretKey() !== null;
+            }
+            if ($key === 'payment.obpay.webhook_secret') {
+                return PaymentGatewaySettings::obpayWebhookSecret() !== null;
+            }
 
             return (bool) (PlatformSetting::getSecret($storageKey) ?: PlatformSetting::get($storageKey));
         }
@@ -348,6 +351,15 @@ class ControlSettingsController extends Controller
 
     private function validateField(string $key, array $field, mixed $value): mixed
     {
+        if ($key === 'payment.obpay.callback_url') {
+            $validated = Validator::make(
+                ['value' => $value],
+                ['value' => ['nullable', 'string', 'url', 'max:2048']],
+            )->validate()['value'];
+
+            return trim((string) $validated);
+        }
+
         if ($field['type'] === 'secret') {
             Validator::make(['value' => $value], ['value' => ['nullable', 'string', 'max:4096']])->validate();
 

@@ -132,10 +132,10 @@ class DatabaseSeeder extends Seeder
         // ─── 7. ROUTERS (Including Virtual CHR) ────────────────
         // Virtual CHR Router for testing
         Router::firstOrCreate(['tenant_id' => $acme->id, 'name' => 'CHR-Test'], [
-            'management_ip' => 'hamnet-chr',
-            'api_username' => 'admin',
-            'api_password' => 'admin',
-            'api_port' => 8728,
+            'management_ip' => env('MIKROTIK_HOST', 'hamnet-chr'),
+            'api_username' => env('MIKROTIK_USERNAME'),
+            'api_password' => env('MIKROTIK_PASSWORD'),
+            'api_port' => (int) env('MIKROTIK_PORT', 8729),
             'site' => 'Ntinda Hub',
             'status' => 'online',
             'hardware_model' => 'CHR (Virtual)',

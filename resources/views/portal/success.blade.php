@@ -96,12 +96,17 @@
         }
 
         async function checkPaymentStatus() {
+            let nextCheckDelay = 30000;
             try {
                 const payment = await window.apiFetch(paymentStatusUrl, {
                     headers: { 'X-Payment-Token': paymentToken },
                     cache: 'no-store',
                     feedback: false,
                 });
+
+                if (payment.status !== 'pending') {
+                    nextCheckDelay = 2000;
+                }
 
                 if (payment.status === 'completed') {
                     try {
@@ -137,7 +142,7 @@
                 document.getElementById('payment-message').textContent = 'Checking payment status… Keep this page open.';
             }
 
-            setTimeout(checkPaymentStatus, 2000);
+            setTimeout(checkPaymentStatus, nextCheckDelay);
         }
 
         if (paymentStatusUrl) {

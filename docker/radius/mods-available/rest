@@ -21,6 +21,31 @@ rest {
         force_to = "plain"
         do_xlat = no
     }
+
+    post-auth {
+        uri = "${..connect_uri}/post-auth"
+        method = "post"
+        body = "post"
+        data = "router_id=%{urlencode:%{client:shortname}}&peer_ip=%{urlencode:%{Packet-Src-IP-Address}}&nas_identifier=%{urlencode:%{NAS-Identifier}}&outcome=accept&username=%{urlencode:%{User-Name}}"
+        force_to = "plain"
+        do_xlat = no
+    }
+}
+
+rest postauth_reject {
+    connect_uri = "http://radius-policy-bridge:8080"
+    connect_timeout = 2.0
+    timeout = 5.0
+    read_timeout = 5.0
+
+    post-auth {
+        uri = "${..connect_uri}/post-auth"
+        method = "post"
+        body = "post"
+        data = "router_id=%{urlencode:%{client:shortname}}&peer_ip=%{urlencode:%{Packet-Src-IP-Address}}&nas_identifier=%{urlencode:%{NAS-Identifier}}&outcome=reject&username=%{urlencode:%{User-Name}}"
+        force_to = "plain"
+        do_xlat = no
+    }
 }
 
 rest radius_client_lookup {

@@ -7,6 +7,7 @@ use App\Models\PlatformSetting;
 use App\Models\PolicySetting;
 use App\Models\User;
 use App\Services\Policy\Policy;
+use App\Services\Policy\PolicyRiskChecker;
 use CodingLibs\MFA\Facades\MFA;
 use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -56,13 +57,60 @@ class PolicyControlSecurityTest extends TestCase
             ->assertOk()
             ->assertSee('data-theme-toggle', false)
             ->assertSee('wifi-billing-theme', false)
+            ->assertSee('--bg:var(--app-page-bg)', false)
             ->assertDontSee('id="themeToggle"', false);
 
         $this->get(route('platform.policies.index'))
             ->assertOk()
             ->assertSee('data-theme-toggle', false)
             ->assertSee('wifi-billing-theme', false)
+            ->assertSee('--bg:var(--app-page-bg)', false)
             ->assertDontSee('id="policyTheme"', false);
+    }
+
+    public function test_policy_risk_checks_follow_stored_policies_and_runtime_enforcement_flags(): void
+    {
+        config([
+            'security.platform_admin_mfa_required' => true,
+            'security.step_up_enabled' => true,
+        ]);
+        $values = [
+            'security.platform_admin_mfa' => true,
+            'security.step_up_enabled' => true,
+            'approval.wallet_adjustment.enabled' => true,
+            'approval.wallet_adjustment.mode' => 'always',
+        ];
+        $checker = app(PolicyRiskChecker::class);
+        $checks = collect($checker->evaluate($values))->keyBy('id');
+
+        $this->assertFalse($checks['security.platform_admin_mfa']['active']);
+        $this->assertFalse($checks['security.step_up_enabled']['active']);
+        $this->assertFalse($checks['approval.wallet_adjustment.enabled']['active']);
+
+        config(['security.platform_admin_mfa_required' => false]);
+        $checks = collect($checker->evaluate($values))->keyBy('id');
+        $this->assertTrue($checks['security.platform_admin_mfa']['active']);
+
+        $values['security.platform_admin_mfa'] = false;
+        $values['security.step_up_enabled'] = false;
+        $values['approval.wallet_adjustment.mode'] = 'never';
+        $checks = collect($checker->evaluate($values))->keyBy('id');
+        $this->assertTrue($checks['security.platform_admin_mfa']['active']);
+        $this->assertTrue($checks['security.step_up_enabled']['active']);
+        $this->assertTrue($checks['approval.wallet_adjustment.enabled']['active']);
+    }
+
+    public function test_policy_risk_panel_renders_checks_from_policy_definitions(): void
+    {
+        $html = $this->get(route('platform.policies.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('data-risk-check="security.platform_admin_mfa"', $html);
+        $this->assertStringContainsString('data-risk-check="security.step_up_enabled"', $html);
+        $this->assertStringContainsString('data-risk-check="approval.wallet_adjustment.enabled"', $html);
+        $this->assertStringContainsString('data-risk-conditions=', $html);
+        $this->assertStringNotContainsString('data-risk-item="platform_admin_mfa"', $html);
     }
 
     public function test_controls_are_typed_and_full_section_submission_preserves_unchanged_values(): void

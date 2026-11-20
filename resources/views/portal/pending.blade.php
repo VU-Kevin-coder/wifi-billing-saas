@@ -50,7 +50,11 @@
         </div>
 
         <h1>Waiting for payment</h1>
-        <p class="lede">Approve the mobile money prompt on your phone. Keep this page open while we confirm your payment.</p>
+        @if(($transaction->meta['payment_provider'] ?? null) === 'obpay' && ($transaction->meta['provider_prompt_sent'] ?? null) !== true)
+            <p class="lede">We could not confirm whether a phone prompt was sent or a checkout page is needed. Keep this page open while we check the original payment; do not pay again.</p>
+        @else
+            <p class="lede">Approve the mobile money prompt on your phone. Keep this page open while we confirm your payment.</p>
+        @endif
 
         <div id="status-message" role="status" aria-live="polite">
             Payment status has not been checked yet.
@@ -74,6 +78,7 @@
         const returnLink = document.getElementById('return-link');
 
         async function checkPayment() {
+            let nextCheckDelay = 30000;
             try {
                 const result = await window.apiFetch(checkUrl, {
                     cache: 'no-store',
@@ -95,8 +100,10 @@
 
                 if (result.status === 'fulfillment_pending') {
                     statusElement.textContent = 'Payment confirmed. Access is being prepared. Please do not pay again.';
+                    nextCheckDelay = 5000;
                 } else if (result.status === 'provisioning' || result.status === 'activation_pending') {
                     statusElement.textContent = 'Payment confirmed. Waiting for the site router to activate your access…';
+                    nextCheckDelay = 5000;
                 } else if (result.status === 'pending') {
                     statusElement.textContent = 'Waiting for payment confirmation…';
                 } else {
@@ -106,7 +113,7 @@
                 statusElement.textContent = 'Unable to check right now. We will try again shortly.';
             }
 
-            window.setTimeout(checkPayment, 5000);
+            window.setTimeout(checkPayment, nextCheckDelay);
         }
 
         document.addEventListener('DOMContentLoaded', checkPayment, { once: true });

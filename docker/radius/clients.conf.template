@@ -5,3 +5,9 @@ client wireguard_peers {
     require_message_authenticator = yes
     lifetime = 30
 }
+
+client radius_healthcheck {
+    ipaddr = 172.16.0.0/12
+    secret = ${RADIUS_HEALTH_SECRET}
+    require_message_authenticator = no
+}

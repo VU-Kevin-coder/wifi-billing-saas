@@ -14,11 +14,18 @@ class SystemHealthService
 {
     private const HEARTBEAT_KEY = 'system-health:scheduler-heartbeat';
 
+    private const QUEUE_HEARTBEAT_KEY = 'system-health:queue-worker-heartbeat';
+
     private const SNAPSHOT_KEY = 'system-health:snapshot';
 
     public function recordSchedulerHeartbeat(): void
     {
         Cache::put(self::HEARTBEAT_KEY, now()->timestamp, 300);
+    }
+
+    public function recordQueueWorkerHeartbeat(): void
+    {
+        Cache::put(self::QUEUE_HEARTBEAT_KEY, now()->timestamp, 300);
     }
 
     public function checkAndNotify(): array
@@ -54,6 +61,7 @@ class SystemHealthService
         try {
             $snapshot = Cache::get(self::SNAPSHOT_KEY);
             $heartbeat = Cache::get(self::HEARTBEAT_KEY);
+            $queueHeartbeat = Cache::get(self::QUEUE_HEARTBEAT_KEY);
         } catch (Throwable $exception) {
             return $this->unknownSnapshot('Cache unavailable');
         }
@@ -63,6 +71,7 @@ class SystemHealthService
         }
 
         $snapshot['checks']['scheduler'] = $this->schedulerStatus($heartbeat);
+        $snapshot['checks']['queue'] = $this->queueStatus($queueHeartbeat);
         $snapshot['overall'] = $this->overallStatus($snapshot['checks']);
 
         return $snapshot;
@@ -132,7 +141,32 @@ class SystemHealthService
             return ['status' => 'healthy', 'message' => 'Synchronous queue; no worker required'];
         }
 
-        return ['status' => 'unverified', 'message' => 'Queue worker heartbeat is not configured'];
+        try {
+            return $this->queueStatus(Cache::get(self::QUEUE_HEARTBEAT_KEY));
+        } catch (Throwable $exception) {
+            Log::warning('System health queue worker probe failed.', [
+                'exception' => $exception::class,
+            ]);
+
+            return ['status' => 'unhealthy', 'message' => 'Queue worker heartbeat unavailable'];
+        }
+    }
+
+    private function queueStatus(mixed $heartbeat): array
+    {
+        if (config('queue.default') === 'sync') {
+            return ['status' => 'healthy', 'message' => 'Synchronous queue; no worker required'];
+        }
+
+        $threshold = max(30, (int) config('health.queue_worker_stale_after_seconds', 180));
+        $fresh = is_numeric($heartbeat) && now()->timestamp - (int) $heartbeat <= $threshold;
+
+        return [
+            'status' => $fresh ? 'healthy' : 'unhealthy',
+            'message' => $fresh
+                ? 'Queue worker heartbeat is recent'
+                : 'Queue worker heartbeat is stale or missing',
+        ];
     }
 
     private function overallStatus(array $checks): string

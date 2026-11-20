@@ -1,0 +1,19 @@
+server health {
+    listen {
+        type = auth
+        ipaddr = ${RADIUS_HEALTH_ADDRESS}
+        port = ${RADIUS_HEALTH_PORT}
+    }
+
+    authorize {
+        update control {
+            Auth-Type := Reject
+        }
+    }
+
+    authenticate {
+        Auth-Type Reject {
+            reject
+        }
+    }
+}

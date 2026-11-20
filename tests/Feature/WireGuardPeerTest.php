@@ -76,7 +76,8 @@ class WireGuardPeerTest extends TestCase
         $this->assertStringContainsString('private-key="'.$privateKey.'"', $configuration);
         $this->assertStringContainsString('10.8.1.2/32', $configuration);
         $this->assertStringContainsString('endpoint-address="vpn.example.test"', $configuration);
-        $this->assertStringContainsString('/ip service set api-ssl disabled=no port=8729 address="10.8.0.1/32"', $configuration);
+        $this->assertStringContainsString('/ip service set api-ssl disabled=yes port=8729 address="10.8.0.1/32"', $configuration);
+        $this->assertStringNotContainsString('/ip service set api-ssl disabled=no', $configuration);
         $this->assertNull($peer->fresh()->private_key);
         $this->assertNotNull($peer->fresh()->config_downloaded_at);
         $this->expectException(RuntimeException::class);

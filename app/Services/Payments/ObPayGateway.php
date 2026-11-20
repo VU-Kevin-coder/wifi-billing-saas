@@ -2,24 +2,20 @@
 
 namespace App\Services\Payments;
 
-use App\Models\PlatformSetting;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class ObPayGateway
 {
-    private const API_URL = 'https://obpay.online/api/public/v1';
-
     public function configured(): bool
     {
-        return filled(PlatformSetting::getSecret('payment.obpay.secret_key'))
-            && filled(PlatformSetting::getSecret('payment.obpay.webhook_secret'));
+        return PaymentGatewaySettings::configured('obpay');
     }
 
     public function verifyWebhook(string $rawBody, string $signature): bool
     {
-        $secret = PlatformSetting::getSecret('payment.obpay.webhook_secret');
+        $secret = PaymentGatewaySettings::obpayWebhookSecret();
         if (! is_string($secret) || $secret === '' || $signature === '') {
             return false;
         }
@@ -34,8 +30,9 @@ class ObPayGateway
         string $customerName,
         ?string $email,
         string $callbackUrl,
+        ?string $redirectUrl = null,
     ): array {
-        return $this->request()->post('/collect', [
+        $payload = [
             'amount' => $amount,
             'currency' => 'UGX',
             'phone_number' => $phone,
@@ -43,7 +40,17 @@ class ObPayGateway
             'customer_email' => $email ?? '',
             'reference' => $reference,
             'callback_url' => $callbackUrl,
-        ])->throw()->json();
+        ];
+        if ($redirectUrl !== null) {
+            $payload['redirect_url'] = $redirectUrl;
+        }
+
+        return $this->request()->post('/collect', $payload)->throw()->json();
+    }
+
+    public function callbackUrl(): string
+    {
+        return PaymentGatewaySettings::obpayCallbackUrl();
     }
 
     public function payout(
@@ -72,7 +79,7 @@ class ObPayGateway
 
     private function request(): PendingRequest
     {
-        $secret = PlatformSetting::getSecret('payment.obpay.secret_key');
+        $secret = PaymentGatewaySettings::obpaySecretKey();
         if (! is_string($secret) || $secret === '') {
             throw new RuntimeException('OBPay secret key is not configured.');
         }
@@ -82,6 +89,6 @@ class ObPayGateway
             ->withToken($secret)
             ->connectTimeout(5)
             ->timeout(20)
-            ->baseUrl(self::API_URL);
+            ->baseUrl(PaymentGatewaySettings::obpayBaseUrl());
     }
 }

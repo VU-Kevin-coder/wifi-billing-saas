@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Transaction;
+use App\Services\Payments\PaymentGatewaySettings;
 use App\Services\PaymentService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -24,7 +25,7 @@ class ReconcilePendingPayments extends Command
             ->where('status', 'pending')
             ->whereNotNull('provider_reference')
             ->where('created_at', '<=', now()->subMinutes($minutes))
-            ->whereIn('meta->payment_provider', ['MTN', 'AIRTEL'])
+            ->whereIn('meta->payment_provider', PaymentGatewaySettings::PROVIDERS)
             ->orderBy('id')
             ->chunkById(100, function ($transactions) use ($payments, &$checked, &$unavailable): void {
                 foreach ($transactions as $transaction) {

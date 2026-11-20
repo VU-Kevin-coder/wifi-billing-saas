@@ -5,6 +5,31 @@ eligible routers dynamically by their WireGuard peer IP while retaining a
 unique RADIUS secret per router. It is not a production deployment or an
 external UDP RADIUS service.
 
+## One-line enrollment and activation gate
+
+The guided onboarding screen displays one RouterOS command that downloads and imports a short-lived script over HTTPS with certificate checking enabled.
+The script configures the assigned WireGuard peer, API-SSL on port 8729, the
+router-specific RADIUS client, and a dedicated HotSpot profile, then posts the
+router identity and API certificate to the enrollment callback. Enrollment
+stores the certificate for that router and burns the token. The app keeps
+`verify_peer=true` and verifies the API certificate name against the WireGuard
+tunnel IP; it does not weaken TLS name verification.
+
+Enrollment prepares RADIUS but does not switch a `site_agent` router to the
+RADIUS backend. A queued readiness check verifies the policy bridge, a
+FreeRADIUS health listener, the router API, and its RADIUS configuration.
+Only a signed FreeRADIUS post-auth Access-Accept from that router activates
+RADIUS. Three consecutive Access-Reject events pause pending activation and
+alert Platform Admin while preserving the previous backend. An Access-Reject
+may reflect an invalid customer credential; it is not proof that the router's
+shared secret is incorrect.
+
+The local Compose RADIUS profile now also requires a distinct 32-byte
+hexadecimal `RADIUS_HEALTH_SECRET`; configure the same value for the app,
+queue worker, and RADIUS service. The health listener is internal to the
+Compose network and is not published on the host. It uses UDP 18121 to avoid
+colliding with FreeRADIUS's built-in `inner-tunnel` listener on UDP 18120.
+
 ## Trust and data path
 
 ```text
@@ -24,31 +49,34 @@ CHR -- RADIUS over WireGuard --> FreeRADIUS -- private REST --> policy bridge
   FreeRADIUS has no application database credentials.
 - Accounting is validated and written as sanitized local log observations.
   It does not update application sessions, counters, or disconnect state.
-- Direct router API deployment, CoA, and Disconnect-Request delivery remain
-  disabled.
+- Router API access outside verified API-SSL over WireGuard, CoA, and
+  Disconnect-Request delivery remain disabled.
 
 ## Local setup
 
 1. In the ignored local `.env`, set `APP_ENV=local`, `RADIUS_ENABLED=true`,
    `RADIUS_PRODUCTION_ENABLED=false`, `WIREGUARD_ENABLED=true`,
    `ROUTER_LAB_PROVISIONING_ENABLED=true`, and
-   `RADIUS_LAB_ACCOUNTING_LOG=true`. Set `WIREGUARD_ENDPOINT` to the endpoint
-   reachable by the CHR. Keep the default host binding for WireGuard unless
-   the CHR needs another explicitly firewalled address.
+   `RADIUS_LAB_ACCOUNTING_LOG=true`. Set `APP_URL` to the publicly reachable
+   HTTPS application URL whose certificate chain the router trusts, and set
+   `WIREGUARD_ENDPOINT` to the endpoint reachable by the CHR. Keep the default
+   host binding for WireGuard unless the CHR needs another explicitly
+   firewalled address.
 2. Generate distinct 32-byte hexadecimal values for
-   `RADIUS_LARAVEL_SERVICE_SECRET` and `RADIUS_BRIDGE_TOKEN`. Do not reuse
-   `APP_KEY`, the RADIUS client secret, or any router/agent credential.
+   `RADIUS_LARAVEL_SERVICE_SECRET`, `RADIUS_BRIDGE_TOKEN`, and
+   `RADIUS_HEALTH_SECRET`. Do not reuse `APP_KEY`, the RADIUS client secret,
+   or any router/agent credential.
    `RADIUS_POLICY_API_URL=http://web` and `RADIUS_BRIDGE_ALLOW_HTTP=true` are
    allowed only for this local Compose lab.
-3. Start the regular app stack, pair the CHR with a WireGuard peer, and apply
-   its one-time WireGuard configuration. Set the router's hardware model to
-   `CHR` and ensure it has an enabled peer.
-4. As an authorized operator, enable RADIUS for that router. The resulting
-   no-store page displays the new shared secret once and, only in the enabled
-   local CHR lab, offers a one-time RADIUS-only `.rsc`. Save it securely and
-   import it manually into the intended CHR. The script expects an existing
-   HotSpot profile named `prof-billing`; it does not apply itself or alter
-   RouterOS API settings.
+3. Start the regular app stack and use the guided router onboarding screen to
+   copy and run its one-line bootstrap command. It provisions the WireGuard
+   tunnel and verified API-SSL connection, then enrolls the router's identity.
+4. The bootstrap prepares its RADIUS client and dedicated `prof-billing`
+   profile without switching a pre-existing access backend. The queued
+   readiness check must pass before service configuration can proceed.
+   Existing routers using the separate manual RADIUS-only workflow can still
+   use the one-time CHR `.rsc`; that legacy script expects the
+   `prof-billing` profile and does not apply itself.
 5. Start the listener and bridge. No per-router FreeRADIUS client entry or
    `RADIUS_LAB_*` client settings are needed; the listener resolves the router
    from its enabled WireGuard peer and fetches its unique secret over the

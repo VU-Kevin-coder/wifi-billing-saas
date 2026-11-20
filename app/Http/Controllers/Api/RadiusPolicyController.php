@@ -127,6 +127,23 @@ class RadiusPolicyController extends Controller
         return response()->noContent();
     }
 
+    public function postAuthEvent(Request $request, RadiusAccountingService $accounting): Response
+    {
+        $validated = $request->validate([
+            'nas_identifier' => ['required', 'string', 'max:255', 'not_regex:/[\x00-\x20\x7f]/'],
+            'outcome' => ['required', 'string', Rule::in(['accept', 'reject'])],
+            'username' => ['nullable', 'string', 'max:128', 'not_regex:/[\x00-\x1f\x7f]/'],
+        ]);
+
+        $accounting->recordPostAuthEvent([
+            ...$validated,
+            'authenticated_router_id' => (int) $request->attributes->get('authenticated_router_id'),
+            'authenticated_peer_ip' => (string) $request->attributes->get('authenticated_peer_ip'),
+        ]);
+
+        return response()->noContent();
+    }
+
     public function disconnectCommands(RadiusAccountingService $accounting): JsonResponse
     {
         return response()->json(['commands' => $accounting->claimDisconnectCommands()]);

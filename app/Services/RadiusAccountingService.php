@@ -249,7 +249,13 @@ class RadiusAccountingService
 
         $router = Router::withoutTenancy()
             ->whereKey($routerId)
-            ->where('access_backend', 'radius')
+            ->where(function ($query): void {
+                $query->where('access_backend', 'radius')
+                    ->orWhere(function ($pending): void {
+                        $pending->where('pending_radius_activation', true)
+                            ->whereNull('radius_activation_paused_at');
+                    });
+            })
             ->where('radius_nas_identifier', $nasIdentifier)
             ->whereNotNull('radius_shared_secret')
             ->first();
@@ -285,12 +291,77 @@ class RadiusAccountingService
         $router = Router::withoutTenancy()
             ->whereKey($peer->router_id)
             ->where('tenant_id', $peer->tenant_id)
-            ->where('access_backend', 'radius')
+            ->where(function ($query): void {
+                $query->where('access_backend', 'radius')
+                    ->orWhere(function ($pending): void {
+                        $pending->where('pending_radius_activation', true)
+                            ->whereNull('radius_activation_paused_at');
+                    });
+            })
             ->first();
 
         return $router && $router->hasUsableRadiusConfiguration()
             ? $router
             : null;
+    }
+
+    /**
+     * Process an actual FreeRADIUS post-auth event, never an authorization API decision.
+     */
+    public function recordPostAuthEvent(array $input): void
+    {
+        $routerId = (int) ($input['authenticated_router_id'] ?? 0);
+        $peerIp = (string) ($input['authenticated_peer_ip'] ?? '');
+        $nasIdentifier = (string) ($input['nas_identifier'] ?? '');
+        $outcome = (string) ($input['outcome'] ?? '');
+        $router = $this->routerBoundToPeer($routerId, $peerIp, $nasIdentifier);
+
+        if (! $router || ! in_array($outcome, ['accept', 'reject'], true)) {
+            throw new RadiusUnavailableException('RADIUS authentication event identity could not be verified.');
+        }
+
+        $paused = DB::transaction(function () use ($router, $outcome): bool {
+            $lockedRouter = Router::withoutTenancy()
+                ->whereKey($router->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lockedRouter || ! $lockedRouter->pending_radius_activation) {
+                return false;
+            }
+
+            if ($outcome === 'accept') {
+                $lockedRouter->forceFill([
+                    'access_backend' => 'radius',
+                    'pending_radius_activation' => false,
+                    'radius_access_reject_streak' => 0,
+                    'radius_activation_paused_at' => null,
+                ])->saveOrFail();
+
+                return false;
+            }
+
+            if ($lockedRouter->radius_activation_paused_at !== null) {
+                return false;
+            }
+
+            $rejectStreak = min(3, (int) $lockedRouter->radius_access_reject_streak + 1);
+            $lockedRouter->forceFill([
+                'radius_access_reject_streak' => $rejectStreak,
+                'radius_activation_paused_at' => $rejectStreak >= 3 ? now() : null,
+            ])->saveOrFail();
+
+            return $rejectStreak >= 3;
+        });
+
+        if ($paused) {
+            $router->loadMissing('tenant');
+            app(ActivityNotifier::class)->platformAdmins(
+                'Router RADIUS activation paused',
+                "RADIUS activation for {$router->name} in {$router->tenant?->name} was paused after three consecutive Access-Reject events. The existing access backend remains active.",
+                '/platform/tenants/'.$router->tenant_id,
+            );
+        }
     }
 
     public function recordLabAccountingObservation(array $input): void

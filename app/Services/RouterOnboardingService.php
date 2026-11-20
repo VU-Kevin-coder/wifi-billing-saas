@@ -20,9 +20,19 @@ class RouterOnboardingService
             throw new \LogicException('An enabled WireGuard peer is required to start router onboarding.');
         }
 
+        $this->assertBootstrapUrlAvailable();
         $token = Str::random(64);
         $command = $this->bootstrapCommand($token);
-        $script = app(WireGuardService::class)->onboardingConfiguration($router->vpnPeer, $router);
+        $radiusSecret = app(RadiusRouterCredentialService::class)->preparePendingActivation(
+            $router,
+            'router-'.$router->id.'-tenant-'.$router->tenant_id,
+        );
+        $script = app(WireGuardService::class)->onboardingConfiguration(
+            $router->vpnPeer,
+            $router,
+            $token,
+            $radiusSecret,
+        );
         $onboarding = RouterOnboarding::create([
             'tenant_id' => $router->tenant_id,
             'router_id' => $router->id,
@@ -41,20 +51,21 @@ class RouterOnboardingService
 
     public function assertBootstrapUrlAvailable(): void
     {
-        $parts = parse_url(route('api.router-onboarding.bootstrap'));
-        if (($parts['scheme'] ?? null) !== 'https') {
+        $parts = parse_url((string) config('app.url'));
+        if (($parts['scheme'] ?? null) !== 'https' || empty($parts['host'])) {
             throw new \LogicException('Router onboarding requires a publicly reachable HTTPS APP_URL.');
         }
     }
 
     public function bootstrapCommand(string $token): string
     {
-        $url = route('api.router-onboarding.bootstrap');
         $this->assertBootstrapUrlAvailable();
+        $url = rtrim((string) config('app.url'), '/')
+            .route('api.provision.bootstrap', ['token' => $token], false);
 
         $url = $this->escapeRouterOs($url);
 
-        return '/tool fetch url="'.$url.'" http-method=post http-data="token='.$token.'" dst-path="wifi-billing-bootstrap.rsc" check-certificate=yes; /import file-name="wifi-billing-bootstrap.rsc"; /file remove "wifi-billing-bootstrap.rsc"';
+        return '/tool fetch url="'.$url.'" mode=https check-certificate=yes dst-path="wifi-billing-bootstrap.rsc"; /import file-name="wifi-billing-bootstrap.rsc"; /file remove "wifi-billing-bootstrap.rsc"';
     }
 
     public function fetchBootstrapScript(string $token): ?string
@@ -93,6 +104,7 @@ class RouterOnboardingService
         $onboarding->forceFill([
             'status' => 'connected',
             'connected_at' => now(),
+            'bootstrap_token_hash' => null,
             'bootstrap_script' => null,
             'bootstrap_command' => null,
         ])->saveOrFail();

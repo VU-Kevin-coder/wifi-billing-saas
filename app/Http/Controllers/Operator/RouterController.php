@@ -10,7 +10,11 @@ use App\Models\Session;
 use App\Models\Site;
 use App\Models\SiteAgentCommand;
 use App\Services\ActivityNotifier;
+use App\Services\RadiusReadiness;
+use App\Services\RadiusRouterCredentialService;
 use App\Services\RouterConnectionService;
+use App\Services\RouterIdentityEnrollmentService;
+use App\Services\RouterIdentityService;
 use App\Services\RouterOnboardingService;
 use App\Services\RouterProvisioningService;
 use App\Services\SiteAgentCommandService;
@@ -253,6 +257,9 @@ class RouterController extends Controller
         $guidedOnboarding = $request->boolean('guided_onboarding');
         if ($guidedOnboarding) {
             try {
+                if (! RadiusReadiness::available()) {
+                    throw new \LogicException(RadiusRouterCredentialService::UNAVAILABLE_MESSAGE);
+                }
                 $wireGuard->assertOnboardingReady();
                 $onboardingService->assertBootstrapUrlAvailable();
             } catch (\RuntimeException|\LogicException $exception) {
@@ -301,7 +308,7 @@ class RouterController extends Controller
                 'api_username' => $apiUsername,
                 'api_password' => $apiPassword,
                 'api_port' => $guidedOnboarding
-                    ? 8728
+                    ? 8729
                     : ($validated['api_port'] ?? (
                         PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port')
                     )),
@@ -672,6 +679,66 @@ class RouterController extends Controller
             : (($result['failure_type'] ?? null) === 'missing_configuration' ? 422 : 503);
 
         return response()->json($result, $statusCode);
+    }
+
+    public function discoverIdentity(
+        Request $request,
+        RouterIdentityService $identityService,
+        ...$args,
+    ) {
+        $router = $this->resolveTenantRouter($args, app(TenantContext::class));
+
+        try {
+            $identity = $identityService->discover($router);
+
+            return response()->json([
+                'ok' => true,
+                'identity' => $identity,
+                'message' => $router->identity_verified_at
+                    ? 'Read-only identity discovery completed.'
+                    : 'Identity discovered. Explicit operator enrollment is required before writes.',
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Read-only identity discovery failed.',
+            ], 503);
+        }
+    }
+
+    public function enrollIdentity(
+        Request $request,
+        RouterIdentityEnrollmentService $enrollmentService,
+        ...$args,
+    ) {
+        $request->validate([
+            'confirm_identity_enrollment' => ['required', 'accepted'],
+        ]);
+
+        $router = $this->resolveTenantRouter($args, app(TenantContext::class));
+
+        try {
+            $identity = $enrollmentService->enroll($router);
+            AuditLog::record('router.identity_enrolled', $router, [
+                'hardware_model' => $identity['hardware_model'],
+                'serial_number' => $identity['serial_number'],
+            ]);
+
+            return response()->json([
+                'ok' => true,
+                'identity' => $identity,
+                'message' => 'Router model and serial number explicitly enrolled.',
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Identity enrollment failed; no identity replacement was made.',
+            ], 422);
+        }
     }
 
     public function telemetry(Request $request, SiteAgentCommandService $commandService, ...$args)

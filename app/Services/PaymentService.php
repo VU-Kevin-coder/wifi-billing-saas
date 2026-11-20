@@ -27,6 +27,7 @@ class PaymentService
         string $phone,
         Transaction $transaction,
         ?string $email = null,
+        ?string $returnUrl = null,
     ): array {
         if ($transaction->status !== 'pending') {
             return ['status' => $transaction->status, 'error' => 'This payment is no longer pending.'];
@@ -58,6 +59,7 @@ class PaymentService
             (string) ($transaction->meta['customer_name'] ?? 'Wi-Fi Customer'),
             $email,
             $transaction,
+            $returnUrl,
         );
     }
 

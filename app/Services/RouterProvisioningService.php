@@ -106,15 +106,18 @@ class RouterProvisioningService
             return ['ok' => false, 'message' => 'Verify the router connection through WireGuard before provisioning services.'];
         }
 
-        if ($router->access_backend !== 'radius') {
-            return ['ok' => false, 'message' => 'Guided router provisioning requires the RADIUS backend.'];
+        if ($router->access_backend !== 'radius' && ! $router->pending_radius_activation) {
+            return ['ok' => false, 'message' => 'Guided router provisioning requires a pending or active RADIUS configuration.'];
+        }
+        if ($router->pending_radius_activation && $router->radius_readiness_status !== 'ready') {
+            return ['ok' => false, 'message' => 'RADIUS readiness must pass before enabling router services. The existing access backend remains active.'];
         }
 
         if ($router->enable_pppoe && stripos((string) $router->hardware_model, 'chr') !== false) {
             return ['ok' => false, 'message' => 'PPPoE provisioning is not available for CHR lab routers.'];
         }
 
-        if ($router->access_backend === 'radius') {
+        if ($router->access_backend === 'radius' || $router->pending_radius_activation) {
             if (! RadiusReadiness::available() || ! $router->hasUsableRadiusConfiguration()) {
                 return ['ok' => false, 'message' => RadiusRouterCredentialService::UNAVAILABLE_MESSAGE];
             }

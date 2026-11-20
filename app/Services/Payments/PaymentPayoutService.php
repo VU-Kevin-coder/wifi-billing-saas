@@ -282,7 +282,7 @@ class PaymentPayoutService
             (int) $transaction->amount,
             $phone,
             $transaction->tenant?->contact_name ?: $transaction->tenant?->name ?: 'Wi-Fi Operator',
-            route('api.webhooks.obpay'),
+            $this->obpay->callbackUrl(),
         );
         $data = $response['data'] ?? [];
         if (($response['success'] ?? false) === false) {

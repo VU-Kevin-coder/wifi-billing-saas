@@ -72,4 +72,54 @@ class RadiusRouterCredentialService
             return $secret;
         });
     }
+
+    /**
+     * Prepare the router for RADIUS without changing its active access backend.
+     * The backend is switched only after FreeRADIUS reports a real Access-Accept.
+     */
+    public function preparePendingActivation(Router $router, string $nasIdentifier): string
+    {
+        if (! RadiusReadiness::available()) {
+            throw new RadiusUnavailableException(self::UNAVAILABLE_MESSAGE);
+        }
+
+        $nasIdentifier = trim($nasIdentifier);
+        if (! $router->exists || ! $router->getKey()) {
+            throw new LogicException('A persisted router is required before RADIUS can be configured.');
+        }
+        if ($nasIdentifier === '' || strlen($nasIdentifier) > 255 || preg_match('/[\x00-\x20\x7f]/', $nasIdentifier)) {
+            throw new InvalidArgumentException('NAS identity must be a non-empty, bounded identifier without control characters.');
+        }
+
+        return DB::transaction(function () use ($router, $nasIdentifier): string {
+            $context = app(TenantContext::class);
+            if ($context->hasTenant() && (int) $context->getTenantId() !== (int) $router->tenant_id) {
+                throw new LogicException('A router credential cannot be provisioned outside its active tenant.');
+            }
+
+            $lockedRouter = Router::withoutTenancy()
+                ->where('tenant_id', $router->tenant_id)
+                ->lockForUpdate()
+                ->findOrFail($router->getKey());
+            $secret = $lockedRouter->radius_shared_secret;
+            if (! is_string($secret) || strlen($secret) < 64) {
+                $secret = bin2hex(random_bytes(32));
+            }
+
+            $lockedRouter->forceFill([
+                'radius_nas_identifier' => $nasIdentifier,
+                'radius_shared_secret' => $secret,
+                'pending_radius_activation' => $lockedRouter->access_backend !== 'radius',
+                'radius_access_reject_streak' => 0,
+                'radius_activation_paused_at' => null,
+            ]);
+            if (! $lockedRouter->save()) {
+                throw new RuntimeException('The pending RADIUS credential could not be persisted.');
+            }
+
+            $router->setRawAttributes($lockedRouter->getAttributes(), true);
+
+            return $secret;
+        });
+    }
 }

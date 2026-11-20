@@ -5,7 +5,6 @@
 
     @php
         $byKey = $policies->keyBy('key');
-        $values = $policies->mapWithKeys(fn ($policy) => [$policy->key => $policy->value])->all();
         $familyMap = [
             'approvals' => ['Approval controls', 'Manual balance changes can require a second admin.', 'approval'],
             'security' => ['Sign-in and verification', 'Policies that protect administrator and operator accounts.', 'security'],
@@ -14,20 +13,16 @@
             'vouchers' => ['Voucher generation', 'Limits on voucher batches and code length.', 'voucher'],
             'scheduling' => ['Background jobs', 'How often scheduled reconciliation and expiry jobs run.', 'schedule'],
         ];
-        $adminMfaSafe = ($values['security.platform_admin_mfa'] ?? null) === true;
-        $stepUpSafe = ($values['security.step_up_enabled'] ?? null) === true;
-        $approvalSafe = ($values['approval.wallet_adjustment.enabled'] ?? null) === true && in_array($values['approval.wallet_adjustment.mode'] ?? null, ['always', 'threshold'], true);
-        $riskCount = (int) ! $adminMfaSafe + (int) ! $stepUpSafe + (int) ! $approvalSafe;
         $displayHistoryValue = fn ($value) => is_bool($value) ? ($value ? 'on' : 'off') : (is_scalar($value) ? $value : ($value === null ? '-' : json_encode($value)));
 
     @endphp
 
     <style>
-        .policy-page{--bg:#f5f7f8;--surface:#fff;--surface2:#eef2f4;--line:#dde3e7;--line2:#c5cdd3;--fg:#16202a;--fg2:#4a5966;--fg3:#73818d;--accent:#0b6e8a;--accent-soft:#dcf0f6;--ok:#17794a;--warn:#9a5b00;--bad:#b42318;background:var(--bg);color:var(--fg);min-height:calc(100vh - 64px);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+        .policy-page{--bg:var(--app-page-bg);--surface:var(--app-surface);--surface2:var(--app-surface-subtle);--line:var(--app-border);--line2:var(--app-border-strong);--fg:var(--app-text-primary);--fg2:var(--app-text-secondary);--fg3:var(--app-text-muted);--accent:var(--app-accent);--accent-soft:var(--app-accent-subtle);--ok:var(--app-success-text);--warn:var(--app-warning-text);--bad:var(--app-danger-text);background:var(--bg);color:var(--fg);min-height:calc(100vh - 64px);font:inherit}
         .policy-page *{box-sizing:border-box}.policy-page input,.policy-page select,.policy-page button{font:inherit;color:inherit}.policy-page a{color:var(--accent)}
         .policy-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px max(16px,calc((100vw - 1100px)/2));border-bottom:1px solid var(--line);background:var(--surface)}
         .policy-brand{font-weight:700;white-space:nowrap}.policy-brand span{color:var(--fg3);font-weight:500}.policy-search{position:relative;flex:1 1 240px;max-width:380px}.policy-search input{width:100%;padding:8px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}
-        .policy-actions{display:flex;gap:8px}.policy-btn{border:1px solid var(--line2);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;text-decoration:none}.policy-btn:hover{background:var(--surface2)}.policy-btn.primary{background:var(--accent);border-color:var(--accent);color:white}.policy-btn:disabled{opacity:.5;cursor:not-allowed}
+        .policy-actions{display:flex;gap:8px}.policy-btn{border:1px solid var(--line2);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;text-decoration:none}.policy-btn:hover{background:var(--surface2)}.policy-btn.primary{background:var(--app-accent-strong);border-color:var(--app-accent-strong);color:white}.policy-btn:disabled{opacity:.5;cursor:not-allowed}
         .policy-content{max-width:1100px;margin:auto;padding:22px 18px 125px}.policy-head{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start}.policy-head h1{font-size:24px;margin:0 0 4px;letter-spacing:-.02em}.policy-head p{margin:0;color:var(--fg2);max-width:72ch}
         .policy-rail{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin:18px 0 20px}.policy-rail a{display:flex;align-items:center;gap:7px;padding:10px 13px;color:var(--fg2);text-decoration:none;font-weight:600;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px}.policy-rail a.active{color:var(--accent);border-color:var(--accent)}
         .policy-dot{min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:white;font-size:10px;display:inline-grid;place-items:center;padding:0 5px}
@@ -37,14 +32,12 @@
         .policy-input{width:100%;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}.policy-input:focus{outline:2px solid var(--accent);outline-offset:1px}
         .policy-toggle{display:flex;gap:9px;align-items:center}.policy-toggle input{width:17px;height:17px;accent-color:var(--accent)}.policy-switch{width:42px;height:24px}
         .policy-table-wrap{overflow:auto}.policy-table{border-collapse:collapse;width:100%;min-width:700px}.policy-table th,.policy-table td{padding:10px 12px;border-top:1px solid var(--line);vertical-align:middle;text-align:center}.policy-table th{border-top:0;color:var(--fg3);font-size:10px;text-transform:uppercase;letter-spacing:.06em}.policy-table td:first-child,.policy-table th:first-child{text-align:left;min-width:210px}
-        .policy-banner{padding:11px 14px;border-radius:10px;margin-bottom:16px;background:var(--accent-soft)}.policy-banner.warn{background:#fdf0d5}.policy-banner.bad{background:#fde4e1}
+        .policy-banner{padding:11px 14px;border-radius:10px;margin-bottom:16px;background:var(--accent-soft)}.policy-banner.warn{background:var(--app-warning-bg);color:var(--warn)}.policy-banner.bad{background:var(--app-danger-bg);color:var(--bad)}
         .policy-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}.policy-tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px}.policy-tile b{display:block;font-size:10px;color:var(--fg3);text-transform:uppercase;letter-spacing:.06em}.policy-tile strong{display:block;font-size:24px}
         .policy-risk{list-style:none;padding:0;margin:0}.policy-risk li{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:12px;padding:12px 18px;border-top:1px solid var(--line);align-items:start}.policy-risk li:first-child{border-top:0}.policy-sev{width:10px;height:10px;border-radius:50%;margin-top:6px;background:var(--bad)}.policy-sev.warn{background:var(--warn)}.policy-sev.ok{background:var(--ok)}
         .policy-savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border-top:1px solid var(--line2);box-shadow:0 -8px 24px #0002}.policy-savebar.show{display:flex}.policy-savebar input{width:min(420px,100%);padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}
         .policy-empty{padding:32px;text-align:center;color:var(--fg3)}.policy-old{color:var(--bad);text-decoration:line-through}.policy-new{color:var(--ok);font-weight:700}
         @media(max-width:760px){.policy-row{grid-template-columns:minmax(0,1fr)}}
-        @media(prefers-color-scheme:dark){html:not([data-app-theme=light]):not([data-app-theme=dark]) .policy-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}}
-        html[data-app-theme=dark] .policy-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}
     </style>
 
     <div class="policy-page" id="policyPage">
@@ -78,16 +71,23 @@
                         <div class="policy-tiles">
                             <div class="policy-tile"><b>Policies</b><strong>{{ $policies->count() }}</strong></div>
                             <div class="policy-tile"><b>Not default</b><strong>{{ $policies->filter(fn ($p) => array_key_exists($p->key, $defaults) && $p->value !== $defaults[$p->key])->count() }}</strong></div>
-                            <div class="policy-tile"><b>Critical risks</b><strong id="policyRiskCount" style="color:{{ $riskCount ? 'var(--bad)' : 'var(--ok)' }}">{{ $riskCount }}</strong></div>
+                            <div class="policy-tile"><b>Active risks</b><strong id="policyRiskCount" style="color:{{ $riskCount ? 'var(--bad)' : 'var(--ok)' }}">{{ $riskCount }}</strong></div>
                             <div class="policy-tile"><b>Categories</b><strong>{{ $policies->pluck('category')->unique()->count() }}</strong></div>
                         </div>
                         <section class="policy-card">
-                            <header><div><h2>Risk check</h2><p>Critical money and account safeguards.</p></div></header>
+                            <header><div><h2>Risk check</h2><p>Active risks are evaluated from stored policies and runtime enforcement settings.</p></div></header>
                             <ul class="policy-risk">
-                                <li data-risk-item="platform_admin_mfa" @if($adminMfaSafe) hidden @endif><span class="policy-sev"></span><div><b>Platform admins can sign in without 2FA</b><div class="policy-help">Turn platform-admin MFA back on.</div></div><a href="#security">Review</a></li>
-                                <li data-risk-item="step_up" @if($stepUpSafe) hidden @endif><span class="policy-sev warn"></span><div><b>No step-up check on sensitive actions</b><div class="policy-help">A stolen session could approve money movements without a fresh verification.</div></div><a href="#security">Review</a></li>
-                                <li data-risk-item="adjustment_approval" @if($approvalSafe) hidden @endif><span class="policy-sev"></span><div><b>Wallet adjustments need no approval</b><div class="policy-help">One admin can change a balance without review.</div></div><a href="#approvals">Review</a></li>
-                                <li data-risk-item="none" @if($riskCount) hidden @endif><span class="policy-sev ok"></span><div><b>No critical risks detected</b><div class="policy-help">This check updates when you change the settings below.</div></div><span></span></li>
+                                @foreach($riskChecks as $risk)
+                                    <li data-risk-check="{{ $risk['id'] }}"
+                                        data-risk-match="{{ $risk['match'] }}"
+                                        data-risk-conditions="{{ json_encode($risk['conditions']) }}"
+                                        @if(!$risk['active']) hidden @endif>
+                                        <span class="policy-sev {{ $risk['severity'] }}"></span>
+                                        <div><b>{{ $risk['title'] }}</b><div class="policy-help">{{ $risk['description'] }}</div></div>
+                                        <a href="#{{ $risk['review_tab'] }}">Review</a>
+                                    </li>
+                                @endforeach
+                                <li data-no-risk @if($riskCount) hidden @endif><span class="policy-sev ok"></span><div><b>No active risks detected</b><div class="policy-help">All configured checks currently pass.</div></div><span></span></li>
                             </ul>
                         </section>
                         <section class="policy-card">
@@ -263,23 +263,32 @@
                 save.disabled = !!submission || form.dataset.uiSubmitting === 'true' || form.dataset.uiSaveUncertain === 'true' || unique.size === 0 || reason.value.trim().length < 5;
                 renderRisk();
             };
-            const policyCheckbox = key => Array.from(form.querySelectorAll('input[type="checkbox"][name^="policies["]'))
-                .find(input => input.name === `policies[${key}]`);
             const renderRisk = () => {
-                const adminMfa = policyCheckbox('security.platform_admin_mfa')?.checked ?? false;
-                const stepUp = policyCheckbox('security.step_up_enabled')?.checked ?? false;
-                const adjustmentApproval = policyCheckbox('approval.wallet_adjustment.enabled')?.checked ?? false;
-                const approvalMode = Array.from(form.querySelectorAll('select[name^="policies["]'))
-                    .find(input => input.name === 'policies[approval.wallet_adjustment.mode]')?.value;
-                const risks = {
-                    platform_admin_mfa: !adminMfa,
-                    step_up: !stepUp,
-                    adjustment_approval: !adjustmentApproval || !['always', 'threshold'].includes(approvalMode),
-                };
-                const total = Object.values(risks).filter(Boolean).length;
-                document.querySelectorAll('[data-risk-item]').forEach(item => {
-                    item.hidden = item.dataset.riskItem === 'none' ? total > 0 : !risks[item.dataset.riskItem];
+                let total = 0;
+                document.querySelectorAll('[data-risk-check]').forEach(item => {
+                    const violations = JSON.parse(item.dataset.riskConditions).map(condition => {
+                        const name = `policies[${condition.key}]`;
+                        const control = Array.from(form.elements).find(input => input.name === name && input.type !== 'hidden');
+                        const current = condition.source !== 'policy' || !control
+                            ? condition.current
+                            : (control.type === 'checkbox'
+                                ? control.checked
+                                : (control.type === 'number' && control.value !== '' ? Number(control.value) : control.value));
+
+                        switch (condition.operator) {
+                            case 'not_true': return current !== true;
+                            case 'equals': return current === condition.value;
+                            case 'not_in': return !Array.isArray(condition.value) || !condition.value.includes(current);
+                            default: return true;
+                        }
+                    });
+                    const active = item.dataset.riskMatch === 'all'
+                        ? violations.length > 0 && violations.every(Boolean)
+                        : violations.some(Boolean);
+                    item.hidden = !active;
+                    if (active) total++;
                 });
+                document.querySelector('[data-no-risk]').hidden = total > 0;
                 document.getElementById('policyRiskCount').textContent = total;
                 const dot = document.getElementById('policyRiskDot');
                 dot.textContent = total;

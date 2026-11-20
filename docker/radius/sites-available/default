@@ -37,4 +37,18 @@ server default {
         }
         rest
     }
+
+    post-auth {
+        update control {
+            REST-HTTP-Header := "Authorization: Bearer ${RADIUS_BRIDGE_TOKEN}"
+        }
+        rest
+
+        Post-Auth-Type REJECT {
+            update control {
+                REST-HTTP-Header := "Authorization: Bearer ${RADIUS_BRIDGE_TOKEN}"
+            }
+            postauth_reject
+        }
+    }
 }
