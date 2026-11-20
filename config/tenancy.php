@@ -4,12 +4,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tenant URL Mode
+    |--------------------------------------------------------------------------
+    |
+    | Use "path" when the hosting provider supplies one shared domain without
+    | wildcard subdomains. Tenant workspaces then live at /t/{slug}.
+    |
+    */
+
+    'url_mode' => env('TENANT_URL_MODE', 'subdomain') === 'path' ? 'path' : 'subdomain',
+
+    /*
+    |--------------------------------------------------------------------------
     | Tenant Base Domain
     |--------------------------------------------------------------------------
     |
-    | Tenant workspaces are served from subdomains of this host. In local
-    | development this is usually "localhost"; in production set it to the
-    | root domain (for example "wifi.example.com").
+    | Used by subdomain mode. In local development this is usually "localhost";
+    | in production set it to the root domain (for example "wifi.example.com").
     |
     */
 
@@ -18,10 +29,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Reserved Subdomains
+    | Reserved Tenant Slugs
     |--------------------------------------------------------------------------
     |
-    | These slugs cannot be registered as tenant subdomains because they are
+    | These slugs cannot be registered as tenant workspaces because they are
     | used by the platform itself or commonly reserved by infrastructure.
     |
     */

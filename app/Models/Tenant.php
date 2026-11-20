@@ -49,7 +49,7 @@ class Tenant extends Model
             'support_phone' => '+256700000000',
             'support_email' => '',
             'whatsapp_number' => '',
-            'domain' => $this->host(),
+            'domain' => config('tenancy.url_mode') === 'path' ? $this->url('portal') : $this->host(),
             'show_packages' => true,
             'customer_id_prefix' => 'KL',
             'voucher_prefix' => 'KL',
@@ -114,29 +114,50 @@ class Tenant extends Model
      */
     public function host(): string
     {
+        if (config('tenancy.url_mode') === 'path') {
+            return self::domainSuffix();
+        }
+
         return $this->slug.'.'.self::domainSuffix();
     }
 
     public static function domainSuffix(): string
     {
-        $host = (string) config('tenancy.base_domain');
+        $host = config('tenancy.url_mode') === 'path'
+            ? (parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost')
+            : (string) config('tenancy.base_domain');
         $port = parse_url((string) config('app.url'), PHP_URL_PORT);
 
         return $port && ! in_array((int) $port, [80, 443], true) ? $host.':'.$port : $host;
     }
 
-    /**
-     * Build an absolute URL for a path on this tenant's workspace domain.
-     */
-    public function url(string $path = '/'): string
+    public static function workspaceAddressPrefix(): string
     {
-        $scheme = parse_url((string) config('app.url'), PHP_URL_SCHEME) ?: 'https';
+        if (config('tenancy.url_mode') === 'path') {
+            return rtrim((string) config('app.url'), '/').'/t/';
+        }
 
-        return $scheme.'://'.$this->host().'/'.ltrim($path, '/');
+        return '.'.self::domainSuffix();
     }
 
     /**
-     * Slugs that may never be used as tenant subdomains.
+     * Build an absolute URL for a path on this tenant's workspace.
+     */
+    public function url(string $path = '/'): string
+    {
+        $path = ltrim($path, '/');
+
+        if (config('tenancy.url_mode') === 'path') {
+            return rtrim((string) config('app.url'), '/').'/t/'.$this->slug.'/'.($path !== '' ? $path : 'operator/dashboard');
+        }
+
+        $scheme = parse_url((string) config('app.url'), PHP_URL_SCHEME) ?: 'https';
+
+        return $scheme.'://'.$this->host().'/'.$path;
+    }
+
+    /**
+     * Slugs that may never be used by a tenant workspace.
      */
     public static function reservedSlugs(): array
     {

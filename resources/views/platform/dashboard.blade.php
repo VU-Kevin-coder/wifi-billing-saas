@@ -286,7 +286,7 @@
                                     </div>
                                     <div>
                                         <div class="text-sm font-bold text-gray-900">{{ $tenant->name }}</div>
-                                        <div class="text-[11px] text-gray-400 font-mono">{{ $tenant->host() }}</div>
+                                        <div class="text-[11px] text-gray-400 font-mono">{{ $tenant->url('operator/dashboard') }}</div>
                                     </div>
                                 </div>
                             </td>

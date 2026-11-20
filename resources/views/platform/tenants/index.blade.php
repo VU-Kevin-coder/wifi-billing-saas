@@ -400,15 +400,17 @@
                                                         @enderror
                                                     </div>
 
-                                                    <!-- Subdomain / Slug -->
+                                                    <!-- Workspace address / slug -->
                                                     <input type="hidden" name="slug_manual" value="0" :value="slugManual ? '1' : '0'">
                                                     <div>
-                                                        <label for="tenant_slug" class="block font-medium text-gray-700 mb-1">Workspace Subdomain (Slug) <span class="text-red-500">*</span></label>
+                                                        <label for="tenant_slug" class="block font-medium text-gray-700 mb-1">
+                                                            {{ config('tenancy.url_mode') === 'path' ? 'Workspace Slug' : 'Workspace Subdomain (Slug)' }} <span class="text-red-500">*</span>
+                                                        </label>
                                                         <div class="flex rounded-lg shadow-sm">
                                                             <input type="text" id="tenant_slug" name="slug" x-model="slug" @input="slugManual = true" required placeholder="nile-internet"
                                                                    class="block w-full min-w-0 flex-1 rounded-none rounded-l-lg border-gray-300 text-xs font-mono focus:border-blue-500 focus:ring-blue-500">
                                                             <span class="inline-flex items-center rounded-r-lg border border-l-0 border-gray-300 bg-gray-50 px-3 text-xs text-gray-500 font-mono">
-                                                                .{{ \App\Models\Tenant::domainSuffix() }}
+                                                                {{ \App\Models\Tenant::workspaceAddressPrefix() }}
                                                             </span>
                                                         </div>
                                                         @error('slug')

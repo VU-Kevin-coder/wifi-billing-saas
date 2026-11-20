@@ -524,11 +524,13 @@ script cannot truthfully restrict it to only `/ip hotspot`. Do not describe the
 account as subtree-scoped. Use it only on a dedicated router and trusted
 management network until a narrower command boundary is deployed.
 
-Production `TRUSTED_PROXIES` must contain the exact proxy IPs/CIDRs that
-overwrite forwarded headers. The Render blueprint intentionally asks for this
-value instead of trusting `*`; production preflight blocks unset and wildcard
-values. Verify the actual proxy chain and forwarded-header behavior on the
-deployed Render service before enabling production traffic.
+On Render and other non-Railway hosts, production `TRUSTED_PROXIES` must contain
+the exact proxy IPs/CIDRs that overwrite forwarded headers. The Render
+blueprint intentionally asks for this value instead of trusting `*`; production
+preflight blocks unset and wildcard values. Verify the actual proxy chain and
+forwarded-header behavior on the deployed Render service before enabling
+production traffic. For Railway's single-domain path-tenancy profile and its
+platform-specific proxy handling, follow [docs/RAILWAY-DEPLOYMENT.md](docs/RAILWAY-DEPLOYMENT.md).
 
 See [docs/HARDWARE-MATRIX.md](docs/HARDWARE-MATRIX.md) for router-version targets
 and the end-to-end acceptance checklist, and

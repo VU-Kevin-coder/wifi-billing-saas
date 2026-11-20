@@ -29,6 +29,7 @@ abstract class TestCase extends BaseTestCase
             'DB_PASSWORD' => 'disposable-test-password',
             'DB_SOCKET' => '',
             'DB_URL' => '',
+            'DATABASE_URL' => '',
             'DB_FOREIGN_KEYS' => 'true',
             'CACHE_STORE' => 'array',
             'QUEUE_CONNECTION' => 'sync',

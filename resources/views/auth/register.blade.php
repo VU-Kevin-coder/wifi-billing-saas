@@ -28,16 +28,18 @@
             @enderror
         </div>
 
-        {{-- ── Subdomain ──────────────────────────────────────────────────── --}}
+        {{-- ── Workspace address ──────────────────────────────────────────── --}}
         <div>
-            <label for="subdomain" class="block text-sm font-medium text-gray-700 mb-1">Portal Subdomain</label>
+            <label for="subdomain" class="block text-sm font-medium text-gray-700 mb-1">
+                {{ config('tenancy.url_mode') === 'path' ? 'Workspace Slug' : 'Portal Subdomain' }}
+            </label>
             <div class="flex rounded-xl shadow-sm overflow-hidden border border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition @error('subdomain') border-red-400 bg-red-50 @enderror">
                 <input id="subdomain" type="text" name="subdomain"
                 @error('subdomain') aria-invalid="true" aria-describedby="subdomain-error" @enderror value="{{ old('subdomain') }}"
                     required placeholder="acme"
                     class="flex-1 min-w-0 block w-full border-0 text-sm py-2.5 px-3 outline-none bg-transparent">
                 <span class="inline-flex items-center px-3 bg-gray-50 text-gray-400 text-sm border-l border-gray-300 whitespace-nowrap">
-                    .{{ \App\Models\Tenant::domainSuffix() }}
+                    {{ \App\Models\Tenant::workspaceAddressPrefix() }}
                 </span>
             </div>
             @error('subdomain')

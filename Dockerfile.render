@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # ─────────────────────────────────────────────────────────────────────────────
-# Render-optimised Dockerfile for Hamnet Wi-Fi Billing System
+# Production web Dockerfile for Hamnet Wi-Fi Billing System
 # Uses a single container that runs Nginx + PHP-FPM via supervisord.
-# Render provides PostgreSQL for the production deployment.
+# Railway can use this file via RAILWAY_DOCKERFILE_PATH; Render uses it directly.
 # ─────────────────────────────────────────────────────────────────────────────
 # ─── Stage 1: build front-end assets (Vite manifest is required by @vite) ──────
 FROM node:22-alpine AS assets

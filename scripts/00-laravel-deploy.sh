@@ -1,7 +1,7 @@
 #!/bin/sh
 # ─────────────────────────────────────────────────────────────────────────────
-# 00-laravel-deploy.sh  — Render pre-start bootstrap for Hamnet
-# Runs once on every container boot (Render restarts on each deploy).
+# 00-laravel-deploy.sh  — production pre-start bootstrap for Hamnet
+# Runs once on every web container boot.
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 
@@ -15,6 +15,7 @@ mkdir -p \
     storage/framework/cache/data \
     storage/framework/sessions \
     storage/framework/views \
+    storage/app/public \
     storage/logs \
     bootstrap/cache
 
@@ -22,30 +23,53 @@ chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
 # ── 2. Wait for the database ──────────────────────────────────────────────────
-if [ -n "${DB_HOST:-}" ]; then
-    echo ">>> Waiting for database at ${DB_HOST}:${DB_PORT:-3306}..."
+DATABASE_CONNECTION_URL="${DB_URL:-${DATABASE_URL:-}}"
+if [ -n "$DATABASE_CONNECTION_URL" ] || [ -n "${DB_HOST:-}" ]; then
+    echo ">>> Waiting for the configured database..."
     max_attempts=30
     attempt=0
     while [ $attempt -lt $max_attempts ]; do
-        # Try MySQL first, then PostgreSQL
-        if php -r "
-            \$h  = getenv('DB_HOST');
-            \$p  = getenv('DB_PORT') ?: '3306';
-            \$u  = getenv('DB_USERNAME');
-            \$pw = getenv('DB_PASSWORD');
-            \$db = getenv('DB_DATABASE') ?: '';
-            \$drv = getenv('DB_CONNECTION') ?: 'mysql';
+        if php -r '
+            $url = getenv("DB_URL") ?: getenv("DATABASE_URL");
+            $driver = getenv("DB_CONNECTION") ?: "mysql";
+            if ($url !== false && $url !== "") {
+                $parts = parse_url($url);
+                if (! is_array($parts)) {
+                    exit(1);
+                }
+                if (in_array($parts["scheme"] ?? "", ["postgres", "postgresql"], true)) {
+                    $driver = "pgsql";
+                }
+                $host = $parts["host"] ?? "";
+                $port = $parts["port"] ?? ($driver === "pgsql" ? 5432 : 3306);
+                $user = rawurldecode($parts["user"] ?? "");
+                $password = rawurldecode($parts["pass"] ?? "");
+                $database = ltrim(rawurldecode($parts["path"] ?? ""), "/");
+                $query = [];
+                parse_str($parts["query"] ?? "", $query);
+            } else {
+                $host = getenv("DB_HOST") ?: "";
+                $port = getenv("DB_PORT") ?: ($driver === "pgsql" ? "5432" : "3306");
+                $user = getenv("DB_USERNAME") ?: "";
+                $password = getenv("DB_PASSWORD") ?: "";
+                $database = getenv("DB_DATABASE") ?: "";
+                $query = [];
+            }
             try {
-                if (\$drv === 'pgsql') {
-                    new PDO(\"pgsql:host=\$h;port=\$p;dbname=\$db\", \$u, \$pw);
+                if ($driver === "pgsql") {
+                    $dsn = "pgsql:host=$host;port=$port;dbname=$database";
+                    if (isset($query["sslmode"])) {
+                        $dsn .= ";sslmode=".$query["sslmode"];
+                    }
+                    new PDO($dsn, $user, $password);
                 } else {
-                    new PDO(\"mysql:host=\$h;port=\$p\", \$u, \$pw);
+                    new PDO("mysql:host=$host;port=$port;dbname=$database", $user, $password);
                 }
                 exit(0);
-            } catch (PDOException \$e) {
+            } catch (PDOException) {
                 exit(1);
             }
-        "; then
+        '; then
             echo ">>> Database is ready."
             break
         fi
@@ -68,6 +92,9 @@ fi
 # ── 4. Run migrations ─────────────────────────────────────────────────────────
 echo ">>> Running migrations..."
 php artisan migrate --force --no-interaction
+
+# Public disk uploads must point to the mounted Railway volume when enabled.
+php artisan storage:link --force
 
 # ── 5. Seed platform admin (only on first boot — idempotent guard inside seeder)
 # Uncomment once you have a DatabaseSeeder guard in place:
