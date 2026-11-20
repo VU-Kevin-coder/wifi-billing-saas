@@ -46,7 +46,8 @@ class PlatformControlSettingsTest extends TestCase
             ->get(route('platform.configuration.control', ['section' => 'health']))
             ->assertOk()
             ->assertSee('Current status')
-            ->assertSee('Site agents');
+            ->assertSee('Database')
+            ->assertDontSee('Site agents');
     }
 
     public function test_settings_are_saved_and_audited_with_the_admin_reason(): void

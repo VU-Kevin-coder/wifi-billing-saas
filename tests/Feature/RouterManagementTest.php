@@ -84,7 +84,9 @@ class RouterManagementTest extends TestCase
         $response->assertSee('bg-gray-50', false);
         $response->assertSee('bg-white', false);
         $response->assertDontSee('bg-gray-950', false);
-        $response->assertSee('Access backend');
+        $response->assertSee('RADIUS');
+        $response->assertDontSee('site_agent');
+        $response->assertDontSee('management_ip');
         $response->assertSee('Operating site');
         $response->assertSee('Central Office');
         $response->assertSee('value="'.$site->id.'"', false);
@@ -99,7 +101,7 @@ class RouterManagementTest extends TestCase
                 'name' => 'TEST-ROUTER-01',
                 'management_ip' => '10.20.1.10',
                 'management_subnet' => '10.20.1.0/24',
-                'api_port' => 8729,
+                'api_port' => 8728,
                 'api_username' => 'router-api',
                 'site' => 'Kampala Central',
                 'hardware_model' => 'CCR2004',
@@ -122,13 +124,13 @@ class RouterManagementTest extends TestCase
         $this->assertEquals($this->acme->id, $router->tenant_id);
         $this->assertEquals('provisioning', $router->status);
         $this->assertEquals('CCR2004', $router->hardware_model);
-        $this->assertSame('10.20.1.10', $router->management_ip);
+        $this->assertNull($router->management_ip);
         $this->assertEquals(8729, $router->api_port);
         $this->assertSame('router-api', $router->api_username);
         $this->assertTrue($router->has_wireless);
         $this->assertSame('Kampala Guest', $router->wifi_ssid);
         $this->assertSame('supersecretpass123', $router->api_password);
-        $this->assertSame('10.20.1.0/24', $router->hotspot_config['management_subnet']);
+        $this->assertArrayNotHasKey('management_subnet', $router->hotspot_config);
 
         $script = $this->actingAs($this->acmeUser)
             ->get(route('operator.routers.provision-script', [
@@ -286,7 +288,7 @@ class RouterManagementTest extends TestCase
         $this->assertSame($site->id, $router->site_id);
         $this->assertSame('Updated site', $router->site);
         $this->assertSame('RB4011', $router->hardware_model);
-        $this->assertSame('hamnet-chr', $router->management_ip);
+        $this->assertSame('192.0.2.10', $router->management_ip);
         $this->assertSame('updated-api', $router->api_username);
         $this->assertSame('existing-secret', $router->api_password);
         $this->assertSame(8729, $router->api_port);
@@ -476,7 +478,7 @@ class RouterManagementTest extends TestCase
         $this->assertNotNull($router->last_seen_at);
     }
 
-    public function test_operator_can_test_router_lan_api(): void
+    public function test_operator_can_test_router_api_over_wireguard(): void
     {
         $router = app(TenantContext::class)->runAs($this->acme, function () {
             return Router::create([
@@ -528,11 +530,6 @@ class RouterManagementTest extends TestCase
 
     public function test_router_api_failure_includes_connection_diagnostics_without_exposing_password(): void
     {
-        config([
-            'site_agent.required' => false,
-            'site_agent.allow_direct_router_connection' => true,
-        ]);
-
         $router = app(TenantContext::class)->runAs($this->acme, function () {
             return Router::create([
                 'name' => 'DIAGNOSTIC-ROUTER',
@@ -543,23 +540,20 @@ class RouterManagementTest extends TestCase
             ]);
         });
 
-        MikroTik::shouldReceive('router')
-            ->once()
-            ->with('lan-demo-router-'.$router->id)
-            ->andThrow(new ConnectionException('Login failed for user router-admin on 10.8.1.2 with do-not-display-this-password'));
+        MikroTik::shouldReceive('router')->never();
 
         $result = app(RouterConnectionService::class)->test($router);
 
         $this->assertFalse($result['ok']);
-        $this->assertSame('Connection or authentication failed.', $result['diagnostic']);
-        $this->assertSame('Router API test failed. Connection or authentication failed.', $result['message']);
+        $this->assertSame('missing_configuration', $result['failure_type']);
+        $this->assertSame('No enabled WireGuard tunnel address is configured for this router.', $result['diagnostic']);
         foreach (['do-not-display-this-password', 'router-admin', '10.8.1.2', 'Login failed', ConnectionException::class] as $sensitiveDetail) {
             $this->assertStringNotContainsString($sensitiveDetail, $result['diagnostic']);
             $this->assertStringNotContainsString($sensitiveDetail, $result['message']);
         }
     }
 
-    public function test_operator_reboot_is_not_reported_as_success_without_agent_support(): void
+    public function test_operator_reboot_is_not_reported_as_success_without_verified_connection(): void
     {
         $context = app(TenantContext::class);
         $router = $context->runAs($this->acme, function () {
@@ -577,7 +571,7 @@ class RouterManagementTest extends TestCase
         $response->assertSessionHasErrors('router');
     }
 
-    public function test_operator_sync_is_not_reported_as_success_without_agent_support(): void
+    public function test_operator_sync_is_not_reported_as_success_without_verified_connection(): void
     {
         $context = app(TenantContext::class);
         $router = $context->runAs($this->acme, function () {
@@ -608,7 +602,7 @@ class RouterManagementTest extends TestCase
         $this->mock(RouterConnectionService::class, function ($mock): void {
             $mock->shouldReceive('test')
                 ->twice()
-                ->andReturn(['ok' => false, 'message' => 'No site agent paired.']);
+                ->andReturn(['ok' => false, 'message' => 'No enabled WireGuard peer is configured.']);
         });
 
         $response = $this->actingAs($this->acmeUser)
@@ -618,7 +612,7 @@ class RouterManagementTest extends TestCase
         $response->assertSessionHas('status');
     }
 
-    public function test_bulk_ping_is_not_reported_as_success_without_agent_support(): void
+    public function test_bulk_ping_is_not_reported_as_success_without_verified_connection(): void
     {
         $context = app(TenantContext::class);
         $routerIds = $context->runAs($this->acme, function () {
@@ -690,32 +684,6 @@ class RouterManagementTest extends TestCase
 
         // Beta router is still intact in the database
         $this->assertDatabaseHas('routers', ['id' => $betaRouter->id]);
-    }
-
-    public function test_router_settings_sync_all_and_disconnect(): void
-    {
-        $this->acme->update([
-            'mikrotik_host' => '192.168.88.1',
-            'mikrotik_username' => 'admin',
-            'mikrotik_password' => 'mypass',
-            'mikrotik_port' => 8728,
-        ]);
-
-        // Sync all routers
-        $response = $this->actingAs($this->acmeUser)
-            ->post('http://acme.localhost/operator/settings/router/sync-all');
-
-        $response->assertRedirect();
-        $response->assertSessionHas('status');
-
-        // Disconnect router
-        $disconnectResponse = $this->actingAs($this->acmeUser)
-            ->post('http://acme.localhost/operator/settings/router/disconnect');
-
-        $disconnectResponse->assertRedirect();
-        $this->acme->refresh();
-        $this->assertNull($this->acme->mikrotik_host);
-        $this->assertNull($this->acme->mikrotik_username);
     }
 
     public function test_deleting_all_routers_does_not_display_any_fake_data_or_auto_seed(): void

@@ -7,8 +7,6 @@ use App\Models\Package;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
-use App\Models\SiteAgent;
-use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
 use App\Models\Voucher;
 use Illuminate\Http\Request;
@@ -42,18 +40,14 @@ class VoucherActivationService
                 $existingRouter = $session->router_id
                     ? Router::query()->where('tenant_id', $tenant->id)->find($session->router_id)
                     : null;
-                if (! $existingRouter || ! in_array($existingRouter->access_backend, ['site_agent', 'radius'], true)) {
-                    throw new RadiusUnavailableException('Access cannot be confirmed. Contact the operator; please do not pay again.');
+                if (! $existingRouter || $existingRouter->access_backend !== 'radius') {
+                    throw new RadiusUnavailableException('This router must complete RADIUS setup before access can be activated. Please contact the operator; do not pay again.');
                 }
-                if ($existingRouter->access_backend === 'radius') {
-                    $this->strategies->resolve($existingRouter)->assertReady($existingRouter, null);
-                }
+                $this->strategies->resolve($existingRouter)->assertReady($existingRouter);
                 if (! in_array($session->status, ['active', 'provisioning'], true)
                     || $session->expires_at?->isPast()) {
                     throw new LogicException('This voucher session has already expired or disconnected.');
                 }
-
-                $this->resumeAgentProvisioningAfterExplicitRollback($tenant, $session, $voucher);
 
                 return $session;
             }
@@ -77,20 +71,12 @@ class VoucherActivationService
                 throw new RadiusUnavailableException('Router cannot be identified. Contact the operator; please do not pay again.');
             }
             $accessBackend = $router->access_backend;
-            if (! in_array($accessBackend, ['site_agent', 'radius'], true)) {
+            if ($accessBackend !== 'radius') {
                 throw new RadiusUnavailableException('This router has an unsupported access backend. Contact the operator; please do not pay again.');
             }
 
-            $siteAgent = $router?->site_id
-                ? SiteAgent::query()
-                    ->where('tenant_id', $tenant->id)
-                    ->where('site_id', $router->site_id)
-                    ->whereNull('revoked_at')
-                    ->first()
-                : null;
-
             $strategy = $this->strategies->resolve($router);
-            $strategy->assertReady($router, $siteAgent);
+            $strategy->assertReady($router);
 
             $phone = $customerPhone ?: $voucher->redeemed_by ?: 'Walk-in';
             $customer = Customer::firstOrCreate(
@@ -125,49 +111,17 @@ class VoucherActivationService
                 'voucher_id' => $voucher->id,
                 'package_id' => $package->id,
                 'router_id' => $router?->id,
-                'status' => $strategy->initialSessionStatus($router, $siteAgent),
+                'status' => $strategy->initialSessionStatus($router),
                 'started_at' => $startedAt,
                 'expires_at' => $package->expiresAt($startedAt),
                 'ip_address' => $clientIp,
                 'mac_address' => $clientMac,
             ]);
 
-            $strategy->provision($router, $session, $voucher, $siteAgent);
+            $strategy->provision($router, $session, $voucher);
 
             return $session;
         });
-    }
-
-    private function resumeAgentProvisioningAfterExplicitRollback(Tenant $tenant, Session $session, Voucher $voucher): void
-    {
-        if ($session->status !== 'provisioning'
-            || ! $session->router_id
-            || $session->pending_revocation
-            || $session->pending_device_ban) {
-            return;
-        }
-
-        $router = Router::query()
-            ->where('tenant_id', $tenant->id)
-            ->find($session->router_id);
-        if (! $router || $router->access_backend !== 'site_agent' || ! $router->site_id) {
-            return;
-        }
-
-        $siteAgent = SiteAgent::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('site_id', $router->site_id)
-            ->whereNull('revoked_at')
-            ->first();
-        $hasProvisionCommand = SiteAgentCommand::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('session_id', $session->id)
-            ->where('operation', 'provision_user')
-            ->exists();
-
-        if ($siteAgent && ! $hasProvisionCommand) {
-            app(SiteAgentCommandService::class)->provision($router, $session, $voucher);
-        }
     }
 
     private function resolveRouter(Tenant $tenant, Voucher $voucher, Request $request, array $context): ?Router

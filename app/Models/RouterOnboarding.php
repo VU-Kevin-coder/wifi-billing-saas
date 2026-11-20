@@ -18,6 +18,10 @@ class RouterOnboarding extends Model
         'expires_at',
         'connected_at',
         'completed_at',
+        'enrolled_at',
+        'tunnel_verified_at',
+        'api_verified_at',
+        'radius_ready_at',
     ];
 
     protected $hidden = [
@@ -32,6 +36,10 @@ class RouterOnboarding extends Model
         'expires_at' => 'datetime',
         'connected_at' => 'datetime',
         'completed_at' => 'datetime',
+        'enrolled_at' => 'datetime',
+        'tunnel_verified_at' => 'datetime',
+        'api_verified_at' => 'datetime',
+        'radius_ready_at' => 'datetime',
         'bootstrap_fetches' => 'integer',
     ];
 

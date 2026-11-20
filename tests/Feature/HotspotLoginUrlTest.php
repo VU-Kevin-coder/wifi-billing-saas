@@ -32,7 +32,11 @@ class HotspotLoginUrlTest extends TestCase
             'status' => 'online',
             'hotspot_config' => $hotspotConfig,
         ]);
-        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'nas-'.$router->id,
+            'radius_shared_secret' => str_repeat('a', 64),
+        ])->saveOrFail();
 
         return $router;
     }
@@ -117,6 +121,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_each_tenant_is_sent_to_its_own_hotspot_gateway_after_redeeming(): void
     {
+        config(['radius.enabled' => true]);
         $acme = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
         $beta = Tenant::create(['kyc_status' => 'verified', 'name' => 'Beta', 'slug' => 'beta', 'status' => 'active']);
         $routerA = $this->router($acme, ['gateway' => '10.10.0.1'], 'RA');
@@ -133,6 +138,7 @@ class HotspotLoginUrlTest extends TestCase
 
     public function test_the_login_url_follows_the_router_the_customer_used_not_another_router_of_the_tenant(): void
     {
+        config(['radius.enabled' => true]);
         $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
         $this->router($tenant, ['gateway' => '10.10.0.1'], 'First');
         $second = $this->router($tenant, ['gateway' => '10.99.0.1'], 'Second');
@@ -183,7 +189,7 @@ class HotspotLoginUrlTest extends TestCase
         $this->assertSame('192.168.88.1', $stored->hotspot_config['gateway']);
     }
 
-    public function test_router_creation_can_explicitly_select_site_agent_without_mass_assigning_backend(): void
+    public function test_router_creation_uses_radius_and_ignores_legacy_backend_selection(): void
     {
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
         $tenant = Tenant::create(['kyc_status' => 'verified', 'name' => 'Acme', 'slug' => 'acme', 'status' => 'active']);
@@ -192,13 +198,13 @@ class HotspotLoginUrlTest extends TestCase
         URL::defaults(['tenant' => 'acme']);
 
         $this->actingAs($user)->post(route('operator.routers.store'), [
-            'name' => 'Agent Router',
+            'name' => 'RADIUS Router',
             'access_backend' => 'site_agent',
             '_idempotency_key' => $this->idempotencyKey(),
         ])->assertSessionHasNoErrors();
 
-        $router = Router::withoutTenancy()->where('name', 'Agent Router')->firstOrFail();
-        $this->assertSame('site_agent', $router->access_backend);
+        $router = Router::withoutTenancy()->where('name', 'RADIUS Router')->firstOrFail();
+        $this->assertSame('radius', $router->access_backend);
     }
 
     public function test_no_hardcoded_gateway_address_remains_in_application_code(): void

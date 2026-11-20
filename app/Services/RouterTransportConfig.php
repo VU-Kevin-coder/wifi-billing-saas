@@ -26,7 +26,7 @@ class RouterTransportConfig
         }
         if ($plaintext && ! (app()->environment('testing')
             && config('app.env') === 'testing'
-            && config('site_agent.testing_allow_plaintext_router_api') === true)) {
+            && config('router.testing_allow_plaintext_api') === true)) {
             Log::warning('MikroTik router plaintext API blocked.', [
                 'router_id' => $routerId,
                 'port' => $port,
@@ -41,8 +41,10 @@ class RouterTransportConfig
             throw new RouterTransportException('Router API-SSL requires a valid IPv4 address or DNS hostname for certificate identity verification.');
         }
 
-        $routerCaPath = RouterApiCertificateTrustService::pathForRouter($routerId);
-        if ($requireRouterCertificate && ! is_file($routerCaPath)) {
+        $routerCaPath = $requireRouterCertificate
+            ? RouterApiCertificateTrustService::pathForRouter($routerId)
+            : null;
+        if ($requireRouterCertificate && $routerCaPath === null) {
             throw new RouterTransportException('The enrolled router API certificate is unavailable; re-enrollment is required.');
         }
 
@@ -50,13 +52,11 @@ class RouterTransportConfig
             'host' => $host,
             'port' => $port,
             'ssl' => ! $plaintext,
-            // The library verifies both the certificate chain and the host name
-            // when verify_peer is true. The original host is passed unchanged,
-            // so DNS resolution never substitutes an IP for the peer identity.
+            // Router tokens establish enrollment identity; the stored CA still
+            // authenticates the peer when hostname verification is disabled.
             'verify_peer' => true,
-            'ca_cert_path' => is_file($routerCaPath)
-                ? $routerCaPath
-                : config('site_agent.router_ca_cert_path'),
+            'verify_peer_name' => ! $requireRouterCertificate,
+            'ca_cert_path' => $routerCaPath ?? config('router.api_ca_cert_path'),
         ];
     }
 

@@ -12,8 +12,6 @@
              x-data="{
                  testing: false,
                  testResult: null,
-                 requestingTelemetry: false,
-                 telemetryResult: null,
                  discoveringIdentity: false,
                  enrollingIdentity: false,
                  identityResult: null,
@@ -80,14 +78,14 @@
                     <div class="mb-1 flex flex-wrap items-center gap-3">
                         <h1 class="text-2xl font-bold text-gray-900">{{ $router->name }}</h1>
                         <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold
-                            {{ in_array($healthStatus, ['agent confirmed', 'online'], true) ? 'bg-green-100 text-green-800' : (in_array($healthStatus, ['last known', 'provisioning'], true) ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800') }}">
+                            {{ $healthStatus === 'online' ? 'bg-green-100 text-green-800' : (in_array($healthStatus, ['last known', 'provisioning'], true) ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800') }}">
                             <span class="h-1.5 w-1.5 rounded-full
-                                {{ in_array($healthStatus, ['agent confirmed', 'online'], true) ? 'bg-green-600' : (in_array($healthStatus, ['last known', 'provisioning'], true) ? 'bg-amber-600' : 'bg-red-600') }}"></span>
+                                {{ $healthStatus === 'online' ? 'bg-green-600' : (in_array($healthStatus, ['last known', 'provisioning'], true) ? 'bg-amber-600' : 'bg-red-600') }}"></span>
                             {{ ucfirst($healthStatus) }}
                         </span>
                     </div>
                     <p class="text-sm text-gray-500">
-                        {{ $router->management_ip ?: 'No management host configured' }}
+                        {{ $router->vpnPeer?->enabled ? 'WireGuard '.$router->vpnPeer->tunnel_ip : 'WireGuard tunnel not configured' }}
                         <span aria-hidden="true">·</span>
                         {{ $router->hardware_model ?: 'Unknown model' }}
                     </p>
@@ -259,7 +257,7 @@
                 <section class="rounded-xl border border-indigo-200 bg-white p-6 shadow-sm">
                     <h2 class="text-base font-bold text-gray-900">RADIUS access for this router</h2>
                     <p class="mt-2 text-sm text-gray-600">
-                        RADIUS is an explicit per-router choice. This action switches only this router from its current access backend and generates a router-specific secret. Existing site-agent routers and their behavior are unchanged.
+                        This router must use RADIUS before customer access can be enabled. Completing this explicit setup switches only this router to RADIUS and creates a router-specific secret. Legacy non-RADIUS routers remain blocked until an operator completes this step.
                     </p>
                     @if($errors->has('nas_identifier') || $errors->has('confirm_radius_mode'))
                         <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
@@ -294,8 +292,8 @@
                     <h2 class="mb-4 text-base font-bold text-gray-900">Router Details</h2>
                     <dl class="divide-y divide-gray-100">
                         <div class="flex justify-between gap-4 py-3">
-                            <dt class="text-sm text-gray-500">Management IP / Host</dt>
-                            <dd class="break-all text-right font-mono text-sm font-medium text-gray-900">{{ $router->management_ip ?: '—' }}</dd>
+                            <dt class="text-sm text-gray-500">WireGuard tunnel IP</dt>
+                            <dd class="break-all text-right font-mono text-sm font-medium text-gray-900">{{ $router->vpnPeer?->enabled ? $router->vpnPeer->tunnel_ip : 'Not configured' }}</dd>
                         </div>
                         <div class="flex justify-between gap-4 py-3">
                             <dt class="text-sm text-gray-500">API Port</dt>
@@ -313,16 +311,6 @@
                             <dt class="text-sm text-gray-500">Last Seen</dt>
                             <dd class="text-right text-sm font-medium text-gray-900">{{ $router->last_seen_at?->diffForHumans() ?? 'Never' }}</dd>
                         </div>
-                        @if(config('site_agent.required'))
-                            <div class="flex justify-between gap-4 py-3">
-                                <dt class="text-sm text-gray-500">Site agent last reported</dt>
-                                <dd class="text-right text-sm font-medium text-gray-900">{{ $agentLastReportedAt?->diffForHumans() ?? 'Never' }}</dd>
-                            </div>
-                            <div class="flex justify-between gap-4 py-3">
-                                <dt class="text-sm text-gray-500">Router telemetry last reported</dt>
-                                <dd class="text-right text-sm font-medium text-gray-900">{{ $router->telemetry_at?->diffForHumans() ?? 'Never' }}</dd>
-                            </div>
-                        @endif
                     </dl>
                 </section>
 
@@ -330,17 +318,8 @@
                     <div>
                         <h2 class="text-base font-bold text-gray-900">Connection Status</h2>
                         <p class="mb-4 mt-2 text-sm text-gray-500">
-                            Verify saved RouterOS API credentials after importing the setup script. In production, the paired site agent runs this check on the router's local network.
+                            Verify saved RouterOS API-SSL credentials through this router's enrolled WireGuard tunnel.
                         </p>
-                        @if($latestConnectionTest)
-                            <p class="mb-3 text-xs text-gray-600">
-                                Latest agent test:
-                                <span class="font-semibold">{{ ucfirst($latestConnectionTest->status) }}</span>
-                                @if($latestConnectionTest->failure_reason)
-                                    — {{ $latestConnectionTest->failure_reason }}
-                                @endif
-                            </p>
-                        @endif
                         <div x-cloak x-show="testResult" role="status" aria-live="polite"
                              :class="testResult && testResult.ok ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'"
                              class="mb-4 rounded-lg border p-3 text-sm"
@@ -368,33 +347,6 @@
                             class="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60">
                         <span x-text="testing ? 'Testing...' : 'Test Router API'">Test Router API</span>
                     </button>
-                    @if(config('site_agent.required'))
-                        <div x-cloak x-show="telemetryResult" role="status" aria-live="polite"
-                             class="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800"
-                             x-text="telemetryResult ? telemetryResult.message : ''"></div>
-                        <button type="button"
-                                @click="
-                                    requestingTelemetry = true;
-                                    telemetryResult = null;
-                                    window.apiFetch('{{ route('operator.routers.telemetry', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
-                                        method: 'POST',
-                                        feedback: false,
-                                    })
-                                    .then(data => {
-                                        telemetryResult = data;
-                                        window.toast.info(data.message);
-                                    })
-                                    .catch(error => {
-                                        telemetryResult = { message: error.message || 'Telemetry could not be requested.' };
-                                        window.toast.error(telemetryResult.message);
-                                    })
-                                    .finally(() => requestingTelemetry = false);
-                                "
-                                :disabled="requestingTelemetry"
-                                class="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">
-                            <span x-text="requestingTelemetry ? 'Requesting...' : 'Request telemetry from site agent'">Request telemetry from site agent</span>
-                        </button>
-                    @endif
                 </section>
 
                 <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

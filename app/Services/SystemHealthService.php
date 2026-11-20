@@ -28,6 +28,23 @@ class SystemHealthService
         Cache::put(self::QUEUE_HEARTBEAT_KEY, now()->timestamp, 300);
     }
 
+    public function queueWorkerReady(): bool
+    {
+        if (config('queue.default') === 'sync') {
+            return true;
+        }
+
+        try {
+            return $this->queueStatus(Cache::get(self::QUEUE_HEARTBEAT_KEY))['status'] === 'healthy';
+        } catch (Throwable $exception) {
+            Log::warning('RADIUS readiness could not read the queue worker heartbeat.', [
+                'exception' => $exception::class,
+            ]);
+
+            return false;
+        }
+    }
+
     public function checkAndNotify(): array
     {
         $checks = [

@@ -25,15 +25,11 @@ Schedule::command('sessions:retry-revocations')
     ->everyFiveMinutes()
     ->withoutOverlapping();
 
-Schedule::command('routers:retry-device-actions')
-    ->everyFiveMinutes()
-    ->withoutOverlapping();
-
-Schedule::command('routers:mark-stale')
+Schedule::command('routers:dispatch-commands')
     ->everyMinute()
     ->withoutOverlapping();
 
-Schedule::command('site-agents:notify-offline')
+Schedule::command('routers:mark-stale')
     ->everyMinute()
     ->withoutOverlapping();
 

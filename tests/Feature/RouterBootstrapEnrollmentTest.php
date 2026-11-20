@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\VerifyRadiusReadinessJob;
 use App\Models\Router;
 use App\Models\RouterOnboarding;
 use App\Models\Tenant;
@@ -11,7 +10,6 @@ use App\Services\RouterApiCertificateTrustService;
 use App\Services\RouterOnboardingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -25,7 +23,7 @@ class RouterBootstrapEnrollmentTest extends TestCase
 
         $command = app(RouterOnboardingService::class)->bootstrapCommand(str_repeat('A', 64));
 
-        $this->assertStringStartsWith('/tool fetch url="https://billing.example.test/api/provision/bootstrap?token=', $command);
+        $this->assertStringStartsWith('/ip cloud set update-time=yes; :delay 10s; /tool fetch url="https://billing.example.test/api/provision/bootstrap?token=', $command);
         $this->assertStringContainsString('mode=https check-certificate=yes', $command);
         $this->assertStringContainsString('/import file-name="wifi-billing-bootstrap.rsc"', $command);
         $this->assertStringContainsString('/file remove "wifi-billing-bootstrap.rsc"', $command);
@@ -34,15 +32,21 @@ class RouterBootstrapEnrollmentTest extends TestCase
 
     public function test_bootstrap_returns_plain_text_and_successful_enrollment_burns_token_without_switching_backend(): void
     {
-        Queue::fake();
         $token = Str::random(64);
         [$router, $onboarding] = $this->makeOnboarding($token);
-        $this->mock(RouterApiCertificateTrustService::class, function ($mock) use ($router): void {
+        $certificate = "-----BEGIN CERTIFICATE-----\n".base64_encode('test-router-ca')."\n-----END CERTIFICATE-----";
+        $this->mock(RouterApiCertificateTrustService::class, function ($mock) use ($router, $certificate): void {
             $mock->shouldReceive('store')
                 ->once()
-                ->withArgs(fn (Router $target, string $certificate): bool => $target->id === $router->id
-                    && $certificate === 'test-certificate')
-                ->andReturn(storage_path('app/router-ca/test-router.pem'));
+                ->withArgs(function (Router $target, string $received) use ($router, $certificate): bool {
+                    if ($target->id !== $router->id || $received !== $certificate) {
+                        return false;
+                    }
+
+                    $target->forceFill(['api_ca_certificate' => $received])->saveOrFail();
+
+                    return true;
+                });
         });
 
         $bootstrap = $this->get(route('api.provision.bootstrap', ['token' => $token]));
@@ -56,7 +60,7 @@ class RouterBootstrapEnrollmentTest extends TestCase
             'token' => $token,
             'serial' => 'CHR-SYSTEM-1',
             'model' => 'MikroTik CHR',
-            'api_ca_certificate' => 'test-certificate',
+            'api_ca_certificate' => $certificate,
         ];
         $this->postJson(route('api.provision.enroll'), $payload)
             ->assertOk()
@@ -67,12 +71,22 @@ class RouterBootstrapEnrollmentTest extends TestCase
         $this->assertTrue($router->enrolled);
         $this->assertSame('CHR-SYSTEM-1', $router->serial_number);
         $this->assertSame('MikroTik CHR', $router->hardware_model);
+        $this->assertSame($certificate, $router->api_ca_certificate);
         $this->assertSame('site_agent', $router->access_backend);
         $this->assertTrue($router->pending_radius_activation);
-        $this->assertSame('connected', $onboarding->status);
+        $this->assertSame('enrolled', $onboarding->status);
+        $this->assertNotNull($onboarding->enrolled_at);
         $this->assertNull($onboarding->bootstrap_token_hash);
         $this->assertNull($onboarding->bootstrap_script);
-        Queue::assertPushed(VerifyRadiusReadinessJob::class);
+        $this->assertArrayNotHasKey('api_ca_certificate', $router->toArray());
+
+        $certificatePath = RouterApiCertificateTrustService::pathForRouter($router->id);
+        $this->assertIsString($certificatePath);
+        $this->assertFileExists($certificatePath);
+        unlink($certificatePath);
+        $this->assertSame($certificatePath, RouterApiCertificateTrustService::pathForRouter($router->id));
+        $this->assertSame($certificate.PHP_EOL, file_get_contents($certificatePath));
+        unlink($certificatePath);
 
         $this->postJson(route('api.provision.enroll'), $payload)->assertUnprocessable();
         $this->get(route('api.provision.bootstrap', ['token' => $token]))->assertNotFound();
@@ -85,6 +99,33 @@ class RouterBootstrapEnrollmentTest extends TestCase
 
         $this->get(route('api.provision.bootstrap', ['token' => $token]))->assertNotFound();
         $this->assertSame('provisioning', $router->fresh()->status);
+    }
+
+    public function test_onboarding_advances_only_through_verified_states(): void
+    {
+        [, $onboarding] = $this->makeOnboarding(Str::random(64));
+        $service = app(RouterOnboardingService::class);
+
+        try {
+            $service->markApiVerified($onboarding);
+            $this->fail('Onboarding must not skip tunnel verification.');
+        } catch (\LogicException $exception) {
+            $this->assertSame('Router onboarding cannot skip a verification state.', $exception->getMessage());
+        }
+
+        $onboarding->update(['status' => 'enrolled']);
+        $this->assertTrue($service->markTunnelVerified($onboarding));
+        $this->assertFalse($service->markTunnelVerified($onboarding));
+        $this->assertTrue($service->markApiVerified($onboarding));
+        $this->assertTrue($service->markRadiusReady($onboarding));
+        $service->markCompleted($onboarding);
+
+        $onboarding->refresh();
+        $this->assertSame('complete', $onboarding->status);
+        $this->assertNotNull($onboarding->tunnel_verified_at);
+        $this->assertNotNull($onboarding->api_verified_at);
+        $this->assertNotNull($onboarding->radius_ready_at);
+        $this->assertNotNull($onboarding->completed_at);
     }
 
     /**

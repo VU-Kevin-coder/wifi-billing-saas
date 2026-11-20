@@ -18,7 +18,6 @@ class RouterProvisioningSafetyTest extends TestCase
 
     public function test_script_and_api_fail_closed_even_with_opt_in_and_direct_connection(): void
     {
-        config(['site_agent.required' => false, 'site_agent.allow_direct_router_connection' => true]);
         Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
         $tenant = Tenant::create(['name' => 'Synthetic', 'slug' => 'synthetic', 'status' => 'active']);
         $user = User::factory()->create(['tenant_id' => $tenant->id]);

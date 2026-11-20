@@ -19,7 +19,7 @@ class DynamicMikrotikRouterConfig
         }
 
         $manager = app(MikrotikManager::class);
-        if (get_class($manager) !== MikrotikManager::class) {
+        if (! $manager instanceof MikrotikManager) {
             return;
         }
 

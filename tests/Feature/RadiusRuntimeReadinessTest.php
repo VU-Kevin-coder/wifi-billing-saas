@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Package;
 use App\Models\Router;
+use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
@@ -24,7 +25,7 @@ class RadiusRuntimeReadinessTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_paid_sale_stays_pending_without_exhaustion_or_provider_calls_and_can_recover(): void
+    public function test_paid_sale_stays_pending_without_exhaustion_or_provider_calls_for_legacy_backends(): void
     {
         Http::preventStrayRequests();
         Http::fake();
@@ -47,11 +48,11 @@ class RadiusRuntimeReadinessTest extends TestCase
             ->assertStatus(202)->assertJson(['status' => 'fulfillment_pending']);
         Http::assertNothingSent();
         $this->assertNull($worker->attempt($tenant->id + 1000, $sale->id));
-        // Explicit operator change to site agent restores the normal path.
+        // A legacy backend is retained as data but cannot restore fulfillment.
         $router->forceFill(['access_backend' => 'site_agent'])->save();
         DB::table('sale_fulfillment_work')->where('transaction_id', $sale->id)->update(['next_attempt_at' => null]);
-        $this->assertNotNull($worker->attempt($tenant->id, $sale->id));
-        $this->assertDatabaseHas('sale_fulfillment_work', ['transaction_id' => $sale->id, 'status' => 'completed']);
+        $this->assertNull($worker->attempt($tenant->id, $sale->id));
+        $this->assertDatabaseHas('sale_fulfillment_work', ['transaction_id' => $sale->id, 'status' => 'pending', 'attempts' => 0]);
         $this->assertDatabaseCount('wallet_ledger_entries', 1);
     }
 
@@ -70,9 +71,18 @@ class RadiusRuntimeReadinessTest extends TestCase
         $service = app(RadiusAccountingService::class);
         $this->assertSame(['decision' => 'reject'], $service->authorize('test-nas', 'synthetic-session', 'TEST-CODE'));
         $this->assertSame('radius_unavailable', $service->ingestAccountingEvent([])['reason']);
-        // An existing session created before the shutdown cannot be resumed as RADIUS.
-        $router->forceFill(['access_backend' => 'site_agent'])->save();
-        $session = app(TenantContext::class)->runAs($tenant, fn () => app(VoucherActivationService::class)->activate($tenant, $voucher, Request::create('/'), null, ['router_id' => $router->id]));
+        // A pre-existing active record cannot be represented by an agent runtime.
+        // Preserve the record and verify it remains unavailable while RADIUS is down.
+        $voucher->forceFill(['status' => 'redeemed', 'redeemed_at' => now()])->save();
+        $session = Session::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'voucher_id' => $voucher->id,
+            'package_id' => $package->id,
+            'status' => 'active',
+            'started_at' => now()->subMinute(),
+            'expires_at' => now()->addHour(),
+        ]);
         $router->forceFill(['access_backend' => 'radius'])->save();
         $sale = Transaction::create(['tenant_id' => $tenant->id, 'type' => 'voucher_sale', 'amount' => 1000,
             'status' => 'completed', 'reference' => 'LEGACY-PAID', 'payment_token_hash' => hash('sha256', 'legacy-token'),

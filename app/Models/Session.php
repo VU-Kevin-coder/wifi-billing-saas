@@ -17,6 +17,7 @@ class Session extends Model
         'tenant_id', 'site_id', 'customer_id', 'voucher_id', 'package_id', 'router_id',
         'status', 'started_at', 'expires_at', 'ip_address', 'mac_address',
         'bytes_in', 'bytes_out', 'rate_in', 'rate_out',
+        'session_duration_seconds', 'last_interim_at', 'accounting_stopped_at',
         'provisioning_requeues', 'provisioning_alerted_at', 'provisioned_at',
         'expiry_reminder_sent_at', 'renew_token',
         'pending_revocation',
@@ -35,6 +36,9 @@ class Session extends Model
         'pending_device_ban' => 'boolean',
         'bytes_in' => 'integer',
         'bytes_out' => 'integer',
+        'session_duration_seconds' => 'integer',
+        'last_interim_at' => 'datetime',
+        'accounting_stopped_at' => 'datetime',
         'rate_in' => 'integer',
         'rate_out' => 'integer',
     ];

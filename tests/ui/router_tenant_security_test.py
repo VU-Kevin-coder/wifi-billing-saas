@@ -8,7 +8,6 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-ROUTER = ROOT / 'resources/views/operator/settings/router.blade.php'
 TENANTS = ROOT / 'resources/views/platform/tenants/index.blade.php'
 
 class Parser(HTMLParser):
@@ -23,21 +22,6 @@ def node(source, data):
     return json.loads(r.stdout)
 
 class SecurityTests(unittest.TestCase):
-    def test_router_root_url_and_boolean_disabled(self):
-        s = ROUTER.read_text()
-        self.assertIn('x-init="testUrl = $el.dataset.testUrl"', s)
-        self.assertIn("hasSavedHost: {{ $tenant->mikrotik_host ? 'true' : 'false' }}", s)
-        self.assertIn(':disabled="testingConnection || !hasSavedHost"', s)
-        self.assertNotIn('this.$el.dataset.testUrl', s)
-        expression = re.search(r'x-data="(\{[\s\S]*?\n    \})"', s).group(1)
-        for saved in (True, False):
-            js = expression.replace("{{ $tenant->mikrotik_host ? 'true' : 'false' }}", str(saved).lower())
-            out = node('''const p=JSON.parse(require('fs').readFileSync(0,'utf8')); let called; global.window={apiFetch:async (url,opts)=>{called={url,opts};return {success:true,message:'ok'}},toast:{success(){},error(){}}}; const state=eval('('+p.js+')'); state.testUrl='/router/test?x=1&y=2'; state.$el={dataset:{}}; const disabled=state.testingConnection || !state.hasSavedHost; state.runTest().then(()=>console.log(JSON.stringify({called,disabled,testing:state.testingConnection,result:state.testResult})));''', {'js': js})
-            self.assertEqual(out['called'], {'url': '/router/test?x=1&y=2', 'opts': {'method': 'POST', 'feedback': False}})
-            self.assertEqual(out['disabled'], not saved)
-            self.assertFalse(out['testing'])
-            self.assertEqual(out['result'], 'success')
-
     def test_tenant_old_values_are_data_not_code(self):
         s = TENANTS.read_text()
         tag = re.search(r'<div class="py-8 bg-gray-50 min-h-screen"[\s\S]*?x-data="\{[\s\S]*?\n    \}">', s).group()

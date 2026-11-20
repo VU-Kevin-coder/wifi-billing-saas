@@ -9,7 +9,6 @@
         $fields = collect($catalog['fields'])->filter(fn ($field) => $field['section'] === $activeSection['id']);
         $fieldGroups = $fields->groupBy('group', true);
         $permissionNames = array_keys($catalog['permission_labels']);
-        $agentTokens = session('control_action_result.tokens', []);
     @endphp
 
     <style>
@@ -214,22 +213,11 @@
                         </tbody></table></div>
                         <div class="control-note">Checked {{ $health['checked_at'] ? \Illuminate\Support\Carbon::parse($health['checked_at'])->diffForHumans() : 'not yet' }}. Status refreshes when this page loads.</div>
                     </section>
-                    <section class="control-card">
-                        <header><div><h2>Site agents</h2><p>Agents report their actual last poll and paired site.</p></div></header>
-                        @if($agents->isEmpty())<div class="control-empty">No site agents are paired yet.</div>
-                        @else<div class="control-table-wrap"><table class="control-table"><thead><tr><th>Agent</th><th>Site</th><th>Tenant</th><th>Last poll</th><th>Status</th></tr></thead><tbody>
-                            @foreach($agents as $agent)
-                                @php $online = $agent->revoked_at === null && $agent->last_seen_at && $agent->last_seen_at->greaterThan(now()->subMinutes((int) ($settings['alerts.agent_offline_after'] ?? 15))); @endphp
-                                <tr><td>{{ $agent->name }}</td><td>{{ $agent->site?->name ?? '—' }}</td><td>{{ $agent->tenant?->name ?? '—' }}</td><td>{{ $agent->last_seen_at?->diffForHumans() ?? 'Never' }}</td><td><span class="control-status {{ $online ? '' : 'warn' }}">{{ $agent->revoked_at ? 'Revoked' : ($online ? 'Online' : 'Offline') }}</span></td></tr>
-                            @endforeach
-                        </tbody></table></div>@endif
-                    </section>
                 @endif
 
                 @if($activeSection['id'] === 'danger')
                     @php
                         $dangerActions = [
-                            ['rotate', 'Rotate active agent tokens', 'Active agents will stop authenticating until configured with their new one-time token. Revoked agents remain revoked.', 'ROTATE'],
                             ['purge', 'Purge expired sessions now', 'Deletes expired session history older than the configured retention period.', 'PURGE'],
                             ['freeze', 'Suspend all payouts', 'Blocks new operator payout requests and payout approvals until resumed.', 'FREEZE'],
                             ['resume', 'Resume payouts', 'Allows new operator payout requests and payout approvals.', 'RESUME'],
@@ -252,14 +240,6 @@
                             @endif
                         @endforeach
                     </section>
-                    @if(count($agentTokens))
-                        <section class="control-card">
-                            <header><div><h2>New agent tokens</h2><p>Shown once. Copy each token to its site agent and store it securely.</p></div></header>
-                            @foreach($agentTokens as $item)
-                                <div class="control-row"><div><b>{{ $item['site'] }}</b></div><div><code>{{ $item['token'] }}</code></div></div>
-                            @endforeach
-                        </section>
-                    @endif
                 @endif
 
                 @if($fields->isEmpty() && !in_array($activeSection['id'], ['roles','health','danger']))

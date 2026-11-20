@@ -6,24 +6,24 @@ use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\RadiusAccountingEvent;
 use App\Models\RadiusAccountingSession;
-use App\Models\RadiusDisconnectCommand;
 use App\Models\RadiusNasSessionIdentity;
 use App\Models\Router;
 use App\Models\Session;
-use App\Models\SiteAgentCommand;
 use App\Models\Subscriber;
 use App\Models\Voucher;
 use App\Models\VpnPeer;
 use App\Support\DataLimit;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class RadiusAccountingService
 {
     private const MAX_RADIUS_COUNTER = 4294967295;
+
+    public function __construct(private readonly RouterCommandService $routerCommands) {}
 
     /**
      * Resolve policy only through an authenticated NAS identity. The voucher
@@ -125,6 +125,10 @@ class RadiusAccountingService
 
     public function recordPppoeAccountingEvent(array $input): void
     {
+        if (! RadiusReadiness::available()) {
+            throw new RadiusUnavailableException('RADIUS accounting is temporarily unavailable.');
+        }
+
         $router = $this->routerBoundToPeer(
             (int) ($input['authenticated_router_id'] ?? 0),
             (string) ($input['authenticated_peer_ip'] ?? ''),
@@ -144,7 +148,16 @@ class RadiusAccountingService
         $inputBytes = $this->radiusCounterBytes($input['input_gigawords'] ?? 0, $input['input_octets'] ?? 0);
         $outputBytes = $this->radiusCounterBytes($input['output_gigawords'] ?? 0, $input['output_octets'] ?? 0);
 
-        DB::transaction(function () use ($router, $username, $statusType, $nasSessionId, $inputBytes, $outputBytes): void {
+        $eventTime = $this->eventTime($input['event_time'] ?? null) ?? CarbonImmutable::now('UTC');
+        $accountingResult = DB::transaction(function () use (
+            $router,
+            $username,
+            $statusType,
+            $nasSessionId,
+            $inputBytes,
+            $outputBytes,
+            $eventTime,
+        ): array {
             $subscriber = Subscriber::withoutTenancy()
                 ->where('tenant_id', $router->tenant_id)
                 ->where('username', $username)
@@ -155,6 +168,7 @@ class RadiusAccountingService
             }
 
             $session = DB::table('radius_subscriber_sessions')
+                ->where('tenant_id', $router->tenant_id)
                 ->where('router_id', $router->id)
                 ->where('nas_session_id', $nasSessionId)
                 ->orderByDesc('generation')
@@ -172,8 +186,8 @@ class RadiusAccountingService
                     'input_bytes' => 0,
                     'output_bytes' => 0,
                     'state' => 'open',
-                    'started_at' => now(),
-                    'last_seen_at' => now(),
+                    'started_at' => $eventTime,
+                    'last_seen_at' => $eventTime,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -188,14 +202,14 @@ class RadiusAccountingService
                     'input_bytes' => 0,
                     'output_bytes' => 0,
                     'state' => 'open',
-                    'started_at' => now(),
-                    'last_seen_at' => now(),
+                    'started_at' => $eventTime,
+                    'last_seen_at' => $eventTime,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
                 $session = DB::table('radius_subscriber_sessions')->where('id', $id)->first();
             } elseif ($session->state === 'closed') {
-                return;
+                return ['closed_session_id' => null, 'sessions_to_kick' => []];
             } elseif ((int) $session->subscriber_id !== (int) $subscriber->id) {
                 throw new RadiusUnavailableException('PPPoE accounting session does not match the subscriber identity.');
             }
@@ -210,21 +224,75 @@ class RadiusAccountingService
                 ? PHP_INT_MAX
                 : $inputDelta + $outputDelta;
             $currentBytesUsed = (int) $subscriber->bytes_used;
-            $subscriber->forceFill([
-                'bytes_used' => $delta > PHP_INT_MAX - $currentBytesUsed
+            $bytesUsed = $delta > PHP_INT_MAX - $currentBytesUsed
                     ? PHP_INT_MAX
-                    : $currentBytesUsed + $delta,
-            ])->saveOrFail();
+                    : $currentBytesUsed + $delta;
+            $subscriber->forceFill(['bytes_used' => $bytesUsed])->saveOrFail();
 
             DB::table('radius_subscriber_sessions')->where('id', $session->id)->update([
                 'input_bytes' => $currentInput,
                 'output_bytes' => $currentOutput,
                 'state' => $statusType === 'Stop' ? 'closed' : 'open',
-                'last_seen_at' => now(),
-                'stopped_at' => $statusType === 'Stop' ? now() : null,
-                'updated_at' => now(),
+                'last_seen_at' => $eventTime,
+                'stopped_at' => $statusType === 'Stop' ? $eventTime : null,
+                'updated_at' => $eventTime,
             ]);
+
+            $package = Package::withoutTenancy()
+                ->where('tenant_id', $router->tenant_id)
+                ->find($subscriber->package_id);
+            $quotaReached = $this->subscriberDataLimitReached($subscriber, $package, $bytesUsed);
+            $timeExpired = ! $subscriber->expires_at
+                || $eventTime->greaterThanOrEqualTo($subscriber->expires_at)
+                || now()->greaterThanOrEqualTo($subscriber->expires_at);
+            $revoked = $subscriber->status !== 'active';
+            $mustDisconnect = $revoked || $timeExpired || $quotaReached;
+
+            if (! $mustDisconnect) {
+                return [
+                    'closed_session_id' => $statusType === 'Stop' ? (int) $session->id : null,
+                    'sessions_to_kick' => [],
+                ];
+            }
+
+            return [
+                'closed_session_id' => $statusType === 'Stop' ? (int) $session->id : null,
+                'sessions_to_kick' => DB::table('radius_subscriber_sessions')
+                    ->where('tenant_id', $router->tenant_id)
+                    ->where('router_id', $router->id)
+                    ->where('subscriber_id', $subscriber->id)
+                    ->where('state', 'open')
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->all(),
+            ];
         });
+
+        if ($accountingResult['closed_session_id'] !== null) {
+            $this->routerCommands->cancelPendingForPppoeSession($accountingResult['closed_session_id']);
+        }
+
+        foreach ($accountingResult['sessions_to_kick'] as $subscriberSessionId) {
+            $this->routerCommands->requestPppoeKick(
+                $subscriberSessionId,
+                'policy:pppoe-session:'.$subscriberSessionId,
+            );
+        }
+    }
+
+    private function subscriberDataLimitReached(Subscriber $subscriber, ?Package $package, int $bytesUsed): bool
+    {
+        if (! $package || ! PlatformSetting::get('package.data_caps', true)) {
+            return false;
+        }
+
+        try {
+            $limit = DataLimit::bytes($package->data_limit);
+        } catch (InvalidArgumentException) {
+            return true;
+        }
+
+        return $limit !== null && $bytesUsed >= $limit;
     }
 
     private function radiusCounterBytes(mixed $gigawords, mixed $octets): int
@@ -468,6 +536,12 @@ class RadiusAccountingService
             return ['accepted' => false, 'quarantined' => true, 'reason' => 'radius_unavailable'];
         }
 
+        $statusType = (string) ($input['status_type'] ?? '');
+        $nasSessionId = (string) ($input['nas_session_id'] ?? '');
+        if (! in_array($statusType, ['Start', 'Interim-Update', 'Stop'], true) || $nasSessionId === '') {
+            return ['accepted' => false, 'quarantined' => true, 'reason' => 'invalid_accounting_identity'];
+        }
+
         $router = $this->radiusRouter((string) ($input['nas_identifier'] ?? ''));
         if (! $router) {
             return [
@@ -477,14 +551,13 @@ class RadiusAccountingService
             ];
         }
 
-        $statusType = (string) ($input['status_type'] ?? '');
         $eventTime = $this->eventTime($input['event_time'] ?? null);
 
-        return DB::transaction(function () use ($router, $input, $statusType, $eventTime): array {
+        return DB::transaction(function () use ($router, $input, $statusType, $nasSessionId, $eventTime): array {
             $identity = RadiusNasSessionIdentity::query()->firstOrCreate(
                 [
                     'router_id' => $router->id,
-                    'nas_session_id' => $input['nas_session_id'],
+                    'nas_session_id' => $nasSessionId,
                 ],
                 [
                     'tenant_id' => $router->tenant_id,
@@ -529,6 +602,13 @@ class RadiusAccountingService
                     ->first()
                 : null;
 
+            if ($current
+                && ! empty($current->acct_unique_session_id)
+                && ! empty($input['acct_unique_session_id'])
+                && ! hash_equals((string) $current->acct_unique_session_id, (string) $input['acct_unique_session_id'])) {
+                return $this->quarantineEvent($current, $input, $fingerprint, $eventTime, 'unique_session_mismatch');
+            }
+
             $orphanOpen = RadiusAccountingSession::query()
                 ->where('identity_id', $identity->id)
                 ->where('state', 'open')
@@ -567,23 +647,30 @@ class RadiusAccountingService
                 [$inputBytes, $inputValid] = $this->counterBytes(
                     $input['input_octets'] ?? null,
                     $input['input_gigawords'] ?? null,
-                    (int) $session->bytes_in,
+                    0,
                 );
                 [$outputBytes, $outputValid] = $this->counterBytes(
                     $input['output_octets'] ?? null,
                     $input['output_gigawords'] ?? null,
-                    (int) $session->bytes_out,
+                    0,
                 );
                 if (! $inputValid || ! $outputValid) {
                     return $this->quarantineNewGeneration($identity, $router, $input, $fingerprint, $eventTime, 'invalid_start_counters');
                 }
 
                 $accounting = $this->newGeneration($identity, $router, $session, 'open', $eventTime, $inputBytes, $outputBytes);
+                $accounting->forceFill([
+                    'acct_unique_session_id' => $input['acct_unique_session_id'] ?? null,
+                    'session_time_seconds' => max(0, (int) ($input['session_time'] ?? 0)),
+                ])->save();
                 $this->storeEvent($accounting, $input, $fingerprint, $eventTime, false, null);
+                $usage = $this->aggregateSessionUsage($session);
                 $sessionChanges = [
                     'status' => 'active',
-                    'bytes_in' => $inputBytes,
-                    'bytes_out' => $outputBytes,
+                    'bytes_in' => $usage['input_bytes'],
+                    'bytes_out' => $usage['output_bytes'],
+                    'session_duration_seconds' => $usage['session_duration_seconds'],
+                    'accounting_stopped_at' => null,
                 ];
                 if (! empty($input['ip_address'])) {
                     $sessionChanges['ip_address'] = $input['ip_address'];
@@ -591,14 +678,17 @@ class RadiusAccountingService
                 if (! empty($input['mac_address'])) {
                     $sessionChanges['mac_address'] = $input['mac_address'];
                 }
-                if ($this->limitReached($session, $inputBytes, $outputBytes)) {
+                $disconnectReason = $this->disconnectReason($session, $usage, $eventTime);
+                if ($disconnectReason !== null || $session->pending_device_ban) {
                     $sessionChanges['status'] = 'disconnecting';
+                }
+                if ($disconnectReason !== null) {
                     $sessionChanges['pending_revocation'] = true;
-                    $sessionChanges['pending_revocation_status'] = 'expired';
+                    $sessionChanges['pending_revocation_status'] = $disconnectReason;
                 }
                 $session->update($sessionChanges);
-                if ($session->pending_revocation_status === 'expired') {
-                    $this->createDisconnectCommand($accounting, 'data-limit:'.$session->id);
+                if ($disconnectReason !== null || $session->pending_device_ban) {
+                    $this->routerCommands->recordKick($session, 'acct-kick:'.$accounting->id, true);
                 }
 
                 return [
@@ -626,6 +716,12 @@ class RadiusAccountingService
                 return $this->quarantineEvent($current, $input, $fingerprint, $eventTime, 'unbound_application_session');
             }
 
+            if (! empty($current->acct_unique_session_id)
+                && ! empty($input['acct_unique_session_id'])
+                && ! hash_equals((string) $current->acct_unique_session_id, (string) $input['acct_unique_session_id'])) {
+                return $this->quarantineEvent($current, $input, $fingerprint, $eventTime, 'unique_session_mismatch');
+            }
+
             if (isset($input['voucher_code']) && ! $this->voucherMatchesSession($session, (string) $input['voucher_code'])) {
                 return $this->quarantineEvent($current, $input, $fingerprint, $eventTime, 'voucher_mismatch');
             }
@@ -640,29 +736,42 @@ class RadiusAccountingService
             [$inputBytes, $inputValid] = $this->counterBytes(
                 $input['input_octets'] ?? null,
                 $input['input_gigawords'] ?? null,
-                max((int) $current->input_bytes, (int) $session->bytes_in),
+                (int) $current->input_bytes,
             );
             [$outputBytes, $outputValid] = $this->counterBytes(
                 $input['output_octets'] ?? null,
                 $input['output_gigawords'] ?? null,
-                max((int) $current->output_bytes, (int) $session->bytes_out),
+                (int) $current->output_bytes,
             );
             if (! $inputValid || ! $outputValid) {
                 return $this->quarantineEvent($current, $input, $fingerprint, $eventTime, 'counter_regression_or_overflow');
             }
 
             $this->storeEvent($current, $input, $fingerprint, $eventTime, false, null);
+            $sessionTime = max(
+                (int) $current->session_time_seconds,
+                (int) ($input['session_time'] ?? 0),
+            );
             $current->forceFill([
                 'last_accounting_at' => $eventTime,
                 'input_bytes' => $inputBytes,
                 'output_bytes' => $outputBytes,
+                'session_time_seconds' => $sessionTime,
+                'acct_unique_session_id' => $current->acct_unique_session_id
+                    ?: ($input['acct_unique_session_id'] ?? null),
                 'state' => $statusType === 'Stop' ? 'stopped' : 'open',
                 'stopped_at' => $statusType === 'Stop' ? $eventTime : null,
             ])->save();
 
+            $usage = $this->aggregateSessionUsage($session);
+            $hasOpenGenerations = RadiusAccountingSession::query()
+                ->where('session_id', $session->id)
+                ->where('state', 'open')
+                ->exists();
             $sessionChanges = [
-                'bytes_in' => $inputBytes,
-                'bytes_out' => $outputBytes,
+                'bytes_in' => $usage['input_bytes'],
+                'bytes_out' => $usage['output_bytes'],
+                'session_duration_seconds' => $usage['session_duration_seconds'],
             ];
             if (! empty($input['ip_address'])) {
                 $sessionChanges['ip_address'] = $input['ip_address'];
@@ -671,23 +780,35 @@ class RadiusAccountingService
                 $sessionChanges['mac_address'] = $input['mac_address'];
             }
 
-            if ($statusType === 'Stop') {
+            if ($statusType === 'Interim-Update') {
+                $sessionChanges['last_interim_at'] = $eventTime;
+            }
+
+            if ($statusType === 'Stop' && ! $hasOpenGenerations) {
                 $sessionChanges['status'] = $session->pending_revocation
                     ? ($session->pending_revocation_status ?: 'disconnected')
                     : 'disconnected';
                 $sessionChanges['pending_revocation'] = false;
                 $sessionChanges['pending_revocation_status'] = null;
+                $sessionChanges['accounting_stopped_at'] = $eventTime;
                 $identity->forceFill(['current_generation_id' => null])->save();
-            } elseif (! $session->pending_revocation && $this->limitReached($session, $inputBytes, $outputBytes)) {
-                $sessionChanges['status'] = 'disconnecting';
-                $sessionChanges['pending_revocation'] = true;
-                $sessionChanges['pending_revocation_status'] = 'expired';
+            } else {
+                $disconnectReason = $this->disconnectReason($session, $usage, $eventTime);
+                if ($disconnectReason !== null || $session->pending_device_ban) {
+                    $sessionChanges['status'] = 'disconnecting';
+                }
+                if ($disconnectReason !== null) {
+                    $sessionChanges['pending_revocation'] = true;
+                    $sessionChanges['pending_revocation_status'] = $disconnectReason;
+                }
             }
 
             $session->update($sessionChanges);
 
-            if ($statusType !== 'Stop' && $session->pending_revocation_status === 'expired') {
-                $this->createDisconnectCommand($current, 'data-limit:'.$session->id);
+            if ($statusType === 'Stop' && ! $hasOpenGenerations) {
+                $this->routerCommands->cancelPendingForSession((int) $session->id);
+            } elseif ($session->pending_revocation || $session->pending_device_ban) {
+                $this->routerCommands->recordKick($session, 'acct-kick:'.$current->id, true);
             }
 
             return [
@@ -696,173 +817,6 @@ class RadiusAccountingService
                 'duplicate' => false,
                 'generation' => $current->generation,
             ];
-        });
-    }
-
-    /**
-     * Persist an idempotent disconnect intent. A missing accounting generation
-     * stays pending; it is never reported as a confirmed disconnection.
-     */
-    public function requestDisconnect(Session $session, string $idempotencyKey): bool
-    {
-        if ($idempotencyKey === '' || strlen($idempotencyKey) > 128) {
-            return false;
-        }
-
-        return DB::transaction(function () use ($session, $idempotencyKey): bool {
-            $currentSession = Session::withoutTenancy()
-                ->where('tenant_id', $session->tenant_id)
-                ->where('router_id', $session->router_id)
-                ->whereKey($session->id)
-                ->lockForUpdate()
-                ->first();
-            if (! $currentSession) {
-                return false;
-            }
-
-            $router = Router::withoutTenancy()
-                ->where('tenant_id', $currentSession->tenant_id)
-                ->whereKey($currentSession->router_id)
-                ->where('access_backend', 'radius')
-                ->whereNotNull('radius_nas_identifier')
-                ->whereNotNull('radius_shared_secret')
-                ->first();
-            if (! $router || ! $router->hasUsableRadiusConfiguration()) {
-                return false;
-            }
-
-            $accounting = RadiusAccountingSession::query()
-                ->where('tenant_id', $currentSession->tenant_id)
-                ->where('router_id', $currentSession->router_id)
-                ->where('session_id', $currentSession->id)
-                ->where('state', 'open')
-                ->orderByDesc('generation')
-                ->lockForUpdate()
-                ->first();
-            if (! $accounting) {
-                return false;
-            }
-
-            $this->createDisconnectCommand($accounting, $idempotencyKey);
-            $currentSession->update([
-                'status' => 'disconnecting',
-                'pending_revocation' => true,
-                'pending_revocation_status' => $currentSession->pending_revocation_status ?: 'disconnected',
-            ]);
-
-            return true;
-        });
-    }
-
-    /**
-     * Claim durable outbox work with a lease. The response excludes tenant
-     * records and all credentials; it contains only the NAS/session target.
-     */
-    public function claimDisconnectCommands(int $limit = 25): array
-    {
-        return DB::transaction(function () use ($limit): array {
-            $now = now();
-            $commands = DB::table('radius_disconnect_commands as commands')
-                ->join('radius_accounting_sessions as accounting', 'accounting.id', '=', 'commands.accounting_session_id')
-                ->join('radius_nas_session_identities as identities', 'identities.id', '=', 'accounting.identity_id')
-                ->join('routers', 'routers.id', '=', 'commands.router_id')
-                ->where('routers.access_backend', 'radius')
-                ->whereNotNull('routers.radius_nas_identifier')
-                ->where(function ($query) use ($now): void {
-                    $query->where(function ($ready) use ($now): void {
-                        $ready->whereIn('commands.state', ['pending', 'retry_wait'])
-                            ->where('commands.available_at', '<=', $now);
-                    })->orWhere(function ($unconfirmedDisconnect) use ($now): void {
-                        $unconfirmedDisconnect->where('commands.state', 'delivery_acknowledged')
-                            ->where('commands.available_at', '<=', $now);
-                    })->orWhere(function ($expiredLease) use ($now): void {
-                        $expiredLease->where('commands.state', 'leased')
-                            ->where('commands.lease_expires_at', '<=', $now);
-                    });
-                })
-                ->where('accounting.state', 'open')
-                ->orderBy('commands.id')
-                ->select([
-                    'commands.id',
-                    'commands.command_id',
-                    'commands.attempt_count',
-                    'accounting.generation',
-                    'accounting.identity_id',
-                    'identities.nas_session_id',
-                    'routers.radius_nas_identifier',
-                ])
-                ->lockForUpdate()
-                ->limit(max(1, min(100, $limit)))
-                ->get();
-
-            $leaseSeconds = max(15, (int) config('radius_policy.lease_seconds', 60));
-            $claimed = [];
-            foreach ($commands as $command) {
-                $attempts = (int) $command->attempt_count + 1;
-                DB::table('radius_disconnect_commands')
-                    ->where('id', $command->id)
-                    ->update([
-                        'state' => 'leased',
-                        'attempt_count' => $attempts,
-                        'lease_owner' => 'radius-policy-adapter',
-                        'lease_expires_at' => $now->copy()->addSeconds($leaseSeconds),
-                        'updated_at' => $now,
-                    ]);
-
-                $claimed[] = [
-                    'command_id' => $command->command_id,
-                    'nas_identifier' => $command->radius_nas_identifier,
-                    'nas_session_id' => $command->nas_session_id,
-                    'generation' => (int) $command->generation,
-                    'attempt' => $attempts,
-                ];
-            }
-
-            return $claimed;
-        });
-    }
-
-    /**
-     * Record adapter delivery only. The session remains disconnecting until a
-     * valid Stop event provides terminal evidence.
-     */
-    public function acknowledgeDisconnectCommand(string $commandId, string $result, ?string $resultCode = null): array
-    {
-        return DB::transaction(function () use ($commandId, $result, $resultCode): array {
-            $command = RadiusDisconnectCommand::query()
-                ->where('command_id', $commandId)
-                ->lockForUpdate()
-                ->first();
-            if (! $command) {
-                return ['found' => false, 'duplicate' => false];
-            }
-
-            if ($command->state === 'delivery_acknowledged') {
-                return ['found' => true, 'duplicate' => true, 'state' => $command->state];
-            }
-
-            if ($result === 'delivered') {
-                $retrySeconds = max(15, (int) config('radius_policy.retry_seconds', 30));
-                $command->update([
-                    'state' => 'delivery_acknowledged',
-                    'available_at' => now()->addSeconds($retrySeconds),
-                    'delivery_acknowledged_at' => now(),
-                    'delivery_result_code' => $resultCode ?: 'delivered',
-                    'lease_owner' => null,
-                    'lease_expires_at' => null,
-                ]);
-            } else {
-                $retrySeconds = max(15, (int) config('radius_policy.retry_seconds', 30));
-                $command->update([
-                    'state' => 'retry_wait',
-                    'available_at' => now()->addSeconds($retrySeconds),
-                    'delivery_result_code' => $resultCode ?: 'retryable_failure',
-                    'lease_owner' => null,
-                    'lease_expires_at' => null,
-                ]);
-            }
-
-            return ['found' => true, 'duplicate' => false, 'state' => $command->fresh()->state];
         });
     }
 
@@ -922,20 +876,13 @@ class RadiusAccountingService
     }
 
     /**
-     * Do not turn legacy or agent-managed sessions into RADIUS entitlements.
-     * A pending session without an agent command is eligible for the explicit
-     * RADIUS path; active sessions need an existing RADIUS generation and
-     * available package device capacity.
+     * Pending RADIUS sessions may authenticate; active sessions need an
+     * existing RADIUS generation and available package device capacity.
      */
     private function sessionMayAuthenticate(Router $router, Session $session, Package $package, string $nasSessionId): bool
     {
         if ($session->pending_revocation || $session->pending_device_ban
-            || ! $session->expires_at || $session->expires_at->isPast()
-            || SiteAgentCommand::query()
-                ->where('tenant_id', $router->tenant_id)
-                ->where('router_id', $router->id)
-                ->where('session_id', $session->id)
-                ->exists()) {
+            || ! $session->expires_at || $session->expires_at->isPast()) {
             return false;
         }
 
@@ -1091,6 +1038,7 @@ class RadiusAccountingService
             'fingerprint' => $fingerprint,
             'status_type' => $input['status_type'],
             'event_time' => $eventTime,
+            'acct_unique_session_id' => $input['acct_unique_session_id'] ?? null,
             'session_time' => $input['session_time'] ?? null,
             'input_octets' => $input['input_octets'] ?? null,
             'input_gigawords' => $input['input_gigawords'] ?? null,
@@ -1103,24 +1051,6 @@ class RadiusAccountingService
             'quarantine_reason' => $reason,
             'received_at' => now(),
         ]);
-    }
-
-    private function createDisconnectCommand(RadiusAccountingSession $accounting, string $idempotencyKey): RadiusDisconnectCommand
-    {
-        return RadiusDisconnectCommand::query()->firstOrCreate(
-            [
-                'accounting_session_id' => $accounting->id,
-                'idempotency_key' => $idempotencyKey,
-            ],
-            [
-                'command_id' => (string) Str::uuid(),
-                'tenant_id' => $accounting->tenant_id,
-                'router_id' => $accounting->router_id,
-                'state' => 'pending',
-                'attempt_count' => 0,
-                'available_at' => now(),
-            ],
-        );
     }
 
     private function limitReached(Session $session, int $inputBytes, int $outputBytes): bool
@@ -1142,6 +1072,66 @@ class RadiusAccountingService
             && ($inputBytes >= $limit || $outputBytes >= $limit - $inputBytes);
     }
 
+    /**
+     * @return array{input_bytes: int, output_bytes: int, session_duration_seconds: int}
+     */
+    private function aggregateSessionUsage(Session $session): array
+    {
+        $usage = [
+            'input_bytes' => 0,
+            'output_bytes' => 0,
+            'session_duration_seconds' => 0,
+        ];
+        $accountingSessions = RadiusAccountingSession::query()
+            ->where('tenant_id', $session->tenant_id)
+            ->where('router_id', $session->router_id)
+            ->where('session_id', $session->id)
+            ->get(['input_bytes', 'output_bytes', 'session_time_seconds']);
+
+        foreach ($accountingSessions as $accountingSession) {
+            $usage['input_bytes'] = $this->saturatedAdd(
+                $usage['input_bytes'],
+                (int) $accountingSession->input_bytes,
+            );
+            $usage['output_bytes'] = $this->saturatedAdd(
+                $usage['output_bytes'],
+                (int) $accountingSession->output_bytes,
+            );
+            $usage['session_duration_seconds'] = $this->saturatedAdd(
+                $usage['session_duration_seconds'],
+                (int) $accountingSession->session_time_seconds,
+            );
+        }
+
+        return $usage;
+    }
+
+    private function saturatedAdd(int $total, int $addition): int
+    {
+        return $addition > PHP_INT_MAX - $total ? PHP_INT_MAX : $total + $addition;
+    }
+
+    /**
+     * Return the terminal session state to record when an open generation
+     * must be disconnected, or null when no policy limit has been reached.
+     */
+    private function disconnectReason(Session $session, array $usage, CarbonImmutable $eventTime): ?string
+    {
+        if ($session->pending_revocation) {
+            return $session->pending_revocation_status ?: 'disconnected';
+        }
+
+        if ($session->expires_at
+            && ($eventTime->greaterThanOrEqualTo($session->expires_at)
+                || now()->greaterThanOrEqualTo($session->expires_at))) {
+            return 'expired';
+        }
+
+        return $this->limitReached($session, $usage['input_bytes'], $usage['output_bytes'])
+            ? 'expired'
+            : null;
+    }
+
     private function fingerprint(
         RadiusNasSessionIdentity $identity,
         Router $router,
@@ -1154,7 +1144,8 @@ class RadiusAccountingService
             'identity_id' => (int) $identity->id,
             'nas_session_id' => (string) $identity->nas_session_id,
             'status_type' => $statusType,
-            'event_time' => $eventTime?->toIso8601String(),
+            'acct_unique_session_id' => $input['acct_unique_session_id'] ?? null,
+            'event_time' => $eventTime?->utc()->toIso8601String(),
             'session_time' => $input['session_time'] ?? null,
             'input_octets' => $input['input_octets'] ?? null,
             'input_gigawords' => $input['input_gigawords'] ?? null,
@@ -1174,7 +1165,12 @@ class RadiusAccountingService
             return null;
         }
 
-        return CarbonImmutable::parse($value)->utc();
+        try {
+            return CarbonImmutable::parse($value)
+                ->setTimezone((string) config('app.timezone', 'UTC'));
+        } catch (InvalidFormatException) {
+            return null;
+        }
     }
 
     /**

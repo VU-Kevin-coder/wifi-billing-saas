@@ -8,59 +8,49 @@ use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
-use App\Services\RouterConnectionService;
+use App\Services\RouterCommandService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class ExpireSessionsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_expired_session_is_disconnected_and_marked_expired(): void
+    public function test_expired_radius_session_requests_router_kick_and_remains_pending_until_accounting_confirms(): void
     {
-        config(['site_agent.required' => false]);
-        [$router, $voucher, $session] = $this->createExpiredSession();
-
-        $this->mock(RouterConnectionService::class, function ($mock) use ($router, $voucher): void {
-            $mock->shouldReceive('disconnectUser')
+        [$router, $session] = $this->createExpiredSession();
+        $this->mock(RouterCommandService::class, function ($mock) use ($session): void {
+            $mock->shouldReceive('requestKick')
                 ->once()
-                ->withArgs(fn (Router $target, string $code): bool => $target->is($router) && $code === $voucher->code)
+                ->withArgs(fn (Session $requested, string $key): bool => $requested->is($session)
+                    && $key === "revocation:{$session->id}:expired")
                 ->andReturnTrue();
         });
 
         $this->artisan('sessions:expire')->assertSuccessful();
 
         $expired = Session::withoutTenancy()->findOrFail($session->id);
-        $this->assertSame('expired', $expired->status);
-        $this->assertFalse($expired->pending_revocation);
+        $this->assertSame('disconnecting', $expired->status);
+        $this->assertTrue($expired->pending_revocation);
+        $this->assertSame('expired', $expired->pending_revocation_status);
+        $this->assertSame('radius', $router->fresh()->access_backend);
     }
 
-    public function test_failed_router_disconnect_keeps_expired_session_pending_for_retry(): void
+    public function test_unsupported_legacy_backend_fails_closed_and_keeps_revocation_pending(): void
     {
-        config(['site_agent.required' => false]);
-        [$router, $voucher, $session] = $this->createExpiredSession();
-
-        $this->mock(RouterConnectionService::class, function ($mock) use ($router, $voucher): void {
-            $mock->shouldReceive('disconnectUser')
-                ->once()
-                ->withArgs(fn (Router $target, string $code): bool => $target->is($router) && $code === $voucher->code)
-                ->andThrow(new \RuntimeException('synthetic-secret synthetic-user private-data'));
+        [, $session] = $this->createExpiredSession('site_agent');
+        $this->mock(RouterCommandService::class, function ($mock): void {
+            $mock->shouldNotReceive('requestKick');
         });
-        Log::shouldReceive('error')->once()->with(
-            'Unable to disconnect expired MikroTik session; it will be retried.',
-            ['session_id' => $session->id, 'router_id' => $router->id, 'voucher_id' => $voucher->id],
-        );
 
         $this->artisan('sessions:expire')->assertExitCode(1);
 
         $pending = Session::withoutTenancy()->findOrFail($session->id);
         $this->assertSame('disconnecting', $pending->status);
         $this->assertTrue($pending->pending_revocation);
-        $this->assertSame('expired', $pending->pending_revocation_status);
     }
 
-    private function createExpiredSession(): array
+    private function createExpiredSession(string $backend = 'radius'): array
     {
         $tenant = Tenant::create(['name' => 'Expiry test', 'slug' => 'expiry-test']);
         $package = Package::create([
@@ -82,11 +72,10 @@ class ExpireSessionsTest extends TestCase
         $router = Router::create([
             'tenant_id' => $tenant->id,
             'name' => 'Expiry router',
-            'management_ip' => '192.0.2.1',
             'api_username' => 'expiry-user',
             'api_password' => 'expiry-password',
-        ]);
-        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        ])->forceFill(['access_backend' => $backend]);
+        $router->saveOrFail();
         $voucher = Voucher::create([
             'tenant_id' => $tenant->id,
             'voucher_batch_id' => $batch->id,
@@ -105,6 +94,6 @@ class ExpireSessionsTest extends TestCase
             'expires_at' => now()->subMinute(),
         ]);
 
-        return [$router, $voucher, $session];
+        return [$router, $session];
     }
 }

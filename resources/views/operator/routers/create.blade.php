@@ -75,30 +75,7 @@
                             @error('hardware_model') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
 
-                        <fieldset class="sm:col-span-2">
-                            <legend class="text-sm font-medium text-gray-700">Access backend</legend>
-                            <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                                <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
-                                    <input type="radio" name="access_backend" value="radius" required
-                                           @checked(old('access_backend', 'radius') === 'radius')
-                                           class="mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500">
-                                    <span>
-                                        <span class="block text-sm font-medium text-gray-900">RADIUS (default)</span>
-                                        <span class="mt-1 block text-xs text-gray-500">Voucher access is authorized by the private RADIUS policy service. Configure RADIUS before activating vouchers.</span>
-                                    </span>
-                                </label>
-                                <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
-                                    <input type="radio" name="access_backend" value="site_agent" required
-                                           @checked(old('access_backend') === 'site_agent')
-                                           class="mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500">
-                                    <span>
-                                        <span class="block text-sm font-medium text-gray-900">Site agent</span>
-                                        <span class="mt-1 block text-xs text-gray-500">A paired site agent provisions and removes hotspot users for routers at this site.</span>
-                                    </span>
-                                </label>
-                            </div>
-                            @error('access_backend') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </fieldset>
+                        <p class="text-sm text-gray-600 sm:col-span-2">Customer authentication is handled by the cloud RADIUS service. Router management uses the WireGuard tunnel and API-SSL.</p>
 
                         <div class="sm:col-span-2">
                             <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4">
@@ -130,37 +107,10 @@
                 </section>
 
                 <section x-show="step === 2" x-ref="apiAccess" class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-                    <h2 class="text-lg font-semibold text-gray-900">Router API Credentials</h2>
-                    <p class="mt-1 text-sm text-gray-500">These credentials are saved with this router; the password is encrypted at rest. Leave it blank to generate one and include it in the setup script.</p>
+                    <h2 class="text-lg font-semibold text-gray-900">Router API-SSL Credentials</h2>
+                    <p class="mt-1 text-sm text-gray-500">The API account is accessed only through WireGuard over TLS on port 8729. Passwords are encrypted at rest; leave it blank to generate one for enrollment.</p>
 
                     <div class="mt-6 grid gap-5 sm:grid-cols-2">
-                        <div>
-                            <label for="management_ip" class="mb-1 block text-sm font-medium text-gray-700">Router IP / Hostname</label>
-                            <input id="management_ip" name="management_ip" type="text" maxlength="255"
-                                   value="{{ old('management_ip') }}" placeholder="192.168.88.1"
-                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            <p class="mt-1 text-xs text-gray-500">Router address reachable from the paired site agent or the local test environment.</p>
-                            @error('management_ip') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div>
-                            <label for="management_subnet" class="mb-1 block text-sm font-medium text-gray-700">Allowed API source subnet</label>
-                            <input id="management_subnet" name="management_subnet" type="text" maxlength="18"
-                                   value="{{ old('management_subnet') }}" placeholder="192.168.88.0/24"
-                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            <p class="mt-1 text-xs text-gray-500">Restricts API/API-SSL access. If omitted, the generated script leaves API access disabled.</p>
-                            @error('management_subnet') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div>
-                            <label for="api_port" class="mb-1 block text-sm font-medium text-gray-700">API Port</label>
-                            <input id="api_port" name="api_port" type="number" min="1" max="65535"
-                                   value="{{ old('api_port', $apiPort) }}"
-                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                            <p class="mt-1 text-xs text-gray-500">8728 uses the unencrypted API; 8729 uses API-SSL. Restrict its allowed source subnet.</p>
-                            @error('api_port') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
                         <div>
                             <label for="api_username" class="mb-1 block text-sm font-medium text-gray-700">API Username</label>
                             <input id="api_username" name="api_username" type="text" maxlength="100"

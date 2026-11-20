@@ -59,25 +59,6 @@
                                    class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
                         <div>
-                            <label for="management_ip" class="mb-1 block text-sm font-medium text-gray-700">Management IP / hostname</label>
-                            <input id="management_ip" name="management_ip" maxlength="255" value="{{ old('management_ip', $router->management_ip) }}"
-                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            @error('management_ip') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                        <div>
-                            <label for="management_subnet" class="mb-1 block text-sm font-medium text-gray-700">Allowed API source subnet</label>
-                            <input id="management_subnet" name="management_subnet" maxlength="18"
-                                   value="{{ old('management_subnet', $hotspotConfig['management_subnet'] ?? '') }}"
-                                   placeholder="192.168.88.0/24"
-                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            @error('management_subnet') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                        <div>
-                            <label for="api_port" class="mb-1 block text-sm font-medium text-gray-700">API port</label>
-                            <input id="api_port" name="api_port" type="number" min="1" max="65535" required value="{{ old('api_port', $router->api_port ?: config('services.mikrotik.api_port')) }}"
-                                   class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        </div>
-                        <div>
                             <label for="api_username" class="mb-1 block text-sm font-medium text-gray-700">API username</label>
                             <input id="api_username" name="api_username" maxlength="100" value="{{ old('api_username', $router->api_username) }}"
                                    class="block w-full rounded-lg border-gray-300 font-mono shadow-sm focus:border-blue-500 focus:ring-blue-500">

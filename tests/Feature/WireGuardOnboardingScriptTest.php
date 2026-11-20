@@ -65,15 +65,26 @@ class WireGuardOnboardingScriptTest extends TestCase
             $router->fresh(),
             str_repeat('T', 64),
             str_repeat('a', 64),
+            str_repeat('b', 64),
         );
 
         $this->assertStringContainsString('api-ssl certificate="wifi-billing-api" port=8729', $script);
+        $this->assertStringContainsString('/ip cloud set update-time=yes', $script);
         $this->assertStringContainsString('subject-alt-name="IP:10.8.1.20"', $script);
         $this->assertStringContainsString('/ip service set api disabled=yes', $script);
         $this->assertStringContainsString('service=hotspot authentication-port=1812 accounting-port=1813', $script);
         $this->assertStringContainsString('use-radius=yes radius-accounting=yes', $script);
         $this->assertStringContainsString('https://billing.example.test/api/provision/enroll', $script);
         $this->assertStringContainsString('check-certificate=yes', $script);
+        $this->assertStringContainsString('Authorization: Bearer '.str_repeat('b', 64), $script);
+        $this->assertStringContainsString('interval=1m on-event="/system script run wifi-billing-poll"', $script);
+        $this->assertStringContainsString('/ip hotspot active remove \\$activeId', $script);
+        $this->assertStringContainsString('/ppp active remove \\$activeId', $script);
+        $this->assertStringContainsString('targetService = \\"pppoe\\"', $script);
+        $this->assertStringNotContainsString(':parse', strtolower($script));
+        $this->assertStringNotContainsString('eval', strtolower($script));
+        $this->assertStringContainsString('/file get [find name="wifi-billing-api.crt"] contents', $script);
+        $this->assertStringNotContainsString('cert_export_wifi-billing-api.crt', $script);
         $this->assertStringNotContainsString('check-certificate=no', $script);
         $this->assertNull($peer->fresh()->private_key);
         $this->assertNotNull($peer->fresh()->config_downloaded_at);

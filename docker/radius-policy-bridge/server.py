@@ -99,6 +99,9 @@ def policy_payload(path, form):
         "username": safe_value(form.get("username", ""), "username", 64, required=False),
         "service_type": safe_value(form.get("service_type", ""), "service type", 32, required=False),
         "status_type": status_type,
+        "acct_unique_session_id": safe_value(
+            form.get("acct_unique_session_id", ""), "unique session id", 255, required=False
+        ),
         "event_time": safe_value(form.get("event_time", ""), "event time", 64, required=False),
         "session_time": safe_value(form.get("session_time", ""), "session time", 16, required=False),
         "input_octets": safe_value(form.get("input_octets", ""), "input octets", 16, required=False),

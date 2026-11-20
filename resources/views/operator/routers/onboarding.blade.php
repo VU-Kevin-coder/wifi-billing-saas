@@ -28,9 +28,9 @@
                 </div>
                 @if ($bootstrapCommand)
                     <pre id="bootstrap-command" class="mt-5 overflow-x-auto rounded-lg bg-gray-100 p-4 text-sm text-blue-900">{{ $bootstrapCommand }}</pre>
-                @elseif ($onboarding->status === 'connected')
+                @elseif ($onboarding->status !== 'awaiting_bootstrap')
                     <p class="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                        The one-line bootstrap completed and the router identity is locked. Continue to service setup when readiness checks pass.
+                        Router onboarding status: {{ str_replace('_', ' ', $onboarding->status) }}. Continue when WireGuard, API-SSL, and RADIUS checks are complete.
                     </p>
                 @else
                     <p class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -47,7 +47,7 @@
 
                 <div class="mt-6 flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4" role="status" aria-live="polite">
                     <span class="mt-1 h-3 w-3 shrink-0 rounded-full"
-                          :class="status === 'connected' ? 'bg-green-500' : (status === 'expired' ? 'bg-red-500' : 'animate-pulse bg-orange-500')"></span>
+                          :class="['radius_ready', 'complete'].includes(status) ? 'bg-green-500' : (status === 'expired' ? 'bg-red-500' : 'animate-pulse bg-orange-500')"></span>
                     <div>
                         <p class="font-mono text-sm" x-text="message"></p>
                         <p class="mt-2 text-xs text-gray-500" x-text="`Attempt ${attempt} of 300`"></p>
@@ -57,7 +57,7 @@
                 <div class="mt-6 flex items-center justify-between">
                     <a href="{{ route('operator.routers.show', ['tenant' => $tenant->slug, 'router' => $router->id]) }}"
                        class="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Back</a>
-                    <a x-show="status === 'connected'" x-cloak
+                    <a x-show="['radius_ready', 'complete'].includes(status)" x-cloak
                        href="{{ route('operator.routers.onboarding.services', ['tenant' => $tenant->slug, 'router' => $router->id]) }}"
                        class="rounded-lg bg-orange-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-500">Next</a>
                 </div>
@@ -69,15 +69,19 @@
         function routerOnboarding() {
             return {
                 status: @js($onboarding->status),
-                message: @js($onboarding->status === 'connected' ? 'Router connection verified.' : 'Paste the provisioning command into your MikroTik terminal to begin.'),
+                message: @js(in_array($onboarding->status, ['radius_ready', 'complete'], true)
+                    ? 'Router connection and RADIUS readiness verified.'
+                    : ($onboarding->status === 'awaiting_bootstrap'
+                        ? 'Paste the provisioning command into your MikroTik terminal to begin.'
+                        : 'Router onboarding is in progress.')),
                 attempt: 0,
                 timer: null,
                 async start() {
-                    if (this.status === 'connected' || this.status === 'expired') return;
+                    if (['radius_ready', 'complete', 'expired'].includes(this.status)) return;
                     this.poll();
                 },
                 async poll() {
-                    if (this.attempt >= 300 || this.status === 'connected' || this.status === 'expired') return;
+                    if (this.attempt >= 300 || ['radius_ready', 'complete', 'expired'].includes(this.status)) return;
                     this.attempt++;
                     try {
                         const response = await fetch(@js(route('operator.routers.onboarding.status', ['tenant' => $tenant->slug, 'router' => $router->id])), {
@@ -91,7 +95,7 @@
                     } catch (error) {
                         this.message = error.message || 'Unable to check router status. Retrying.';
                     }
-                    if (this.status !== 'connected' && this.status !== 'expired' && this.attempt < 300) {
+                    if (!['radius_ready', 'complete', 'expired'].includes(this.status) && this.attempt < 300) {
                         this.timer = window.setTimeout(() => this.poll(), 3000);
                     }
                 },

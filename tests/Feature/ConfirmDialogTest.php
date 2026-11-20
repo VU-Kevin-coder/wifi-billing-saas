@@ -25,7 +25,6 @@ class ConfirmDialogTest extends TestCase
             'operator/vouchers/index.blade.php',
             'operator/staff/index.blade.php',
             'operator/routers/index.blade.php',
-            'operator/settings/router.blade.php',
             'platform/revenue/index.blade.php',
             'platform/billing/index.blade.php',
             'platform/refunds/index.blade.php',

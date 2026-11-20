@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Concerns;
 use App\Models\RadiusAccountingSession;
 use App\Models\Router;
 use App\Models\Session;
-use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\Voucher;
@@ -73,22 +72,8 @@ trait PortalPaymentActions
         // Activation locks and updates a fresh model instance; discard the
         // pre-activation snapshot before evaluating credential readiness.
         $voucher->refresh();
-        if ($radiusResponse = $this->radiusPaymentResponse($transaction, $voucher, $session, true)) {
-            return $radiusResponse;
-        }
 
-        if ($session->status === 'provisioning') {
-            return response()->json([
-                'status' => 'provisioning',
-                'message' => 'Payment confirmed. Waiting for the site router to activate access.',
-            ], 202);
-        }
-
-        return response()->json([
-            'status' => 'activated',
-            'voucher_code' => $voucher->code,
-            'mikrotik_url' => HotspotLogin::forVoucher($voucher),
-        ])->header('Cache-Control', 'no-store');
+        return $this->radiusPaymentResponse($transaction, $voucher, $session, true);
     }
 
     public function paymentStatus(Request $request, PaymentService $paymentService): JsonResponse
@@ -138,13 +123,8 @@ trait PortalPaymentActions
             return response()->json(['status' => 'activation_unavailable', 'message' => 'The access session ended before connection. Contact the operator; please do not pay again.'], 202)->header('Cache-Control', 'no-store');
         }
 
-        if ($session && ($radiusResponse = $this->radiusPaymentResponse($transaction, $voucher, $session))) {
-            return $radiusResponse;
-        }
-
-        if ($session?->status === 'provisioning') {
-            return response()->json(['status' => 'provisioning'], 202)
-                ->header('Cache-Control', 'no-store');
+        if ($session) {
+            return $this->radiusPaymentResponse($transaction, $voucher, $session);
         }
 
         if (! $session) {
@@ -164,8 +144,7 @@ trait PortalPaymentActions
         ])->header('Cache-Control', 'no-store');
     }
 
-    /** Null means the session is not RADIUS and retains its existing behavior. */
-    private function radiusPaymentResponse(Transaction $sale, Voucher $voucher, Session $session, bool $activation = false): ?JsonResponse
+    private function radiusPaymentResponse(Transaction $sale, Voucher $voucher, Session $session, bool $activation = false): JsonResponse
     {
         if (! $session->router_id) {
             return response()->json(['status' => 'activation_unavailable', 'message' => 'Access cannot be confirmed. Contact the operator; please do not pay again.'], 202)->header('Cache-Control', 'no-store');
@@ -173,9 +152,6 @@ trait PortalPaymentActions
         $router = Router::withoutTenancy()->where('tenant_id', $sale->tenant_id)->find($session->router_id);
         if (! $router) {
             return response()->json(['status' => 'activation_pending'], 202)->header('Cache-Control', 'no-store');
-        }
-        if ($router->access_backend === 'site_agent') {
-            return null;
         }
         if ($router->access_backend !== 'radius') {
             return response()->json(['status' => 'activation_unavailable', 'message' => 'Access cannot be confirmed. Contact the operator; please do not pay again.'], 202)->header('Cache-Control', 'no-store');
@@ -187,9 +163,7 @@ trait PortalPaymentActions
             && $router->hasUsableRadiusConfiguration()
             && app(RadiusVoucherEligibility::class)->permits($voucher)
             && ! $session->pending_revocation && ! $session->pending_device_ban
-            && $session->expires_at && $session->expires_at->gt(now())
-            && ! SiteAgentCommand::query()->where('tenant_id', $sale->tenant_id)
-                ->where('router_id', $router->id)->where('session_id', $session->id)->exists();
+            && $session->expires_at && $session->expires_at->gt(now());
 
         // For an already active session use its proven NAS identity, rather
         // than a fictitious new device which may exceed the device limit.

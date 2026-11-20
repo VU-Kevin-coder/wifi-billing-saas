@@ -31,6 +31,7 @@ class Router extends Model
         'uptime',
         'api_username',
         'api_password',
+        'api_ca_certificate',
         'api_port',
         'has_wireless',
         'enable_hotspot',
@@ -49,6 +50,7 @@ class Router extends Model
 
     protected $casts = [
         'api_password' => 'encrypted',
+        'api_ca_certificate' => 'encrypted',
         'radius_shared_secret' => 'encrypted',
         'last_seen_at' => 'datetime',
         'telemetry_at' => 'datetime',
@@ -58,6 +60,7 @@ class Router extends Model
         'radius_access_reject_streak' => 'integer',
         'radius_activation_paused_at' => 'datetime',
         'radius_readiness_checked_at' => 'datetime',
+        'polling_last_seen_at' => 'datetime',
         'has_wireless' => 'boolean',
         'enable_hotspot' => 'boolean',
         'enable_pppoe' => 'boolean',
@@ -72,6 +75,8 @@ class Router extends Model
 
     protected $hidden = [
         'radius_shared_secret',
+        'api_ca_certificate',
+        'polling_token_hash',
     ];
 
     public function tenant(): BelongsTo

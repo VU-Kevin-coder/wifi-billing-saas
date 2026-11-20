@@ -55,19 +55,7 @@
                                class="w-full rounded-lg border-gray-300 bg-white text-gray-900 shadow-sm focus:border-orange-500 focus:ring-orange-500">
                     </div>
 
-                    <fieldset class="sm:col-span-2">
-                        <legend class="text-sm font-medium text-gray-700">Access backend</legend>
-                        <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                            <label class="flex gap-3 rounded-lg border border-gray-200 p-4">
-                                <input type="radio" name="access_backend" value="radius" required @checked(old('access_backend', 'radius') === 'radius')>
-                                <span><span class="block text-sm font-medium text-gray-900">RADIUS</span><span class="mt-1 block text-xs text-gray-500">Recommended for voucher authorization.</span></span>
-                            </label>
-                            <label class="flex gap-3 rounded-lg border border-gray-200 p-4">
-                                <input type="radio" name="access_backend" value="site_agent" required @checked(old('access_backend') === 'site_agent')>
-                                <span><span class="block text-sm font-medium text-gray-900">Site agent</span><span class="mt-1 block text-xs text-gray-500">Use a paired agent at this router's site.</span></span>
-                            </label>
-                        </div>
-                    </fieldset>
+                    <p class="text-sm text-gray-600 sm:col-span-2">Customer authentication uses cloud RADIUS. Router management is restricted to the WireGuard tunnel and API-SSL.</p>
 
                     <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 sm:col-span-2">
                         <input type="checkbox" name="has_wireless" value="1" @checked(old('has_wireless'))>

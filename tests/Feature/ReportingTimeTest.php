@@ -159,6 +159,7 @@ class ReportingTimeTest extends TestCase
 
     public function test_redeeming_records_the_price_at_that_moment(): void
     {
+        config(['radius.enabled' => true]);
         $batch = VoucherBatch::create(['tenant_id' => $this->tenant->id, 'package_id' => $this->package->id, 'batch_code' => 'B-2', 'quantity' => 1]);
         $voucher = Voucher::create([
             'tenant_id' => $this->tenant->id, 'voucher_batch_id' => $batch->id,
@@ -166,7 +167,11 @@ class ReportingTimeTest extends TestCase
         ]);
 
         $router = Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Price snapshot router']);
-        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'nas-'.$router->id,
+            'radius_shared_secret' => str_repeat('a', 64),
+        ])->saveOrFail();
         $session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
             ->activate($this->tenant, $voucher, Request::create('/', 'POST', ['router_id' => $router->id]), '0771234567'));
         $this->assertSame($router->id, $session->router_id);

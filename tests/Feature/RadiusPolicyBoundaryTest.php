@@ -22,7 +22,7 @@ use App\Services\RadiusUnavailableException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -224,41 +224,252 @@ class RadiusPolicyBoundaryTest extends TestCase
         ])->assertUnauthorized();
     }
 
-    public function test_accounting_endpoint_logs_sanitized_observations_without_reconciling_sessions(): void
+    public function test_accounting_endpoint_reconciles_hotspot_sessions_idempotently_through_stop(): void
     {
         config([
             'radius.enabled' => true,
+            'radius_policy.accounting_reconciliation_enabled' => true,
             'radius_policy.service_secret' => self::SERVICE_SECRET,
             'radius_policy.nonce_cache_store' => null,
             'radius_policy.allowed_source_cidrs' => [],
         ]);
-        [, $router] = $this->createRadiusAccess();
+        [, $router, $voucher, $session] = $this->createRadiusAccess();
         $this->createVpnPeer($router, '10.8.1.22');
-        $sessionId = 'raw-accounting-session-id';
-        $log = \Mockery::mock();
-        $log->shouldReceive('info')->once()->withArgs(function (string $message, array $context) use ($sessionId): bool {
-            return $message === 'RADIUS accounting observation'
-                && $context['status_type'] === 'Start'
-                && $context['session_fingerprint'] !== $sessionId
-                && ! array_key_exists('nas_session_id', $context)
-                && ! array_key_exists('voucher_code', $context);
-        });
-        Log::shouldReceive('channel')->once()->with('radius')->andReturn($log);
-
-        $this->signedCall('POST', '/internal/radius/v1/accounting-events', [
+        $sessionId = 'radius-session-123';
+        $uniqueSessionId = 'router-unique-session-123';
+        $interimTime = now()->subSeconds(30)->startOfSecond();
+        $start = [
             'authenticated_router_id' => $router->id,
             'authenticated_peer_ip' => '10.8.1.22',
             'nas_identifier' => $router->radius_nas_identifier,
             'nas_session_id' => $sessionId,
+            'acct_unique_session_id' => $uniqueSessionId,
+            'username' => $voucher->code,
             'status_type' => 'Start',
-            'event_time' => '2026-07-14 08:15:00',
-            'session_time' => 12,
+            'event_time' => now()->subMinute()->format('Y-m-d H:i:s'),
+            'session_time' => 0,
             'input_octets' => 100,
             'output_octets' => 200,
-        ])->assertNoContent();
+        ];
+        $this->signedCall('POST', '/internal/radius/v1/accounting-events', $start)->assertNoContent();
+        $this->signedCall('POST', '/internal/radius/v1/accounting-events', $start)->assertNoContent();
 
-        $this->assertDatabaseCount('radius_accounting_events', 0);
-        $this->assertDatabaseCount('radius_accounting_sessions', 0);
+        $interim = array_merge($start, [
+            'status_type' => 'Interim-Update',
+            'event_time' => $interimTime->toIso8601String(),
+            'session_time' => 30,
+            'input_octets' => 400,
+            'output_octets' => 800,
+        ]);
+        $this->signedCall('POST', '/internal/radius/v1/accounting-events', $interim)->assertNoContent();
+        $this->signedCall('POST', '/internal/radius/v1/accounting-events', $interim)->assertNoContent();
+
+        $session->forceFill([
+            'status' => 'disconnecting',
+            'pending_revocation' => true,
+            'pending_revocation_status' => 'expired',
+        ])->saveOrFail();
+        $stop = array_merge($interim, [
+            'status_type' => 'Stop',
+            'event_time' => now()->format('Y-m-d H:i:s'),
+            'session_time' => 60,
+            'input_octets' => 900,
+            'output_octets' => 1500,
+        ]);
+        $this->signedCall('POST', '/internal/radius/v1/accounting-events', $stop)->assertNoContent();
+
+        $session->refresh();
+        $this->assertSame('expired', $session->status);
+        $this->assertSame(900, $session->bytes_in);
+        $this->assertSame(1500, $session->bytes_out);
+        $this->assertSame(60, $session->session_duration_seconds);
+        $this->assertSame($interimTime->timestamp, $session->last_interim_at->timestamp);
+        $this->assertFalse($session->pending_revocation);
+        $this->assertNotNull($session->accounting_stopped_at);
+        $this->assertDatabaseCount('radius_accounting_events', 3);
+        $this->assertDatabaseCount('radius_accounting_sessions', 1);
+        $this->assertDatabaseHas('radius_accounting_sessions', [
+            'identity_id' => DB::table('radius_nas_session_identities')->where('router_id', $router->id)
+                ->where('nas_session_id', $sessionId)->value('id'),
+            'acct_unique_session_id' => $uniqueSessionId,
+            'state' => 'stopped',
+        ]);
+    }
+
+    public function test_hotspot_generations_aggregate_usage_and_wait_for_all_stops_before_terminal_state(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'radius_policy.accounting_reconciliation_enabled' => true,
+        ]);
+        [, $router, $voucher, $session] = $this->createRadiusAccess();
+        $service = app(RadiusAccountingService::class);
+        $base = [
+            'nas_identifier' => $router->radius_nas_identifier,
+            'voucher_code' => $voucher->code,
+        ];
+        $firstStart = now()->subSeconds(20)->startOfSecond();
+        $service->ingestAccountingEvent($base + [
+            'nas_session_id' => 'nas-session-a',
+            'acct_unique_session_id' => 'unique-session-a',
+            'status_type' => 'Start',
+            'event_time' => $firstStart->toIso8601String(),
+            'session_time' => 0,
+            'input_octets' => 0,
+            'output_octets' => 0,
+        ]);
+        $service->ingestAccountingEvent($base + [
+            'nas_session_id' => 'nas-session-a',
+            'acct_unique_session_id' => 'unique-session-a',
+            'status_type' => 'Interim-Update',
+            'event_time' => $firstStart->addSeconds(5)->toIso8601String(),
+            'session_time' => 30,
+            'input_octets' => 100,
+            'output_octets' => 200,
+        ]);
+
+        $secondStart = $firstStart->addSecond();
+        $service->ingestAccountingEvent($base + [
+            'nas_session_id' => 'nas-session-b',
+            'acct_unique_session_id' => 'unique-session-b',
+            'status_type' => 'Start',
+            'event_time' => $secondStart->toIso8601String(),
+            'session_time' => 0,
+            'input_octets' => 0,
+            'output_octets' => 0,
+        ]);
+        $service->ingestAccountingEvent($base + [
+            'nas_session_id' => 'nas-session-b',
+            'acct_unique_session_id' => 'unique-session-b',
+            'status_type' => 'Interim-Update',
+            'event_time' => $secondStart->addSeconds(5)->toIso8601String(),
+            'session_time' => 60,
+            'input_octets' => 300,
+            'output_octets' => 400,
+        ]);
+
+        $session->refresh();
+        $this->assertSame(400, $session->bytes_in);
+        $this->assertSame(600, $session->bytes_out);
+        $this->assertSame(90, $session->session_duration_seconds);
+
+        $service->ingestAccountingEvent($base + [
+            'nas_session_id' => 'nas-session-a',
+            'acct_unique_session_id' => 'unique-session-a',
+            'status_type' => 'Stop',
+            'event_time' => $firstStart->addSeconds(10)->toIso8601String(),
+            'session_time' => 35,
+            'input_octets' => 120,
+            'output_octets' => 220,
+        ]);
+        $this->assertSame('active', $session->fresh()->status);
+        $this->assertNull($session->fresh()->accounting_stopped_at);
+
+        $service->ingestAccountingEvent($base + [
+            'nas_session_id' => 'nas-session-b',
+            'acct_unique_session_id' => 'unique-session-b',
+            'status_type' => 'Stop',
+            'event_time' => $secondStart->addSeconds(10)->toIso8601String(),
+            'session_time' => 65,
+            'input_octets' => 320,
+            'output_octets' => 420,
+        ]);
+        $this->assertSame('disconnected', $session->fresh()->status);
+        $this->assertNotNull($session->fresh()->accounting_stopped_at);
+        $this->assertSame(440, $session->fresh()->bytes_in);
+        $this->assertSame(640, $session->fresh()->bytes_out);
+        $this->assertSame(100, $session->fresh()->session_duration_seconds);
+    }
+
+    public function test_hotspot_interim_after_expiry_queues_disconnect(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'radius_policy.accounting_reconciliation_enabled' => true,
+        ]);
+        Queue::fake();
+        [, $router, $voucher, $session] = $this->createRadiusAccess();
+        $this->createVpnPeer($router, '10.8.1.24');
+        $service = app(RadiusAccountingService::class);
+        $identity = [
+            'nas_identifier' => $router->radius_nas_identifier,
+            'nas_session_id' => 'expired-time-session',
+            'acct_unique_session_id' => 'expired-time-unique',
+            'voucher_code' => $voucher->code,
+        ];
+        $startTime = now()->subMinute();
+        $service->ingestAccountingEvent($identity + [
+            'status_type' => 'Start',
+            'event_time' => $startTime->toIso8601String(),
+            'session_time' => 0,
+            'input_octets' => 0,
+            'output_octets' => 0,
+        ]);
+        $session->forceFill(['expires_at' => now()->subSecond()])->saveOrFail();
+        $service->ingestAccountingEvent($identity + [
+            'status_type' => 'Interim-Update',
+            'event_time' => now()->toIso8601String(),
+            'session_time' => 60,
+            'input_octets' => 10,
+            'output_octets' => 10,
+        ]);
+
+        $this->assertTrue($session->fresh()->pending_revocation);
+        $this->assertSame('expired', $session->fresh()->pending_revocation_status);
+        $this->assertDatabaseHas('router_commands', [
+            'router_id' => $router->id,
+            'session_id' => $session->id,
+            'operation' => 'kick',
+            'state' => 'pending_api',
+            'target_service' => 'hotspot',
+            'target_username' => $voucher->code,
+        ]);
+    }
+
+    public function test_hotspot_interim_at_data_limit_requests_one_router_kick(): void
+    {
+        config([
+            'radius.enabled' => true,
+            'radius_policy.accounting_reconciliation_enabled' => true,
+        ]);
+        Queue::fake();
+        [, $router, $voucher, $session, $package] = $this->createRadiusAccess();
+        $this->createVpnPeer($router, '10.8.1.23');
+        $package->update(['data_limit' => '1KB']);
+
+        $service = app(RadiusAccountingService::class);
+        $identity = [
+            'nas_identifier' => $router->radius_nas_identifier,
+            'nas_session_id' => 'quota-session-1',
+            'acct_unique_session_id' => 'quota-unique-1',
+            'voucher_code' => $voucher->code,
+        ];
+        $service->ingestAccountingEvent($identity + [
+            'status_type' => 'Start',
+            'event_time' => now()->subMinute()->format('Y-m-d H:i:s'),
+            'session_time' => 0,
+            'input_octets' => 0,
+            'output_octets' => 0,
+        ]);
+        $result = $service->ingestAccountingEvent($identity + [
+            'status_type' => 'Interim-Update',
+            'event_time' => now()->format('Y-m-d H:i:s'),
+            'session_time' => 60,
+            'input_octets' => 512,
+            'output_octets' => 512,
+        ]);
+
+        $this->assertTrue($result['accepted']);
+        $this->assertTrue($session->fresh()->pending_revocation);
+        $this->assertSame('expired', $session->fresh()->pending_revocation_status);
+        $this->assertDatabaseHas('router_commands', [
+            'router_id' => $router->id,
+            'session_id' => $session->id,
+            'operation' => 'kick',
+            'state' => 'pending_api',
+            'target_service' => 'hotspot',
+            'target_username' => $voucher->code,
+        ]);
     }
 
     public function test_production_private_policy_route_keeps_https_hmac_and_replay_checks_for_allowed_peer(): void
@@ -368,10 +579,10 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertSame('provisioning', $sessionB->fresh()->status);
         $this->assertSame(0, RadiusAccountingSession::query()->count());
         $this->assertSame(0, RadiusAccountingEvent::query()->count());
-        $this->signedCall('GET', '/internal/radius/v1/disconnect-commands')->assertStatus(503);
+        $this->signedCall('GET', '/internal/radius/v1/disconnect-commands')->assertNotFound();
         $this->signedCall('POST', '/internal/radius/v1/disconnect-commands/'.Str::uuid().'/ack', [
             'result' => 'delivered',
-        ])->assertStatus(503);
+        ])->assertNotFound();
         $this->assertSame(0, RadiusDisconnectCommand::query()->count());
     }
 
@@ -452,65 +663,17 @@ class RadiusPolicyBoundaryTest extends TestCase
         $this->assertSame((int) $tenant->id, (int) $router->fresh()->tenant_id);
     }
 
-    public function test_disconnect_delivery_ack_is_not_disconnect_confirmation(): void
-    {
-        [$tenant, $router, $voucher, $session] = $this->createRadiusAccess();
-        $service = app(RadiusAccountingService::class);
-        $eventTime = now()->subSeconds(30)->startOfSecond();
-
-        // Legacy open accounting evidence is seeded directly; new events cannot enter.
-        $identity = RadiusNasSessionIdentity::create(['tenant_id' => $tenant->id, 'router_id' => $router->id,
-            'nas_session_id' => 'disconnect-target-session', 'last_generation' => 1]);
-        $accounting = RadiusAccountingSession::create(['identity_id' => $identity->id, 'generation' => 1,
-            'tenant_id' => $tenant->id, 'router_id' => $router->id, 'session_id' => $session->id,
-            'state' => 'open', 'started_at' => $eventTime]);
-        $identity->update(['current_generation_id' => $accounting->id]);
-        $session->update(['status' => 'active']);
-
-        $this->assertTrue($service->requestDisconnect($session, 'revocation:'.$session->id.':disconnected'));
-        $this->assertTrue($service->requestDisconnect($session, 'revocation:'.$session->id.':disconnected'));
-        $this->assertSame(1, RadiusDisconnectCommand::query()->count());
-
-        $commands = $service->claimDisconnectCommands();
-        $this->assertCount(1, $commands);
-        $this->assertSame($router->radius_nas_identifier, $commands[0]['nas_identifier']);
-        $this->assertArrayNotHasKey('radius_shared_secret', $commands[0]);
-
-        $ack = $service->acknowledgeDisconnectCommand($commands[0]['command_id'], 'delivered');
-        $this->assertSame('delivery_acknowledged', $ack['state']);
-        $this->assertSame('disconnecting', $session->fresh()->status);
-        $this->assertTrue($session->fresh()->pending_revocation);
-
-        $this->assertCount(0, $service->claimDisconnectCommands());
-        $this->travel(31)->seconds();
-        $retryCommands = $service->claimDisconnectCommands();
-        $this->assertCount(1, $retryCommands);
-        $this->assertSame($commands[0]['command_id'], $retryCommands[0]['command_id']);
-        $service->acknowledgeDisconnectCommand($retryCommands[0]['command_id'], 'delivered');
-
-        $stop = $service->ingestAccountingEvent([
-            'nas_identifier' => $router->radius_nas_identifier,
-            'nas_session_id' => 'disconnect-target-session',
-            'status_type' => 'Stop',
-            'event_time' => $eventTime->addMinute()->toIso8601String(),
-            'input_octets' => 10,
-            'output_octets' => 20,
-            'voucher_code' => $voucher->code,
-        ]);
-        $this->assertSame(['accepted' => false, 'quarantined' => true, 'reason' => 'radius_unavailable'], $stop);
-        $this->assertSame('disconnecting', $session->fresh()->status);
-        $this->assertSame('open', $accounting->fresh()->state);
-        $this->assertSame(0, RadiusAccountingEvent::query()->count());
-        $this->assertSame((int) $tenant->id, (int) $router->fresh()->tenant_id);
-    }
-
     public function test_verified_sale_writes_typed_voucher_link_and_replay_returns_same_voucher(): void
     {
-        config(['site_agent.required' => false]);
+        config(['radius.enabled' => true]);
         PlatformSetting::set('sms.voucher_receipt', false);
         $tenant = $this->createTenant('radius-sale');
-        $router = Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site agent router']);
-        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $router = Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic RADIUS router']);
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'nas-'.$router->id,
+            'radius_shared_secret' => str_repeat('a', 64),
+        ])->saveOrFail();
         $package = Package::create([
             'tenant_id' => $tenant->id,
             'name' => 'Sale package',

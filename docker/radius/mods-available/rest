@@ -17,7 +17,7 @@ rest {
         uri = "${..connect_uri}/accounting"
         method = "post"
         body = "post"
-        data = "router_id=%{urlencode:%{client:shortname}}&peer_ip=%{urlencode:%{Packet-Src-IP-Address}}&nas_identifier=%{urlencode:%{NAS-Identifier}}&nas_session_id=%{urlencode:%{Acct-Session-Id}}&username=%{urlencode:%{User-Name}}&service_type=%{urlencode:%{Service-Type}}&status_type=%{urlencode:%{Acct-Status-Type}}&event_time=%{urlencode:%{Event-Timestamp}}&session_time=%{urlencode:%{Acct-Session-Time}}&input_octets=%{urlencode:%{Acct-Input-Octets}}&input_gigawords=%{urlencode:%{Acct-Input-Gigawords}}&output_octets=%{urlencode:%{Acct-Output-Octets}}&output_gigawords=%{urlencode:%{Acct-Output-Gigawords}}&termination_cause=%{urlencode:%{Acct-Terminate-Cause}}"
+        data = "router_id=%{urlencode:%{client:shortname}}&peer_ip=%{urlencode:%{Packet-Src-IP-Address}}&nas_identifier=%{urlencode:%{NAS-Identifier}}&nas_session_id=%{urlencode:%{Acct-Session-Id}}&acct_unique_session_id=%{urlencode:%{Acct-Unique-Session-Id}}&username=%{urlencode:%{User-Name}}&service_type=%{urlencode:%{Service-Type}}&status_type=%{urlencode:%{Acct-Status-Type}}&event_time=%{urlencode:%{Event-Timestamp}}&session_time=%{urlencode:%{Acct-Session-Time}}&input_octets=%{urlencode:%{Acct-Input-Octets}}&input_gigawords=%{urlencode:%{Acct-Input-Gigawords}}&output_octets=%{urlencode:%{Acct-Output-Octets}}&output_gigawords=%{urlencode:%{Acct-Output-Gigawords}}&termination_cause=%{urlencode:%{Acct-Terminate-Cause}}"
         force_to = "plain"
         do_xlat = no
     }

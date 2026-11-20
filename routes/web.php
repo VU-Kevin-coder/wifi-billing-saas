@@ -11,7 +11,6 @@ use App\Http\Controllers\Operator\PortalSettingsController;
 use App\Http\Controllers\Operator\RadiusRouterCredentialController;
 use App\Http\Controllers\Operator\RouterController;
 use App\Http\Controllers\Operator\RouterOnboardingController;
-use App\Http\Controllers\Operator\RouterSettingsController;
 use App\Http\Controllers\Operator\SettingsController;
 use App\Http\Controllers\Operator\SiteController;
 use App\Http\Controllers\Operator\StaffController;
@@ -235,7 +234,6 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::post('routers/{router}/test', [RouterController::class, 'testConnection'])->name('routers.test');
                     Route::post('routers/{router}/identity/discover', [RouterController::class, 'discoverIdentity'])->name('routers.identity.discover');
                     Route::post('routers/{router}/identity/enroll', [RouterController::class, 'enrollIdentity'])->name('routers.identity.enroll');
-                    Route::post('routers/{router}/telemetry', [RouterController::class, 'telemetry'])->name('routers.telemetry');
                     Route::post('routers/{router}/vpn-peer', [VpnPeerController::class, 'storeForRouter'])->whereNumber('router')->name('routers.vpn-peer.store');
                     Route::get('routers/{router}/vpn-peer/config', [VpnPeerController::class, 'downloadForRouter'])->whereNumber('router')->middleware('throttle:3,1')->name('routers.vpn-peer.download');
                     Route::patch('routers/{router}/gateway', [RouterController::class, 'updateGateway'])->name('routers.gateway');
@@ -262,10 +260,6 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                         ->middleware('throttle:5,1')
                         ->name('routers.radius-readiness');
                     Route::post('/sessions/{session}/disconnect', [LiveSessionController::class, 'disconnect'])->name('sessions.disconnect');
-                    Route::post('/sessions/{session}/ban-device', [LiveSessionController::class, 'banDevice'])->name('sessions.ban-device');
-                    Route::post('/blocked-devices/{blockedDevice}/unban', [LiveSessionController::class, 'unbanDevice'])
-                        ->whereNumber('blockedDevice')
-                        ->name('blocked-devices.unban');
                     Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
                 });
 
@@ -306,13 +300,7 @@ Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
                     Route::put('/settings/portal', [PortalSettingsController::class, 'update'])->name('settings.portal.update');
                 });
 
-                Route::middleware('role:operator_admin|operator_network')->group(function () {
-                    Route::get('/settings/router', [RouterSettingsController::class, 'edit'])->name('settings.router');
-                    Route::put('/settings/router', [RouterSettingsController::class, 'update'])->name('settings.router.update');
-                    Route::post('/settings/router/test', [RouterSettingsController::class, 'testConnection'])->name('settings.router.test');
-                    Route::post('/settings/router/sync-all', [RouterSettingsController::class, 'syncAll'])->name('settings.router.sync-all');
-                    Route::post('/settings/router/disconnect', [RouterSettingsController::class, 'disconnect'])->name('settings.router.disconnect');
-                });
+                Route::middleware('role:operator_admin|operator_network')->group(function () {});
 
                 // Staff Management is strictly for operator_admin
                 Route::middleware('role:operator_admin')->group(function () {

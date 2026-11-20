@@ -78,9 +78,6 @@ class PolicySeeder extends Seeder
 
             // ── Provisioning ──
             'provisioning.alert_after_minutes' => [10,   'Minutes before alerting operator of a stuck session'],
-            'provisioning.max_requeues' => [3,    'Automatic retries of failed activation command'],
-            'provisioning.requeue_backoff_minutes' => [5,    'Minutes between retry attempts'],
-            'provisioning.agent_healthy_minutes' => [5,    'Agent poll interval to be considered healthy'],
             'provisioning.compensate_delay' => [true, 'Give full package duration when activation is delayed'],
             'provisioning.grace_minutes' => [2,    'Grace period before delay compensation kicks in'],
 

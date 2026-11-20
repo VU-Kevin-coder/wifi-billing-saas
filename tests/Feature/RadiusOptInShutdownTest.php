@@ -58,7 +58,7 @@ class RadiusOptInShutdownTest extends TestCase
         $this->assertSame(0, AuditLog::query()->where('action', 'router.radius_credential_provisioned')->count());
     }
 
-    public function test_existing_radius_is_preserved_on_show_and_rejected_opt_in_but_can_be_explicitly_switched_to_site_agent(): void
+    public function test_existing_radius_is_preserved_on_show_and_rejected_opt_in(): void
     {
         [$tenant, $router, $user] = $this->fixture('existing-radius');
         $router->forceFill(['access_backend' => 'radius', 'radius_nas_identifier' => 'existing-nas', 'radius_shared_secret' => str_repeat('a', 64)])->save();
@@ -72,12 +72,6 @@ class RadiusOptInShutdownTest extends TestCase
             'nas_identifier' => 'existing-nas', 'confirm_radius_mode' => '1',
         ])->assertStatus(503)->assertDontSee(str_repeat('a', 64));
         $this->assertEquals($before, DB::table('routers')->where('id', $router->id)->first());
-        // Explicit recovery is a model-level operation, not a claim that a UI exists.
-        $router->forceFill(['access_backend' => 'site_agent'])->save();
-        $after = DB::table('routers')->where('id', $router->id)->first();
-        $this->assertSame('site_agent', $after->access_backend);
-        $this->assertSame($before->radius_shared_secret, $after->radius_shared_secret);
-        $this->assertSame($before->radius_nas_identifier, $after->radius_nas_identifier);
     }
 
     public function test_show_of_unconfigured_router_hides_enable_form_without_changing_state(): void

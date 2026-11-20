@@ -27,8 +27,13 @@ class RouterOnboardingController extends Controller
     {
         $routerModel = Router::query()
             ->where('tenant_id', $context->getTenantId())
+            ->with('onboarding')
             ->findOrFail($router);
-        abort_unless($routerModel->pending_radius_activation && ! $routerModel->radius_activation_paused_at, 404);
+        abort_unless(
+            ($routerModel->pending_radius_activation || $routerModel->onboarding?->status === 'api_verified')
+                && ! $routerModel->radius_activation_paused_at,
+            404,
+        );
 
         VerifyRadiusReadinessJob::dispatch((int) $routerModel->id);
 
@@ -45,7 +50,8 @@ class RouterOnboardingController extends Controller
             ->where('tenant_id', $context->getTenantId())
             ->with(['onboarding', 'vpnPeer'])
             ->findOrFail($router);
-        abort_unless($tenant && $routerModel->onboarding?->status === 'connected', 404);
+        abort_unless($tenant
+            && in_array($routerModel->onboarding?->status, ['radius_ready', 'complete'], true), 404);
         abort_unless($routerModel->enrolled, 404);
 
         try {
@@ -92,7 +98,7 @@ class RouterOnboardingController extends Controller
             ->where('tenant_id', $context->getTenantId())
             ->with(['onboarding', 'vpnPeer'])
             ->findOrFail($router);
-        abort_unless($routerModel->onboarding?->status === 'connected', 404);
+        abort_unless(in_array($routerModel->onboarding?->status, ['radius_ready', 'complete'], true), 404);
         abort_unless($routerModel->enrolled, 404);
         $wanInterface = (string) PlatformSetting::get('hotspot.wan_interface', 'ether1');
         try {
@@ -225,8 +231,6 @@ class RouterOnboardingController extends Controller
         $routerModel->forceFill([
             'enable_hotspot' => (bool) $validated['enable_hotspot'],
             'enable_pppoe' => (bool) $validated['enable_pppoe'],
-            'radius_readiness_status' => 'not_checked',
-            'radius_readiness_checked_at' => null,
             'hotspot_config' => $hotspotConfig,
             'pppoe_config' => $pppoeConfig,
             'ethernet_ports' => array_values($validated['ethernet_ports'] ?? []),
@@ -284,10 +288,26 @@ class RouterOnboardingController extends Controller
         $onboarding = $routerModel->onboarding;
         abort_unless($onboarding, 404);
 
-        if ($onboarding->status === 'connected') {
-            return response()->json(['status' => 'connected', 'message' => 'Router connection verified.']);
+        if ($onboarding->status === 'complete') {
+            return response()->json(['status' => 'complete', 'message' => 'Router onboarding is complete.']);
         }
-        if ($onboarding->expires_at->isPast()) {
+        if ($onboarding->status === 'radius_ready') {
+            return response()->json([
+                'status' => 'radius_ready',
+                'message' => 'WireGuard, API-SSL, and RADIUS readiness are verified.',
+                'next_url' => route('operator.routers.onboarding.services', [
+                    'tenant' => $routerModel->tenant->slug,
+                    'router' => $routerModel->id,
+                ]),
+            ]);
+        }
+        if ($onboarding->status === 'api_verified') {
+            return response()->json([
+                'status' => 'api_verified',
+                'message' => 'Router API-SSL is verified. Waiting for RADIUS readiness checks.',
+            ]);
+        }
+        if ($onboarding->status === 'awaiting_bootstrap' && $onboarding->expires_at->isPast()) {
             return response()->json(['status' => 'expired', 'message' => 'The setup command expired. Restart onboarding to issue a fresh command.']);
         }
         if (! $routerModel->enrolled) {
@@ -315,32 +335,45 @@ class RouterOnboardingController extends Controller
         if (! $routerModel->vpnPeer?->last_handshake_at
             || $routerModel->vpnPeer->last_handshake_at->lt(now()->subMinutes(2))) {
             return response()->json([
-                'status' => 'waiting',
+                'status' => $onboarding->status,
                 'message' => 'Paste the provisioning command into the MikroTik terminal. Waiting for the router tunnel.',
             ]);
         }
 
+        $onboardingService->markTunnelVerified($onboarding);
         $result = $connection->testOnboardingWireGuard($routerModel);
         if (! $result['ok']) {
             return response()->json([
-                'status' => 'connecting',
+                'status' => 'tunnel_verified',
                 'message' => $result['message'],
             ]);
         }
 
-        $onboardingService->markConnected($onboarding);
+        $apiVerified = $onboardingService->markApiVerified($onboarding);
         $routerModel->forceFill([
             'status' => 'online',
             'last_seen_at' => now(),
         ])->saveOrFail();
 
+        if ($apiVerified) {
+            VerifyRadiusReadinessJob::dispatch((int) $routerModel->id);
+        }
+
+        $onboarding->refresh();
+        if ($onboarding->status === 'radius_ready') {
+            return response()->json([
+                'status' => 'radius_ready',
+                'message' => 'WireGuard, API-SSL, and RADIUS readiness are verified.',
+                'next_url' => route('operator.routers.onboarding.services', [
+                    'tenant' => $routerModel->tenant->slug,
+                    'router' => $routerModel->id,
+                ]),
+            ]);
+        }
+
         return response()->json([
-            'status' => 'connected',
-            'message' => 'Router connection verified. Continue to service setup.',
-            'next_url' => route('operator.routers.onboarding.services', [
-                'tenant' => $routerModel->tenant->slug,
-                'router' => $routerModel->id,
-            ]),
+            'status' => 'api_verified',
+            'message' => 'Router API-SSL is verified. Waiting for RADIUS readiness checks.',
         ]);
     }
 

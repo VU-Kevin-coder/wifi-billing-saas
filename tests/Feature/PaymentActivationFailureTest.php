@@ -30,7 +30,7 @@ class PaymentActivationFailureTest extends TestCase
         parent::setUp();
         PlatformSetting::setSecret('payment.pawapay.api_token', 'pawapay-test-token');
         PlatformSetting::set('payment.active_gateway', 'pawapay');
-        config(['payments.simulation_enabled' => false]);
+        config(['payments.simulation_enabled' => false, 'radius.enabled' => true]);
     }
 
     public function test_verified_payment_survives_activation_failure_and_retries_without_provider_reverification(): void
@@ -62,7 +62,7 @@ class PaymentActivationFailureTest extends TestCase
         $this->assertDatabaseCount('vouchers', 1);
         $this->assertDatabaseCount('sessions_log', 1);
         $this->getJson('/api/payments/status', ['X-Payment-Token' => self::PAYMENT_STATUS_TOKEN])
-            ->assertOk()->assertJson(['status' => 'completed']);
+            ->assertStatus(202)->assertJson(['status' => 'radius_ready']);
     }
 
     public function test_committed_work_recovers_after_crash_before_dispatch_and_expired_lease(): void
@@ -182,9 +182,12 @@ class PaymentActivationFailureTest extends TestCase
             'wallet_balance' => 0,
             'commission_rate' => 5,
         ]);
-        // Use a synthetic site-agent router; RADIUS remains deliberately unavailable.
-        Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site-agent router'])
-            ->forceFill(['access_backend' => 'site_agent'])->save();
+        $router = Router::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic RADIUS router']);
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'nas-'.$router->id,
+            'radius_shared_secret' => str_repeat('a', 64),
+        ])->saveOrFail();
         $package = Package::create([
             'tenant_id' => $tenant->id,
             'name' => 'One hour',

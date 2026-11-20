@@ -166,10 +166,15 @@ class SitesAndHotspotsTest extends TestCase
 
     public function test_portal_redemption_records_router_site_on_voucher_and_session(): void
     {
+        config(['radius.enabled' => true]);
         $data = app(TenantContext::class)->runAs($this->acme, function (): array {
             $site = $this->acme->sites()->create(['name' => 'Portal Site']);
             $router = Router::create(['name' => 'Portal Router', 'site_id' => $site->id, 'site' => $site->name, 'status' => 'online']);
-            $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+            $router->forceFill([
+                'access_backend' => 'radius',
+                'radius_nas_identifier' => 'nas-'.$router->id,
+                'radius_shared_secret' => str_repeat('a', 64),
+            ])->saveOrFail();
             $package = Package::create([
                 'name' => 'Guest Pass',
                 'price' => 500,

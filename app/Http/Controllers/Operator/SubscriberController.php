@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Package;
 use App\Models\Subscriber;
+use App\Services\RouterCommandService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -78,7 +80,7 @@ class SubscriberController extends Controller
             ]);
     }
 
-    public function update(Request $request, Subscriber $subscriber)
+    public function update(Request $request, Subscriber $subscriber, RouterCommandService $routerCommands)
     {
         $validated = $request->validate([
             'status' => ['required', Rule::in(['active', 'suspended'])],
@@ -92,6 +94,25 @@ class SubscriberController extends Controller
                 'to' => $subscriber->status,
             ]);
         }
+
+        DB::table('radius_subscriber_sessions')
+            ->where('tenant_id', $subscriber->tenant_id)
+            ->where('subscriber_id', $subscriber->id)
+            ->where('state', 'open')
+            ->orderBy('id')
+            ->pluck('id')
+            ->each(function ($sessionId) use ($routerCommands, $subscriber): void {
+                if ($subscriber->status === 'suspended') {
+                    $routerCommands->requestPppoeKick(
+                        (int) $sessionId,
+                        'suspended:pppoe-session:'.$sessionId,
+                    );
+
+                    return;
+                }
+
+                $routerCommands->cancelPendingForPppoeSession((int) $sessionId);
+            });
 
         return redirect()->route('operator.subscribers.index')
             ->with('status', 'PPPoE subscriber status updated.');

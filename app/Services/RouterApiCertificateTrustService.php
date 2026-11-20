@@ -7,7 +7,72 @@ use RuntimeException;
 
 class RouterApiCertificateTrustService
 {
-    public function store(Router $router, string $certificate): string
+    public function store(Router $router, string $certificate): void
+    {
+        $certificate = $this->validatedCertificate($router, $certificate);
+        $router->forceFill(['api_ca_certificate' => $certificate]);
+        $router->saveOrFail();
+    }
+
+    public static function pathForRouter(int|string $routerId): ?string
+    {
+        if (! ctype_digit((string) $routerId)) {
+            throw new RuntimeException('Router identity is invalid.');
+        }
+
+        $router = Router::withoutGlobalScopes()->find($routerId);
+        if (! $router) {
+            return null;
+        }
+
+        $certificate = $router->api_ca_certificate;
+        if (! is_string($certificate) || $certificate === '') {
+            $legacyPath = storage_path('app/router-ca/router-'.$routerId.'.pem');
+            if (! is_file($legacyPath)) {
+                return null;
+            }
+
+            $router->loadMissing('vpnPeer');
+            app(self::class)->store($router, (string) file_get_contents($legacyPath));
+            $certificate = $router->api_ca_certificate;
+        }
+
+        if (! is_string($certificate) || $certificate === '') {
+            return null;
+        }
+
+        $directory = storage_path('framework/cache/router-ca');
+        if (! is_dir($directory) && ! mkdir($directory, 0700, true) && ! is_dir($directory)) {
+            throw new RuntimeException('The router API trust cache could not be created.');
+        }
+
+        $path = $directory.'/router-'.$routerId.'-'.hash('sha256', $certificate).'.pem';
+        if (! is_file($path)) {
+            $temporaryPath = tempnam($directory, 'router-ca-');
+            if ($temporaryPath === false) {
+                throw new RuntimeException('A temporary router API trust file could not be created.');
+            }
+
+            try {
+                if (file_put_contents($temporaryPath, $certificate.PHP_EOL, LOCK_EX) === false
+                    || ! chmod($temporaryPath, 0600)) {
+                    throw new RuntimeException('The router API trust certificate could not be cached.');
+                }
+
+                if (! is_file($path) && ! rename($temporaryPath, $path)) {
+                    throw new RuntimeException('The router API trust certificate could not be cached.');
+                }
+            } finally {
+                if (is_file($temporaryPath)) {
+                    unlink($temporaryPath);
+                }
+            }
+        }
+
+        return $path;
+    }
+
+    private function validatedCertificate(Router $router, string $certificate): string
     {
         $certificate = trim($certificate);
         if (strlen($certificate) > 16384
@@ -40,38 +105,6 @@ class RouterApiCertificateTrustService
             throw new RuntimeException('The router API certificate does not match its enrolled WireGuard identity.');
         }
 
-        $directory = storage_path('app/router-ca');
-        if (! is_dir($directory) && ! mkdir($directory, 0700, true) && ! is_dir($directory)) {
-            throw new RuntimeException('The router API trust directory could not be created.');
-        }
-
-        $path = self::pathForRouter($router->id);
-        $temporaryPath = tempnam($directory, 'router-ca-');
-        if ($temporaryPath === false) {
-            throw new RuntimeException('A temporary router API trust file could not be created.');
-        }
-
-        try {
-            if (file_put_contents($temporaryPath, $certificate.PHP_EOL, LOCK_EX) === false
-                || ! chmod($temporaryPath, 0600)
-                || ! rename($temporaryPath, $path)) {
-                throw new RuntimeException('The router API trust certificate could not be stored.');
-            }
-        } finally {
-            if (is_file($temporaryPath)) {
-                unlink($temporaryPath);
-            }
-        }
-
-        return $path;
-    }
-
-    public static function pathForRouter(int|string $routerId): string
-    {
-        if (! ctype_digit((string) $routerId)) {
-            throw new RuntimeException('Router identity is invalid.');
-        }
-
-        return storage_path('app/router-ca/router-'.$routerId.'.pem');
+        return $certificate;
     }
 }
