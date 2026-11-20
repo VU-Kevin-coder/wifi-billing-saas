@@ -135,6 +135,7 @@ class RouterIdentityService
                     $rows[] = $row;
                     $row = [];
                 }
+
                 continue;
             }
             if ($word === '' || $word === '!done') {
@@ -142,6 +143,7 @@ class RouterIdentityService
                     $rows[] = $row;
                     $row = [];
                 }
+
                 continue;
             }
             if (str_starts_with($word, '=')) {

@@ -86,8 +86,7 @@ class WireGuardService
         Router $router,
         string $enrollmentToken,
         string $radiusSecret,
-    ): string
-    {
+    ): string {
         $this->assertEnabled();
         if ((int) $peer->router_id !== (int) $router->id
             || blank($router->api_username)
@@ -182,8 +181,7 @@ class WireGuardService
         ?Router $router,
         ?string $enrollmentToken = null,
         ?string $radiusSecret = null,
-    ): string
-    {
+    ): string {
         return DB::transaction(function () use ($peer, $router, $enrollmentToken, $radiusSecret): string {
             $lockedPeer = VpnPeer::query()->findOrFail($peer->id);
             if (! $lockedPeer->enabled || blank($lockedPeer->private_key) || $lockedPeer->config_downloaded_at) {
@@ -245,8 +243,7 @@ class WireGuardService
         VpnPeer $peer,
         string $enrollmentToken,
         string $radiusSecret,
-    ): string
-    {
+    ): string {
         $serverAddress = $this->routerOsQuote($this->serverAddress());
         $tunnelIp = $this->routerOsQuote($peer->tunnel_ip);
         $username = $this->routerOsQuote((string) $router->api_username);

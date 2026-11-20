@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Jobs\VerifyRadiusReadinessJob;
 use App\Models\Router;
 use App\Models\RouterOnboarding;
-use App\Jobs\VerifyRadiusReadinessJob;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 

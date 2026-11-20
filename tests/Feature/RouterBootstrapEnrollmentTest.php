@@ -10,6 +10,7 @@ use App\Models\VpnPeer;
 use App\Services\RouterApiCertificateTrustService;
 use App\Services\RouterOnboardingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -89,7 +90,7 @@ class RouterBootstrapEnrollmentTest extends TestCase
     /**
      * @return array{Router, RouterOnboarding}
      */
-    private function makeOnboarding(string $token, ?\Illuminate\Support\Carbon $expiresAt = null): array
+    private function makeOnboarding(string $token, ?Carbon $expiresAt = null): array
     {
         $tenant = Tenant::create([
             'name' => 'Bootstrap Test',

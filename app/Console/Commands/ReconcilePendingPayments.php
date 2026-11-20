@@ -3,8 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Transaction;
-use App\Services\PaymentService;
 use App\Services\Payments\PaymentGatewaySettings;
+use App\Services\PaymentService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 

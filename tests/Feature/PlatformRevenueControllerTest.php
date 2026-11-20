@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\WithdrawalApproved;
 use App\Notifications\WithdrawalRejected;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -131,7 +132,7 @@ class PlatformRevenueControllerTest extends TestCase
             ])
             ->assertSessionHasNoErrors();
 
-        Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->url() === self::API_URL.'/payouts'
+        Http::assertSent(fn (Request $request): bool => $request->url() === self::API_URL.'/payouts'
             && $request['callback_url'] === 'https://billing.example.test/api/webhooks/obpay');
         $this->assertSame('completed', Transaction::withoutTenancy()->find($tx->id)->status);
         Notification::assertSentTo($operatorAdmin, WithdrawalApproved::class);

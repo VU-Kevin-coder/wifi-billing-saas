@@ -39,7 +39,11 @@
                          window.toast.error('Discover the router identity before enrollment.');
                          return;
                      }
-                     if (!window.confirm('Enroll this exact router model and serial/system ID? Enrollment is permanent and cannot be replaced here.')) {
+                     const confirmed = await window.confirmAction(
+                         'Enroll this exact router model and serial/system ID? Enrollment is permanent and cannot be replaced here.',
+                         { title: 'Permanently enroll this router?', confirmButtonText: 'Enroll router' }
+                     );
+                     if (confirmed !== true) {
                          return;
                      }
                      this.enrollingIdentity = true;

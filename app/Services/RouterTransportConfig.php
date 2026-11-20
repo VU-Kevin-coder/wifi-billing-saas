@@ -12,8 +12,7 @@ class RouterTransportConfig
         int $port,
         int|string $routerId,
         bool $requireRouterCertificate = false,
-    ): array
-    {
+    ): array {
         if ($port < 1 || $port > 65535) {
             throw new RouterTransportException('Router API port is invalid.');
         }
@@ -71,8 +70,7 @@ class RouterTransportConfig
         VpnPeer $peer,
         int|string $routerId,
         bool $requireRouterCertificate = false,
-    ): array
-    {
+    ): array {
         if (! $peer->enabled
             || filter_var($peer->tunnel_ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
             || ! hash_equals($peer->tunnel_ip, $host)) {

@@ -17,7 +17,9 @@ class RouterIdentityUiTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $operator;
+
     private Router $router;
 
     protected function setUp(): void

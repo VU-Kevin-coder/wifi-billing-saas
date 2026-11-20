@@ -361,7 +361,7 @@
                 applySearch();
             };
             if (form) {
-                gatewaySelector?.addEventListener('change', () => {
+                gatewaySelector?.addEventListener('change', async () => {
                     const nextGateway = gatewaySelector.value;
                     const previousGroup = gatewayGroups.find(group => group.dataset.paymentGatewayGroup === selectedGateway);
                     const pendingControls = previousGroup
@@ -369,7 +369,11 @@
                         : [];
                     if (!resettingSection && pendingControls.length > 0) {
                         const providerName = previousGroup.querySelector('h2')?.textContent.trim() || 'gateway';
-                        if (!window.confirm(`Discard unsaved changes for ${providerName}?`)) {
+                        const confirmed = await window.confirmAction(
+                            `Discard unsaved changes for ${providerName}?`,
+                            { title: 'Discard unsaved changes?', confirmButtonText: 'Discard changes' }
+                        );
+                        if (confirmed !== true) {
                             gatewaySelector.value = selectedGateway;
                             syncGatewayFields();
                             updateBar();

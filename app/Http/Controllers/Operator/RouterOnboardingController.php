@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Operator;
 
-use App\Jobs\VerifyRadiusReadinessJob;
 use App\Http\Controllers\Controller;
+use App\Jobs\VerifyRadiusReadinessJob;
 use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Services\RadiusReadiness;

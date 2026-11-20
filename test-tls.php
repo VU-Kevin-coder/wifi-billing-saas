@@ -1,8 +1,11 @@
 <?php
+
+use RouterOS\Client;
+
 require 'vendor/autoload.php';
 
 try {
-    $client = new \RouterOS\Client([
+    $client = new Client([
         'host' => 'hamnet-chr',
         'user' => 'admin',
         'pass' => 'admin',
@@ -11,12 +14,12 @@ try {
         'ssl_options' => [
             'cafile' => '/var/www/html/storage/app/certs/chr-ca.crt',
             'verify_peer' => true,
-            'verify_peer_name' => false
-        ]
+            'verify_peer_name' => false,
+        ],
     ]);
-    
+
     $client->query('/system/resource/print');
     echo "SUCCESS! TLS VERIFIED.\n";
-} catch (\Exception $e) {
-    echo "ERROR: " . $e->getMessage() . "\n";
+} catch (Exception $e) {
+    echo 'ERROR: '.$e->getMessage()."\n";
 }

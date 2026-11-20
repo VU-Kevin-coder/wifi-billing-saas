@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -23,7 +24,7 @@ class RadiusRuntimeHealthCheck
             if (! $bridge->successful() || trim($bridge->body()) !== 'ok') {
                 return false;
             }
-        } catch (\Illuminate\Http\Client\ConnectionException) {
+        } catch (ConnectionException) {
             Log::warning('RADIUS policy bridge readiness probe failed.');
 
             return false;

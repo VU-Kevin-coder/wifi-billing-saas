@@ -404,6 +404,7 @@ class RouterConnectionService
                     $rows[] = $row;
                     $row = [];
                 }
+
                 continue;
             }
             if ($word === '' || $word === '!done') {
@@ -411,6 +412,7 @@ class RouterConnectionService
                     $rows[] = $row;
                     $row = [];
                 }
+
                 continue;
             }
             if (str_starts_with($word, '=')) {
