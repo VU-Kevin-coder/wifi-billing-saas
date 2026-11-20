@@ -524,10 +524,11 @@ RouterOS CHR on the Compose network. The app container creates `wg0` at startup,
 retains its server key in the `wireguard-data` volume, and restores enabled peers
 from the database. Compose publishes the UDP port on loopback by default;
 set `WIREGUARD_BIND_ADDRESS` to an address reachable by your test router when
-testing beyond the Compose network. For a real router, configure a public DNS
-name or IP in `WIREGUARD_ENDPOINT`, bind/publish the UDP port appropriately,
-and forward it through the host firewall/NAT. Do not use the Docker service name
-as an endpoint for routers outside the Compose network.
+testing beyond the Compose network. For a physical router on the same LAN as the host, set `WIREGUARD_ENDPOINT` to
+the host's LAN IP; a public UDP port-forward is not needed for this direct path.
+For a remote router, use a public DNS name or IP and forward UDP 51820 through
+the host firewall/NAT. HTTPS tunnels do not carry WireGuard UDP. Do not use the
+Docker service name as an endpoint for routers outside the Compose network.
 
 The local CHR RADIUS listener is available only through the `radius-lab` Compose
 profile. It shares the app network namespace to bind to the WireGuard address;

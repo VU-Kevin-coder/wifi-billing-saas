@@ -74,9 +74,14 @@ CHR -- RADIUS over WireGuard --> FreeRADIUS -- private REST --> policy bridge
    `ROUTER_LAB_PROVISIONING_ENABLED=true`, and
    `RADIUS_LAB_ACCOUNTING_LOG=true`. Set `APP_URL` to the publicly reachable
    HTTPS application URL whose certificate chain the router trusts, and set
-   `WIREGUARD_ENDPOINT` to the endpoint reachable by the CHR. Keep the default
-   host binding for WireGuard unless the CHR needs another explicitly
-   firewalled address.
+   `WIREGUARD_ENDPOINT` to an address the router can reach over UDP. For a
+   laptop directly connected to the router's management LAN, use the laptop's
+   LAN IPv4 address; no internet port-forward is needed for that local path.
+   For a remote router, use a public IP/DNS endpoint and forward UDP 51820 to
+   the host. Set `WIREGUARD_BIND_ADDRESS=0.0.0.0` (or the host's specific LAN
+   address) and allow inbound UDP 51820 in the host firewall. An HTTPS
+   Cloudflare/ngrok tunnel only exposes `APP_URL`; it does not carry
+   WireGuard UDP. Keep RADIUS UDP private and unpublished.
 2. Generate distinct 32-byte hexadecimal values for
    `RADIUS_LARAVEL_SERVICE_SECRET`, `RADIUS_BRIDGE_TOKEN`, and
    `RADIUS_HEALTH_SECRET`. Do not reuse `APP_KEY`, the RADIUS client secret,

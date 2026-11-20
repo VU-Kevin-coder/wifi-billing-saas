@@ -397,12 +397,12 @@ class WireGuardService
         $endpoint = trim((string) config('wireguard.endpoint', ''));
         $port = (int) config('wireguard.listen_port', 51820);
         if ($endpoint === '' || $port < 1 || $port > 65535) {
-            throw new RuntimeException('Set a public WireGuard endpoint and valid UDP listen port before generating peers.');
+            throw new RuntimeException('Set a router-reachable WireGuard endpoint and valid UDP listen port before generating peers.');
         }
 
         if (filter_var($endpoint, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
             && ! preg_match('/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/', $endpoint)) {
-            throw new RuntimeException('WireGuard endpoint must be a public IPv4 address or valid hostname.');
+            throw new RuntimeException('WireGuard endpoint must be an IPv4 address or valid hostname reachable by the router over UDP.');
         }
 
         return ['host' => $endpoint, 'port' => $port];

@@ -59,7 +59,7 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     ports:
-      - "${WIREGUARD_BIND_ADDRESS:-127.0.0.1}:${WIREGUARD_LISTEN_PORT:-51820}:${WIREGUARD_LISTEN_PORT:-51820}/udp"
+      - "${WIREGUARD_BIND_ADDRESS:-0.0.0.0}:${WIREGUARD_LISTEN_PORT:-51820}:${WIREGUARD_LISTEN_PORT:-51820}/udp"
     depends_on:
       db:
         condition: service_healthy
@@ -181,7 +181,7 @@ services:
     container_name: wifi-billing-web
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-8000}:80"
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8000}:80"
     volumes:
       - ./:/var/www/html:delegated
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro

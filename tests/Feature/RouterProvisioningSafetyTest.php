@@ -30,7 +30,7 @@ class RouterProvisioningSafetyTest extends TestCase
         $this->actingAs($user);
         $params = ['tenant' => $tenant->slug, 'router' => $router->id];
         $this->get(route('operator.routers.provision-script', $params + ['download' => 1, 'opt_in' => 1]))
-            ->assertStatus(423)->assertSee('Router provisioning is disabled');
+            ->assertStatus(423)->assertSee(RouterProvisioningService::SAFETY_BLOCK);
         $this->getJson(route('operator.routers.provision-script', $params + ['opt_in' => 1]))
             ->assertStatus(423)->assertJsonPath('success', false);
         $this->assertNull($router->fresh()->api_password);

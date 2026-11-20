@@ -79,7 +79,7 @@
 
             @unless ($wireGuardReady)
                 <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                    Secure onboarding is unavailable until the WireGuard hub is enabled and its public HTTPS application URL and endpoint are configured.
+                    Secure onboarding is unavailable until the WireGuard hub is enabled, the public HTTPS application URL is configured, and the router-reachable WireGuard UDP endpoint is set.
                 </p>
             @endunless
         </div>

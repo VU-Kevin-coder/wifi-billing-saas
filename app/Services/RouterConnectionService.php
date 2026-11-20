@@ -146,6 +146,82 @@ class RouterConnectionService
         }
     }
 
+    /**
+     * Read the target's live configuration before any service provisioning.
+     * Secret-bearing PPP records are queried with an ID-only property list.
+     *
+     * @return array{ok: bool, message?: string, resource?: array, all_interfaces?: array, interfaces?: array, bridges?: array, bridge_ports?: array, addresses?: array, dhcp_servers?: array, dhcp_networks?: array, hotspot_servers?: array, hotspot_profiles?: array, pools?: array, pppoe_servers?: array, ppp_profiles?: array, vlan_interfaces?: array, nat_rules?: array, interface_list_members?: array, default_routes?: array, radius_clients?: array, ppp_active_count?: int, ppp_secret_count?: int}
+     */
+    public function inspectProvisioningTarget(Router $router): array
+    {
+        $connection = $this->test($router);
+        if (! ($connection['ok'] ?? false) || ! is_array($connection['resource'] ?? null)) {
+            return [
+                'ok' => false,
+                'message' => $connection['message'] ?? 'Router identity and API-SSL connection could not be verified.',
+            ];
+        }
+
+        try {
+            $router->loadMissing('vpnPeer');
+            $peer = $router->vpnPeer;
+            if (! $peer?->enabled) {
+                return ['ok' => false, 'message' => 'An enabled WireGuard peer is required for router preflight.'];
+            }
+            $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
+            $diagnostics = MikroTik::router($key)->diagnostics();
+            $tables = [
+                'all_interfaces' => ['/interface/print', []],
+                'interfaces' => ['/interface/ethernet/print', []],
+                'bridges' => ['/interface/bridge/print', []],
+                'bridge_ports' => ['/interface/bridge/port/print', []],
+                'addresses' => ['/ip/address/print', []],
+                'dhcp_servers' => ['/ip/dhcp-server/print', []],
+                'dhcp_networks' => ['/ip/dhcp-server/network/print', []],
+                'hotspot_servers' => ['/ip/hotspot/print', []],
+                'hotspot_profiles' => ['/ip/hotspot/profile/print', []],
+                'pools' => ['/ip/pool/print', []],
+                'pppoe_servers' => ['/interface/pppoe-server/server/print', []],
+                'ppp_profiles' => ['/ppp/profile/print', []],
+                'vlan_interfaces' => ['/interface/vlan/print', []],
+                'nat_rules' => ['/ip/firewall/nat/print', [
+                    '.proplist' => 'chain,action,out-interface,out-interface-list,disabled',
+                ]],
+                'interface_list_members' => ['/interface/list/member/print', [
+                    '.proplist' => 'list,interface,disabled',
+                ]],
+                'default_routes' => ['/ip/route/print', [
+                    '.proplist' => 'dst-address,gateway,immediate-gw,active,disabled',
+                ]],
+                'radius_clients' => ['/radius/print', [
+                    '.proplist' => 'name,address,src-address,service,authentication-port,accounting-port,comment',
+                ]],
+                'ppp_active_count' => ['/ppp/active/print', []],
+                'ppp_secret_count' => ['/ppp/secret/print', ['.proplist' => '.id']],
+            ];
+            $state = [
+                'ok' => true,
+                'resource' => $connection['resource'],
+            ];
+            foreach ($tables as $name => [$command, $params]) {
+                $rows = $this->rawRows($diagnostics->getRaw($command, $params));
+                $state[$name] = str_ends_with($name, '_count') ? count($rows) : $rows;
+            }
+
+            return $state;
+        } catch (\Throwable $exception) {
+            Log::warning('Router provisioning preflight could not read the target configuration.', [
+                'router_id' => $router->id,
+                'exception' => $exception::class,
+            ]);
+
+            return [
+                'ok' => false,
+                'message' => 'The router configuration could not be fully inspected. No router changes were made.',
+            ];
+        }
+    }
+
     public function hasOnboardingRadiusConfiguration(Router $router): bool
     {
         $router->loadMissing('vpnPeer');
@@ -198,6 +274,46 @@ class RouterConnectionService
             throw new RouterTransportException('Only a router with verified WireGuard and API-SSL onboarding may be configured.');
         }
 
+        $this->runTemporaryScript($router, $peer, $source, 'Temporary Wi-Fi Billing onboarding');
+    }
+
+    public function createProvisioningBackup(Router $router): string
+    {
+        $router->loadMissing(['vpnPeer', 'onboarding']);
+        $peer = $router->vpnPeer;
+        if (! $peer
+            || ! $peer->enabled
+            || ! in_array($router->onboarding?->status, ['api_verified', 'radius_ready', 'complete'], true)) {
+            throw new RouterTransportException('A verified WireGuard and API-SSL connection is required before backing up the router.');
+        }
+
+        $backupName = 'wifi-billing-pre-'.$router->id.'-'.now()->format('YmdHis');
+        $this->runTemporaryScript(
+            $router,
+            $peer,
+            '/system backup save name="'.$backupName.'"',
+            'Temporary Wi-Fi Billing backup',
+        );
+
+        $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
+        $files = $this->rawRows(MikroTik::router($key)->diagnostics()->getRaw(
+            '/file/print',
+            ['.proplist' => 'name,type'],
+        ));
+        $expectedFile = $backupName.'.backup';
+        if (! collect($files)->contains(fn (array $file): bool => ($file['name'] ?? null) === $expectedFile)) {
+            throw new RouterTransportException('Router backup could not be verified. No provisioning changes were made.');
+        }
+
+        return $expectedFile;
+    }
+
+    private function runTemporaryScript(
+        Router $router,
+        VpnPeer $peer,
+        string $source,
+        string $comment,
+    ): void {
         $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
         $scripts = MikroTik::router($key)->scripts();
         $name = 'wifi-billing-onboard-'.$router->id.'-'.strtolower(Str::random(8));
@@ -206,7 +322,7 @@ class RouterConnectionService
         $cleanupError = null;
 
         try {
-            $scripts->addScript($name, $source, 'read,write,api', 'Temporary Wi-Fi Billing onboarding');
+            $scripts->addScript($name, $source, 'read,write,api', $comment);
             $added = true;
             $scripts->runScript($name);
         } catch (\Throwable $exception) {

@@ -2,12 +2,14 @@
     <div class="min-h-screen bg-gray-50 px-4 py-8 text-gray-900 sm:px-6 lg:px-8"
          x-data="{
              enableHotspot: @js((bool) old('enable_hotspot', $router->enable_hotspot)),
-             enablePppoe: @js((bool) old('enable_pppoe', $router->enable_pppoe))
+             enablePppoe: @js((bool) old('enable_pppoe', $router->enable_pppoe)),
+             wanInterface: @js(old('wan_interface', $wanInterface)),
+             managementInterface: @js(old('management_interface', $managementInterface))
          }">
         <div class="mx-auto max-w-5xl">
             <a href="{{ route('operator.routers.index') }}" class="text-sm text-gray-500 hover:text-gray-800">Mikro Tiks</a>
             <h1 class="mt-3 text-2xl font-bold text-gray-900">Add MikroTik Device</h1>
-            <p class="mt-2 text-sm text-gray-600">The secure tunnel is connected. Review the router access and configure its services.</p>
+            <p class="mt-2 text-sm text-gray-600">The secure tunnel is connected. Assign each physical interface role and review the exact service changes before applying them.</p>
 
             <div class="mt-8 grid grid-cols-3 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-200 p-4">
@@ -36,22 +38,50 @@
                 <input type="hidden" name="enable_hotspot" :value="enableHotspot ? 1 : 0">
                 <input type="hidden" name="enable_pppoe" :value="enablePppoe ? 1 : 0">
 
+                <section class="grid gap-5 rounded-xl border border-blue-200 bg-blue-50 p-5 sm:grid-cols-2">
+                    <div>
+                        <label for="wan_interface" class="mb-1 block text-sm font-medium">Internet/WAN interface</label>
+                        <select id="wan_interface" name="wan_interface" x-model="wanInterface" required class="w-full rounded-lg border-gray-300 bg-white text-gray-900 shadow-sm">
+                            <option value="">Select the upstream Internet port</option>
+                            @foreach ($availablePorts as $port)
+                                <option value="{{ $port }}" @selected(old('wan_interface', $wanInterface) === $port)>{{ $port }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="management_interface" class="mb-1 block text-sm font-medium">Recovery/management interface</label>
+                        <select id="management_interface" name="management_interface" x-model="managementInterface" required class="w-full rounded-lg border-gray-300 bg-white text-gray-900 shadow-sm">
+                            <option value="">Select the port reserved for Winbox/recovery</option>
+                            @foreach ($availablePorts as $port)
+                                <option value="{{ $port }}" @selected(old('management_interface', $managementInterface) === $port)>{{ $port }}</option>
+                            @endforeach
+                        </select>
+                        <p class="mt-1 text-xs text-gray-600">This port will never be placed in the HotSpot bridge or PPPoE service. Keep it physically available for Winbox recovery.</p>
+                    </div>
+                </section>
+
                 <section x-show="enableHotspot" x-cloak class="rounded-xl border border-gray-200 bg-white shadow-sm">
                     <div class="border-b border-gray-200 p-5">
                         <h2 class="font-semibold">Ethernet Ports</h2>
-                        <p class="mt-1 text-xs text-gray-600">Select client ports for the HotSpot bridge. WAN ({{ $wanInterface ?? 'ether1' }}) is excluded.</p>
+                        <p class="mt-1 text-xs text-gray-600">Selected ports on the known RouterOS default LAN bridge are moved into the dedicated HotSpot bridge; unbridged client ports are added there. WAN and management ports are excluded by server-side checks.</p>
                     </div>
                     <div class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">
                         @forelse ($availablePorts as $port)
                             <label class="flex items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm">
                                 <input type="checkbox" name="ethernet_ports[]" value="{{ $port }}"
-                                       @checked(in_array($port, old('ethernet_ports', $router->ethernet_ports ?? $availablePorts->all()), true))>
+                                       x-bind:disabled="!enableHotspot || '{{ $port }}' === wanInterface || '{{ $port }}' === managementInterface"
+                                       @checked(
+                                           $port !== old('wan_interface', $wanInterface)
+                                           && $port !== old('management_interface', $managementInterface)
+                                           && in_array($port, old('ethernet_ports', $router->ethernet_ports ?? $availablePorts), true)
+                                       )>
                                 <span class="font-mono">{{ $port }}</span>
                             </label>
                         @empty
                             <p class="col-span-full text-sm text-amber-800">No supported Ethernet client ports were detected. HotSpot setup is unavailable until a router interface can be identified.</p>
                         @endforelse
                     </div>
+                    <p class="px-5 pb-2 text-xs text-gray-600">This reviewed setup supports Ethernet client ports. Active built-in Wi-Fi radios are intentionally not changed; use a separate access point connected to a selected client port.</p>
                     <p class="px-5 pb-5 text-xs text-gray-500">
                         Detected interfaces: {{ collect($interfaces)->pluck('name')->filter()->implode(', ') ?: 'No interface names returned' }}
                     </p>
@@ -157,9 +187,20 @@
                     </div>
                 </section>
 
+                <section class="rounded-xl border border-blue-200 bg-blue-50 p-5">
+                    <h2 class="font-semibold text-blue-950">Provisioning review</h2>
+                    <ul class="mt-2 list-inside list-disc space-y-1 text-sm text-blue-900">
+                        <li>Verify the enrolled router identity, RouterOS 7 version, live API-SSL connection, and selected interface links.</li>
+                        <li>Refuse unknown bridge/resource ownership, conflicting address ranges, and existing PPP accounts/sessions.</li>
+                        <li>Create a router-local backup and verify it exists before making changes.</li>
+                        <li>Configure only the selected HotSpot/PPPoE services and their Wi-Fi Billing-owned resources. Leave WAN, management, existing IP firewall rules, DNS, and API-SSL settings unchanged; RouterOS may add HotSpot dynamic rules and the script adds configured walled-garden entries.</li>
+                    </ul>
+                    <p class="mt-3 text-xs text-blue-800">If any live check is incomplete or conflicts with the plan, provisioning stops without applying changes. Keep the backup until you have tested customer authentication and accounting.</p>
+                </section>
+
                 <label class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                     <input type="checkbox" name="confirm_dedicated_router" value="1" required class="mt-1">
-                    <span>I confirm this is a fresh, dedicated router, I have an out-of-band recovery path, and I understand service setup changes the selected client interfaces and PPP/HotSpot configuration.</span>
+                    <span>I confirm this is a dedicated router, the WAN and recovery/management ports above are correct, I have out-of-band Winbox recovery, and I authorize the listed HotSpot/PPPoE changes.</span>
                 </label>
 
                 @if (str_contains(strtolower((string) $router->hardware_model), 'chr'))
