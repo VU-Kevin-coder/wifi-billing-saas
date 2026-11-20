@@ -49,12 +49,14 @@ class PolicyBridgeTests(unittest.TestCase):
             "peer_ip": "10.8.1.20",
             "nas_identifier": "chr-lab-17",
             "nas_session_id": "session-1",
+            "acct_unique_session_id": "router-unique-session-1",
             "status_type": "Start",
             "input_octets": "123",
         }
         payload = server.policy_payload("/accounting", form)
         self.assertEqual(payload["status_type"], "Start")
         self.assertEqual(payload["input_octets"], "123")
+        self.assertEqual(payload["acct_unique_session_id"], "router-unique-session-1")
         self.assertNotIn("voucher_code", payload)
 
         form["status_type"] = "Accounting-On"

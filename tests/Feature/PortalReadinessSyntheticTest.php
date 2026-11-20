@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Package;
 use App\Models\Router;
 use App\Models\Tenant;
-use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use App\Services\RadiusUnavailableException;
@@ -13,7 +12,6 @@ use App\Services\Tenancy\TenantContext;
 use App\Services\VoucherActivationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class PortalReadinessSyntheticTest extends TestCase
@@ -30,10 +28,9 @@ class PortalReadinessSyntheticTest extends TestCase
         return [$t, $p, $v];
     }
 
-    public function test_ambiguous_and_missing_router_do_not_activate_but_explicit_site_agent_does(): void
+    public function test_ambiguous_missing_and_legacy_routers_fail_closed(): void
     {
         [$t,$p,$v] = $this->fixture();
-        config(['site_agent.required' => false]);
         $activate = fn (array $ctx = []) => app(TenantContext::class)->runAs($t, fn () => app(VoucherActivationService::class)->activate($t, $v, Request::create('/'), null, $ctx));
         try {
             $activate();
@@ -53,22 +50,30 @@ class PortalReadinessSyntheticTest extends TestCase
             }
         }
         $this->assertDatabaseCount('sessions_log', 0);
-        $session = $activate(['router_id' => $r->id]);
-        $this->assertSame($r->id, $session->router_id);
+        try {
+            $activate(['router_id' => $r->id]);
+            $this->fail('A legacy non-RADIUS router must not activate access.');
+        } catch (RadiusUnavailableException $e) {
+            $this->assertStringContainsString('unsupported access backend', $e->getMessage());
+        }
+        $this->assertSame('unused', $v->fresh()->status);
+        $this->assertDatabaseCount('sessions_log', 0);
     }
 
-    public function test_missing_router_never_reports_paid_access_ready(): void
+    public function test_legacy_router_never_activates_a_voucher(): void
     {
         [$t,$p,$v] = $this->fixture();
         $r = Router::create(['tenant_id' => $t->id, 'name' => 'synthetic']);
         $r->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
-        $s = app(TenantContext::class)->runAs($t, fn () => app(VoucherActivationService::class)->activate($t, $v, Request::create('/'), null, ['router_id' => $r->id]));
-        $sale = Transaction::create(['tenant_id' => $t->id, 'type' => 'voucher_sale', 'amount' => 1000, 'status' => 'completed', 'reference' => 'SYNTH', 'payment_token_hash' => hash('sha256', 'synthetic-token'), 'meta' => ['voucher_id' => $v->id]]);
-        $v->forceFill(['sale_transaction_id' => $sale->id])->save();
-        DB::table('sessions_log')->where('id', $s->id)->update(['router_id' => null]);
-        $this->getJson('/api/payments/status', ['X-Payment-Token' => 'synthetic-token'])->assertStatus(202)->assertJson(['status' => 'activation_unavailable'])->assertJsonMissing(['voucher_code' => 'TEST-CODE']);
-        $this->postJson('/api/payments/activate', [], ['X-Payment-Token' => 'synthetic-token', 'X-Idempotency-Key' => 'synthetic-test-key-0001'])->assertStatus(409)->assertJson(['status' => 'activation_failed']);
-        $this->assertSame('completed', $sale->fresh()->status);
+        try {
+            app(TenantContext::class)->runAs($t, fn () => app(VoucherActivationService::class)
+                ->activate($t, $v, Request::create('/'), null, ['router_id' => $r->id]));
+            $this->fail('A legacy non-RADIUS router must not activate a voucher.');
+        } catch (RadiusUnavailableException $e) {
+            $this->assertStringContainsString('unsupported access backend', $e->getMessage());
+        }
+        $this->assertSame('unused', $v->fresh()->status);
+        $this->assertDatabaseCount('sessions_log', 0);
     }
 
     public function test_invalid_payment_token_clears_stale_success_before_readiness_check(): void

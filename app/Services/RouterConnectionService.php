@@ -23,22 +23,17 @@ class RouterConnectionService
 
     public function test(Router $router): array
     {
-        if (config('site_agent.required')) {
-            return [
-                'ok' => false,
-                'message' => 'Direct router connections are disabled. Use the paired site agent.',
-            ];
-        }
-
-        $host = $this->hostForRouter($router);
+        $router->loadMissing('vpnPeer');
+        $peer = $router->vpnPeer;
+        $host = $peer?->enabled ? $peer->tunnel_ip : null;
 
         if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
             return [
                 'ok' => false,
                 'failure_type' => 'missing_configuration',
-                'message' => 'Router API test is missing connection settings.',
+                'message' => 'Router API test requires an enabled WireGuard peer and saved API credentials.',
                 'diagnostic' => blank($host)
-                    ? 'No reachable router address is configured. Enable a WireGuard peer or allow direct connections and set the router management address.'
+                    ? 'No enabled WireGuard tunnel address is configured for this router.'
                     : (blank($router->api_username)
                         ? 'The router API username is empty.'
                         : 'The router API password is empty.'),
@@ -46,10 +41,7 @@ class RouterConnectionService
         }
 
         try {
-            $router->loadMissing('vpnPeer');
-            $key = $router->vpnPeer?->enabled && $router->vpnPeer->tunnel_ip === $host
-                ? $this->configureRouter($router, $host, $router->vpnPeer)
-                : $this->configureRouter($router, $host);
+            $key = $this->configureRouter($router, $host, $peer);
             // This is deliberately read-only: it proves API reachability
             // without changing hotspot, users, profiles or firewall rules.
             $resource = MikroTik::router($key)->system()->getResources();
@@ -200,8 +192,10 @@ class RouterConnectionService
     {
         $router->loadMissing(['vpnPeer', 'onboarding']);
         $peer = $router->vpnPeer;
-        if (! $peer || ! $peer->enabled || $router->onboarding?->status !== 'connected') {
-            throw new RouterTransportException('Only a connected, verified WireGuard onboarding session may configure a router.');
+        if (! $peer
+            || ! $peer->enabled
+            || ! in_array($router->onboarding?->status, ['api_verified', 'radius_ready', 'complete'], true)) {
+            throw new RouterTransportException('Only a router with verified WireGuard and API-SSL onboarding may be configured.');
         }
 
         $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
@@ -246,32 +240,6 @@ class RouterConnectionService
 
     public function liveStatus(Router $router): array
     {
-        if (config('site_agent.required')) {
-            if (! $router->telemetry_at) {
-                return [
-                    'ok' => false,
-                    'message' => 'No router telemetry has been reported by the site agent yet.',
-                    'cpu_load' => 0,
-                    'memory_usage' => 0,
-                    'uptime' => 'N/A',
-                    'active_users' => null,
-                ];
-            }
-
-            $fresh = $router->telemetry_at->greaterThanOrEqualTo(now()->subMinutes(2));
-
-            return [
-                'ok' => $fresh,
-                'message' => $fresh
-                    ? 'Router telemetry reported by the paired site agent '.$router->telemetry_at->diffForHumans().'.'
-                    : 'Router telemetry is stale; last reported by the paired site agent '.$router->telemetry_at->diffForHumans().'.',
-                'cpu_load' => $router->cpu_usage,
-                'memory_usage' => $router->memory_usage,
-                'uptime' => $router->uptime ?: 'N/A',
-                'active_users' => $router->active_users,
-            ];
-        }
-
         $status = [
             'ok' => false,
             'message' => 'Live router metrics are unavailable.',
@@ -311,7 +279,12 @@ class RouterConnectionService
         ];
 
         try {
-            $key = $this->configureRouter($router);
+            $router->loadMissing('vpnPeer');
+            $peer = $router->vpnPeer;
+            if (! $peer?->enabled) {
+                return $status;
+            }
+            $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
             $status['active_users'] = count(MikroTik::router($key)->hotspot()->getActiveHosts());
         } catch (\Throwable $exception) {
             Log::warning('Unable to fetch active hotspot users from MikroTik router', [
@@ -323,32 +296,45 @@ class RouterConnectionService
         return $status;
     }
 
-    public function disconnectUser(Router $router, string $voucherCode): bool
+    public function disconnectUser(Router $router, string $username, string $service = 'hotspot'): bool
     {
-        if (config('site_agent.required')) {
-            throw new RuntimeException('Direct router connections are disabled. Use the paired site agent.');
+        if (! in_array($service, ['hotspot', 'pppoe'], true)
+            || ! preg_match('/^[A-Za-z0-9._-]{1,64}$/D', $username)) {
+            throw new RouterTransportException('The requested RouterOS session target is invalid.');
         }
 
+        $router->loadMissing('vpnPeer');
+        $peer = $router->vpnPeer;
         $host = $this->hostForRouter($router);
 
-        if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
-            throw new RuntimeException("Router {$router->getKey()} is missing API connection details.");
+        if (blank($host) || ! $peer?->enabled || blank($router->api_username) || blank($router->api_password)) {
+            throw new RuntimeException("Router {$router->getKey()} requires an enabled WireGuard peer and API credentials.");
         }
 
-        $key = $this->configureRouter($router, $host);
+        $key = $this->configureRouter($router, $host, $peer);
 
         try {
-            $hotspot = MikroTik::router($key)->hotspot();
-            $isActive = collect($hotspot->getActiveHosts())
-                ->contains(fn (array $host): bool => ($host['user'] ?? null) === $voucherCode);
+            if ($service === 'hotspot') {
+                $hotspot = MikroTik::router($key)->hotspot();
+                $matchingSessions = collect($hotspot->getActiveHosts())
+                    ->filter(fn (array $host): bool => ($host['user'] ?? null) === $username)
+                    ->count();
+                for ($index = 0; $index < $matchingSessions; $index++) {
+                    $hotspot->kickHost($username);
+                }
 
-            if (! $isActive) {
-                return false;
+                return $matchingSessions > 0;
             }
 
-            $hotspot->kickHost($voucherCode);
+            $pppoe = MikroTik::router($key)->pppoe();
+            $matchingSessions = collect($pppoe->getActiveSessions())
+                ->filter(fn (array $session): bool => ($session['name'] ?? null) === $username)
+                ->count();
+            for ($index = 0; $index < $matchingSessions; $index++) {
+                $pppoe->kickSession($username);
+            }
 
-            return true;
+            return $matchingSessions > 0;
         } catch (\Throwable $exception) {
             // Client exceptions may contain credentials; do not retain them as a cause.
             throw new RouterTransportException('Unable to disconnect the router session.');
@@ -366,20 +352,13 @@ class RouterConnectionService
         DynamicMikrotikRouterConfig::set($key, [
             'username' => $router->api_username,
             'password' => $router->api_password,
-            ...($wireGuardPeer
-                ? RouterTransportConfig::forVerifiedWireGuardPeer(
-                    $host,
-                    (int) ($router->api_port ?: 8728),
-                    $wireGuardPeer,
-                    $router->getKey(),
-                    (bool) $router->enrolled,
-                )
-                : RouterTransportConfig::forRouter(
-                    $host,
-                    (int) ($router->api_port ?: 8728),
-                    $router->getKey(),
-                    (bool) $router->enrolled,
-                )),
+            ...RouterTransportConfig::forVerifiedWireGuardPeer(
+                $host,
+                (int) ($router->api_port ?: 8729),
+                $wireGuardPeer ?? throw new RouterTransportException('Router API access requires an enabled WireGuard peer.'),
+                $router->getKey(),
+                true,
+            ),
             'timeout' => 5,
         ]);
 
@@ -430,6 +409,6 @@ class RouterConnectionService
 
         return $router->vpnPeer?->enabled
             ? $router->vpnPeer->tunnel_ip
-            : (config('site_agent.allow_direct_router_connection') ? $router->management_ip : null);
+            : null;
     }
 }

@@ -9,10 +9,10 @@ class RouterAccessStrategyResolver
 {
     public function resolve(Router $router): RouterAccessStrategy
     {
-        return match ($router->access_backend) {
-            'site_agent' => app(SiteAgentAccessStrategy::class),
-            'radius' => app(RadiusAccessStrategy::class),
-            default => throw new InvalidArgumentException('Unsupported router access backend.'),
-        };
+        if ($router->access_backend !== 'radius') {
+            throw new InvalidArgumentException('Router must be configured for RADIUS before access can be activated.');
+        }
+
+        return app(RadiusAccessStrategy::class);
     }
 }

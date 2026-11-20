@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Middleware\AuthenticateSiteAgent;
 use App\Http\Middleware\EnsureIdempotencyKey;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureTenantIsActive;
@@ -77,7 +76,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => EnsureRole::class,
             'idempotency' => EnsureIdempotencyKey::class,
-            'site-agent' => AuthenticateSiteAgent::class,
             'mfa.recent' => RequireRecentMfa::class,
             'tenant.active' => EnsureTenantIsActive::class,
         ]);

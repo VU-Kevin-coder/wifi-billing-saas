@@ -475,41 +475,23 @@ docker compose exec app php artisan platform-admin:create
 Set a unique `REDIS_PASSWORD` in `.env`; the example value is for local
 development only. Database, Redis, and test-router ports are bound to loopback.
 
-### Site-local MikroTik agent
+### Router integration (no on-site agent)
 
-The SaaS does not need inbound access to a customer router. Create a site, pair
-its agent from the application host, and copy the one-time token to the site
-computer:
+The site-agent runtime is removed; `sites` remain physical locations. Add a
+router in the dashboard and use its guided one-line RouterOS bootstrap command.
+The router initiates its WireGuard tunnel, so a public inbound connection to a
+customer router or extra on-site hardware is not required. Backend management
+uses the native RouterOS API-SSL service on port 8729 through an enabled
+WireGuard peer. Direct management-IP fallback and RouterOS REST are not used.
 
-```bash
-docker compose exec app php artisan site-agent:issue-token <site-id>
-```
-
-Run the agent on a trusted computer that can reach the site's routers. Configure
-`SITE_AGENT_URL` (HTTPS), `SITE_AGENT_TOKEN`, and `SITE_AGENT_ROUTERS` there.
-`SITE_AGENT_ROUTERS` is a JSON object keyed by SaaS router ID; each value
-contains the local `host`, `username`, `password`, and optional `port`. These
-credentials stay on the site computer. Do not configure this router map on the
-SaaS host.
-
-Start the worker with `php artisan site-agent:work`. In production, leave
-`SITE_AGENT_REQUIRED` enabled (its default) so activations fail closed when a
-router has no paired agent. A voucher stays in provisioning state until the
-agent acknowledges that the hotspot user was created. Expiry likewise remains
-pending until the agent disables the user and disconnects any active host.
-Router connectivity checks also run through the paired agent in this mode.
-Router detail pages distinguish the site-agent heartbeat from router telemetry.
-Use **Request telemetry from site agent** to collect uptime, CPU, memory, and
-active hotspot users; a profile-sync acknowledgement alone is not displayed as
-an online health check.
-RouterOS API port 8729 automatically selects API-SSL. In production, certificate
-verification defaults to enabled; install the issuing CA on the host running
-the app or agent and set `MIKROTIK_CA_CERT_PATH` to its PEM bundle. The router
-certificate must be valid for the address used to connect (including its
-WireGuard tunnel IP when applicable). Port 8728 is plaintext and is logged as
-a production warning. Do not expose it to the public internet. The legacy
-cloud-to-router path is disabled unless `ALLOW_DIRECT_ROUTER_CONNECTION` is
-explicitly enabled; it should remain disabled in production.
+Enrollment stores the router's API certificate encrypted on its database
+record; the PEM file used by the API client is a regenerable cache. Onboarding
+does not count as complete until tunnel, API-SSL, and RADIUS checks pass.
+New routers use RADIUS. Historical non-RADIUS backend values are preserved,
+but are not an active access path and fail closed until an operator migrates
+the router to RADIUS. Paid access is not considered active until the RADIUS
+accounting path confirms it. Physical-router acceptance is still required
+before production use.
 
 Generated hotspot profiles use `http-chap` only, not plaintext `http-pap`.
 Voucher codes are not placed in router login URLs; customers use the router's
@@ -517,12 +499,10 @@ captive-portal form to submit their credentials. The application portal must
 be served over HTTPS. RouterOS HTTPS captive login additionally requires a
 trusted certificate installed and selected on each router.
 
-The generated RouterOS API account no longer has the `test` or `password`
-policies, and the API service is source-restricted to the configured management
-subnet. RouterOS group policies grant `write` at configuration scope; this
-script cannot truthfully restrict it to only `/ip hotspot`. Do not describe the
-account as subtree-scoped. Use it only on a dedicated router and trusted
-management network until a narrower command boundary is deployed.
+The generated RouterOS API account must remain restricted to the WireGuard
+management subnet. RouterOS group policies grant `write` at configuration
+scope; do not describe the account as subtree-scoped. Keep API-SSL unavailable
+outside the private tunnel.
 
 Production `TRUSTED_PROXIES` must contain the exact proxy IPs/CIDRs that
 overwrite forwarded headers. The Render blueprint intentionally asks for this

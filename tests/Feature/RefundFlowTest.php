@@ -43,15 +43,19 @@ class RefundFlowTest extends TestCase
     {
         parent::setUp();
         Notification::fake();
+        config(['radius.enabled' => true]);
 
         foreach (['platform_admin', 'operator_admin', 'operator_finance', 'operator_support'] as $role) {
             Role::findOrCreate($role, 'web');
         }
 
         $this->tenant = Tenant::create(['name' => 'Acme', 'slug' => 'acme', 'status' => 'active', 'commission_rate' => 5]);
-        // Fulfillment uses a synthetic site-agent router, never a live device.
-        Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Synthetic site-agent router'])
-            ->forceFill(['access_backend' => 'site_agent'])->save();
+        $router = Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Synthetic RADIUS router']);
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'nas-'.$router->id,
+            'radius_shared_secret' => str_repeat('a', 64),
+        ])->saveOrFail();
         $this->package = Package::create([
             'tenant_id' => $this->tenant->id, 'name' => 'One hour', 'price' => 1000, 'currency' => 'UGX',
             'duration_value' => 1, 'duration_unit' => 'hours', 'speed_limit_mbps' => 5, 'device_limit' => 1,
@@ -125,7 +129,7 @@ class RefundFlowTest extends TestCase
         $this->assertEquals(950, $this->balance(), 'requesting must not move money');
     }
 
-    public function test_paid_voucher_receipt_uses_the_configured_template_and_gateway(): void
+    public function test_active_voucher_receipt_uses_the_configured_template_and_gateway(): void
     {
         PlatformSetting::set('sms_provider', 'africastalking');
         PlatformSetting::set('sms_username', 'sandbox');
@@ -144,6 +148,16 @@ class RefundFlowTest extends TestCase
         ]);
 
         $sale = $this->sale();
+        $voucher = Voucher::withoutTenancy()->where('sale_transaction_id', $sale->id)->firstOrFail();
+        $session = Session::withoutTenancy()->where('voucher_id', $voucher->id)->firstOrFail();
+        $session->update(['status' => 'active']);
+        app(PaymentService::class)->sendSaleReceipt(
+            $this->tenant,
+            $this->package,
+            '0771234567',
+            $voucher,
+            $session->fresh(),
+        );
         $message = SmsMessage::withoutTenancy()->sole();
 
         $this->assertSame('voucher_receipt', $message->type);

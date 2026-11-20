@@ -11,13 +11,21 @@ The guided onboarding screen displays one RouterOS command that downloads and im
 The script configures the assigned WireGuard peer, API-SSL on port 8729, the
 router-specific RADIUS client, and a dedicated HotSpot profile, then posts the
 router identity and API certificate to the enrollment callback. Enrollment
-stores the certificate for that router and burns the token. The app keeps
-`verify_peer=true` and verifies the API certificate name against the WireGuard
-tunnel IP; it does not weaken TLS name verification.
+stores the encrypted certificate on the router record and burns the token;
+the PEM file used by the API client is a regenerable cache, not the source of
+truth. Legacy local certificates are imported lazily when accessed.
 
-Enrollment prepares RADIUS but does not switch a `site_agent` router to the
-RADIUS backend. A queued readiness check verifies the policy bridge, a
-FreeRADIUS health listener, the router API, and its RADIUS configuration.
+Onboarding advances through `awaiting_bootstrap`, `enrolled`,
+`tunnel_verified`, `api_verified`, `radius_ready`, and `complete`. Enrollment
+alone is not reported as a verified connection: the app first requires a
+recent WireGuard handshake and a successful native API-SSL check. Only then
+does it queue a RADIUS readiness check. That check verifies the policy bridge,
+a FreeRADIUS health listener, and the router's RADIUS configuration.
+Enrollment prepares RADIUS but does not rewrite a historical non-RADIUS
+backend value. The site-agent backend is no longer supported; those routers
+remain fail-closed until an operator explicitly migrates them to RADIUS. For
+enrolled routers, API-SSL verifies the persisted router CA while skipping
+hostname verification; certificate peer verification remains enabled.
 Only a signed FreeRADIUS post-auth Access-Accept from that router activates
 RADIUS. Three consecutive Access-Reject events pause pending activation and
 alert Platform Admin while preserving the previous backend. An Access-Reject
@@ -50,7 +58,14 @@ CHR -- RADIUS over WireGuard --> FreeRADIUS -- private REST --> policy bridge
 - Accounting is validated and written as sanitized local log observations.
   It does not update application sessions, counters, or disconnect state.
 - Router API access outside verified API-SSL over WireGuard, CoA, and
-  Disconnect-Request delivery remain disabled.
+  RADIUS CoA remain disabled. Session kicks use the verified API-SSL path
+  first, with a durable HTTPS polling queue as fallback. The polling scheduler
+  accepts only the `kick` operation and maps it to removal of a matching
+  HotSpot active entry; it does not parse or evaluate server-provided scripts.
+  Polling credentials are per-router bearer tokens stored as hashes on the
+  server, separate from the one-time bootstrap token. A command acknowledgement
+  is delivery evidence, not accounting confirmation, and does not clear a
+  pending session revocation.
 
 ## Local setup
 
@@ -97,9 +112,9 @@ bridge fails closed outside local/testing unless its upstream uses HTTPS.
 
 ## Explicit non-goals and production blockers
 
-- The schema default affects new routers only; existing `site_agent` router
-  records are not rewritten. Router access selection is per router, not per
-  tenant or site.
+- The schema default affects new routers only; historical non-RADIUS router
+  records are not rewritten. Those values do not enable a supported access
+  runtime. Router access selection is per router, not per tenant or site.
 - RADIUS authorization has not been validated against CHR or physical
   RouterOS in this environment. RouterOS attribute compatibility,
   Message-Authenticator behavior, retransmission, and CHAP/PAP flows need a
@@ -107,11 +122,13 @@ bridge fails closed outside local/testing unless its upstream uses HTTPS.
 - Accounting reconciliation remains disabled because multi-device session
   state, event ordering, counter completeness, and database lock ordering are
   unresolved. A local observation is not proof of billable usage.
-- There is no CoA/Disconnect implementation, production secret rotation and
+- There is no RADIUS CoA implementation, production secret rotation and
   revocation workflow, production private-network deployment, or production
-  TLS/proxy acceptance evidence. The configuration passes `freeradius -XC` on
-  FreeRADIUS 3.2.1, but dynamic client attribute resolution and cache/revocation
-  behavior still require end-to-end and RouterOS hardware validation.
+  TLS/proxy acceptance evidence. The command polling script and RouterOS
+  behavior have not been tested on CHR or physical hardware. The configuration
+  passes `freeradius -XC` on FreeRADIUS 3.2.1, but dynamic client attribute
+  resolution and cache/revocation behavior still require end-to-end and
+  RouterOS hardware validation.
 - Do not expose RADIUS UDP ports publicly.
 - Production readiness requires a separate security review, verified network
   boundaries, shared-cache replay controls, MySQL concurrency tests, operator

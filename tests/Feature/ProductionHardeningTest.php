@@ -20,7 +20,6 @@ class ProductionHardeningTest extends TestCase
         'SESSION_SECURE_COOKIE' => 'true',
         'SESSION_DRIVER' => 'redis',
         'TENANT_BASE_DOMAIN' => 'wifi.example.com',
-        'SITE_AGENT_REQUIRED' => 'true',
         'MAIL_MAILER' => 'smtp',
         'TRUSTED_PROXIES' => '127.0.0.1',
     ];
@@ -82,7 +81,6 @@ class ProductionHardeningTest extends TestCase
             'plain http url' => [['APP_URL' => 'http://wifi.example.com'], 'APP_URL must start with https'],
             'cookie not secure' => [['SESSION_SECURE_COOKIE' => 'false'], 'SESSION_SECURE_COOKIE must be true'],
             'default base domain' => [['TENANT_BASE_DOMAIN' => 'localhost'], 'TENANT_BASE_DOMAIN'],
-            'site agent disabled' => [['SITE_AGENT_REQUIRED' => 'false'], 'SITE_AGENT_REQUIRED'],
             'array sessions' => [['SESSION_DRIVER' => 'array'], 'SESSION_DRIVER=array'],
             'missing app key' => [['APP_KEY' => ''], 'APP_KEY is not set'],
             'wildcard trusted proxies' => [['TRUSTED_PROXIES' => '*'], 'must not trust every source'],
@@ -120,7 +118,7 @@ class ProductionHardeningTest extends TestCase
         $this->assertStringContainsString('fromGroup: hamnet-shared', $yaml);
         $this->assertMatchesRegularExpression('/key: SESSION_DRIVER\s+value: redis/', $yaml);
         $this->assertMatchesRegularExpression('/key: SESSION_SECURE_COOKIE\s+value: "true"/', $yaml);
-        $this->assertMatchesRegularExpression('/key: SITE_AGENT_REQUIRED\s+value: "true"/', $yaml);
+        $this->assertStringNotContainsString('SITE_AGENT_REQUIRED', $yaml);
         $this->assertStringContainsString('key: TRUSTED_PROXIES', $yaml);
         $this->assertStringNotContainsString('value: "*"', $yaml);
         $this->assertSame(2, substr_count($yaml, 'key: MAIL_MAILER'), 'web and scheduler must both configure mail');

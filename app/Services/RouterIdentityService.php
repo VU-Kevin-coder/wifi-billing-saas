@@ -10,23 +10,25 @@ class RouterIdentityService
 {
     public function discover(Router $router): array
     {
-        $host = $router->vpnPeer?->enabled
-            ? $router->vpnPeer->tunnel_ip
-            : $router->management_ip;
+        $router->loadMissing('vpnPeer');
+        $peer = $router->vpnPeer;
 
-        if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
-            throw new RouterTransportException('Router identity discovery requires an API host and credentials.');
+        if (! $router->enrolled || ! $peer?->enabled
+            || blank($router->api_username) || blank($router->api_password)) {
+            throw new RouterTransportException('Router identity discovery requires enrollment, an enabled WireGuard peer, and API credentials.');
         }
 
+        $host = $peer->tunnel_ip;
         $key = 'identity-router-'.$router->id;
         DynamicMikrotikRouterConfig::set($key, [
             'username' => $router->api_username,
             'password' => $router->api_password,
-            ...RouterTransportConfig::forRouter(
+            ...RouterTransportConfig::forVerifiedWireGuardPeer(
                 (string) $host,
                 (int) ($router->api_port ?: 8729),
+                $peer,
                 $router->id,
-                $router->enrolled,
+                true,
             ),
             'timeout' => 5,
         ]);

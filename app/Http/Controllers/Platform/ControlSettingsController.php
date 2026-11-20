@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Models\Session;
-use App\Models\SiteAgent;
 use App\Services\Payments\PaymentGatewaySettings;
 use App\Services\Policy\Policy;
 use App\Services\Policy\PolicyDefinitions;
@@ -15,7 +14,6 @@ use App\Services\SystemHealthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -37,10 +35,6 @@ class ControlSettingsController extends Controller
         }
 
         $roles = $this->rolePermissions($catalog);
-        $agents = SiteAgent::query()
-            ->with(['site:id,name,tenant_id', 'tenant:id,name'])
-            ->latest('last_seen_at')
-            ->get();
         $health = app(SystemHealthService::class)->current();
         $history = AuditLog::query()
             ->with('user:id,name')
@@ -54,7 +48,6 @@ class ControlSettingsController extends Controller
             'settings' => $settings,
             'payoutsPaused' => (bool) PlatformSetting::get('payouts.paused', false),
             'roles' => $roles,
-            'agents' => $agents,
             'health' => $health,
             'history' => $history,
             'section' => $request->query('section', 'general'),
@@ -230,12 +223,11 @@ class ControlSettingsController extends Controller
         if (mb_strlen(trim($validated['reason'])) < 5) {
             throw ValidationException::withMessages(['reason' => 'A reason of at least five non-space characters is required.']);
         }
-        $words = ['rotate' => 'ROTATE', 'purge' => 'PURGE', 'freeze' => 'FREEZE', 'resume' => 'RESUME', 'reset' => 'RESET'];
+        $words = ['purge' => 'PURGE', 'freeze' => 'FREEZE', 'resume' => 'RESUME', 'reset' => 'RESET'];
         abort_unless(isset($words[$action]) && hash_equals($words[$action], $validated['confirmation']), 422);
 
         $result = DB::transaction(function () use ($action, $validated): array {
             $details = match ($action) {
-                'rotate' => $this->rotateAgentTokens(),
                 'purge' => $this->purgeExpiredSessions(),
                 'freeze' => $this->setPayoutsPaused(),
                 'resume' => $this->setPayoutsPaused(false),
@@ -505,21 +497,6 @@ class ControlSettingsController extends Controller
             );
             $role->syncPermissions($permissions);
         }
-    }
-
-    private function rotateAgentTokens(): array
-    {
-        $rotated = [];
-        foreach (SiteAgent::query()->with(['site' => fn ($query) => $query->withoutTenancy()])->whereNull('revoked_at')->lockForUpdate()->get() as $agent) {
-            $token = Str::random(64);
-            $updated = SiteAgent::query()->whereKey($agent->id)->whereNull('revoked_at')
-                ->update(['token_hash' => hash('sha256', $token), 'last_seen_at' => null]);
-            if ($updated) {
-                $rotated[] = ['site' => $agent->site?->name ?? 'Unknown site', 'token' => $token];
-            }
-        }
-
-        return ['rotated_agents' => count($rotated), 'tokens' => $rotated];
     }
 
     private function purgeExpiredSessions(): array

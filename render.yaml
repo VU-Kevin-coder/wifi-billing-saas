@@ -85,8 +85,6 @@ services:
         value: "true"
       - key: MFA_STEP_UP_ENABLED
         value: "true"
-      - key: SITE_AGENT_REQUIRED
-        value: "true"
       # ── Mail (staff invitations and password resets are delivered by email) ──
       - key: MAIL_MAILER
         value: smtp

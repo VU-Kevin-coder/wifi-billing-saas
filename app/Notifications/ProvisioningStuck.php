@@ -50,7 +50,7 @@ class ProvisioningStuck extends Notification
 
         $message->line($this->expired
             ? 'The package has now expired without ever being activated. Please contact the customer and arrange a refund or replacement.'
-            : 'Check that the site agent is running and can reach the router. The system keeps retrying automatically.');
+            : 'Check the router enrollment, WireGuard tunnel, and RADIUS configuration before retrying access.');
 
         if ($this->url) {
             $message->action('Open sessions', $this->url);

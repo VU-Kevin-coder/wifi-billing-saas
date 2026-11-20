@@ -6,12 +6,19 @@ This document records repository changes and validation evidence. A passing
 automated test is not a substitute for testing RouterOS firmware or verifying
 the production proxy chain.
 
+> **Phase 2 update:** The site-agent runtime and its management UI have been
+> removed. Physical `sites` remain, while the `site_agents` and
+> `site_agent_commands` tables are retained for archival safety. Router
+> management is WireGuard-only over verified API-SSL; historical non-RADIUS
+> backend values are preserved but fail closed. The dated validation evidence
+> below predates this update and must not be used as validation of Phase 2.
+
 ## Findings and status
 
 | Finding | Status | Change / evidence |
 |---|---|---|
 | RADIUS and guided router onboarding | Application implementation extended; dynamic lookup and physical acceptance pending validation | Guided WireGuard onboarding supports separate HotSpot and PPPoE setup. PPPoE subscriber credentials are tenant-scoped, encrypted at rest, and authorized through the policy API; PAP authentication and usage accounting are wired into the local service path. FreeRADIUS now requests a per-router client record through an authenticated private lookup, preserving each router's unique secret and requiring Message-Authenticator; unknown or disabled peers fail closed, and FreeRADIUS caches records for 30 seconds. The configuration passes `freeradius -XC` on FreeRADIUS 3.2.1, but end-to-end dynamic attribute resolution and physical RouterOS acceptance have not been run. Subscriber suspension rejects new authentications but does not disconnect an already active PPPoE session (CoA/disconnect is not implemented). CHAP/MSCHAP are not configured. Do not treat this implementation as production-ready. See [RADIUS-CHR-LAB.md](./RADIUS-CHR-LAB.md). |
-| D1 — Misleading router health | In progress | Added site-agent telemetry commands for uptime, CPU, memory, and active hotspot users. Router detail status distinguishes recent telemetry from last-known state and displays separate agent/telemetry timestamps. Successful profile sync alone no longer marks a router online. Automated coverage added; physical-agent/router run pending. |
+| D1 — Misleading router health | Revised; hardware verification pending | The site-agent telemetry channel was removed. Router detail health now depends on router telemetry through the verified WireGuard/API-SSL path; physical-router behavior remains unverified. |
 | D2 — Captive-portal credentials | In progress | Generated profile removes `http-pap` and keeps `http-chap`; login URLs no longer carry voucher codes, which remain on the application success page for manual entry into the router login form. RouterOS HTTPS captive login still requires a trusted router certificate and is not configured by the script. |
 | D2 — Router API account | In progress | Removed `test` and `password` from the generated account policy and retained API/read/write. RouterOS group policies grant write at configuration scope; this script cannot restrict it to `/ip hotspot` alone. Do not describe this account as subtree-scoped. |
 | D2 — Trusted proxies | In progress | Render now requires explicit `TRUSTED_PROXIES`; production preflight rejects empty and `*`. The actual Render proxy addresses and whether its edge overwrites all forwarded headers have not been verified in a deployed service. |
@@ -26,16 +33,17 @@ the production proxy chain.
 | Currency configuration | Done for package creation and display; provider limits remain | New packages inherit the platform-configured currency. OBPay, PawaPay, and ioTec checkout is limited to whole-number UGX packages and rejects unsupported currencies before submitting a charge. |
 | Application and tenant URL defaults | Done in code; production DNS pending | Tenant URLs now use the scheme, host, and non-standard port from `APP_URL`; `TENANT_BASE_DOMAIN` is an explicit optional override. Router onboarding uses the actual authenticated router-specific script download and configurable RouterOS defaults. `hotspot.local` remains a configurable RouterOS captive-portal DNS name, not the SaaS URL. |
 | System status and dependency alerts | Done in application; deployment monitoring pending | The static health claim is replaced by dependency status from database, cache, scheduler heartbeat, and queue configuration. Health transitions email active platform admins. `/health/ready` returns 503 when degraded; configure an external monitor to poll it so a stopped process is detected independently. Non-sync queue workers remain unverified without a worker heartbeat. |
-| Expired sessions awaiting router enforcement | Done in application | Expired sessions with pending router actions are marked `disconnecting` and shown separately from active sessions; retries preserve this state until router confirmation. |
+| Expired sessions awaiting router enforcement | Pending RADIUS confirmation | Expired sessions remain `disconnecting` until RADIUS accounting confirms disconnect; a disconnect delivery response alone is not confirmation. |
 | Duplicate pending purchases and callbacks | Done in application; provider retry behavior tested | Pending payment intents are deduplicated under a tenant/package/normalized-phone fingerprint and cache lock; a new attempt is allowed after failure/completion. OBPay, PawaPay, and ioTec callbacks trigger authoritative provider-status reconciliation; callbacks alone never fulfill a sale. |
 | Database recovery / migrations | Local development stack healthy; production recovery remains unverified | `docker compose ps` reports MySQL healthy and `docker compose exec -T app php artisan migrate:status` reports all migrations as run, including the latest revocation, blocked-device, and purchase-intent migrations. No production backup/restore rehearsal was performed. |
 
 ## Batches A–C
 
-The current branch contains the earlier tenant-scoped router records, site-agent command channel, voucher provisioning/expiry flow, and one-time WireGuard
-configuration. Their individual batch-to-finding mapping and historical test
-results are not captured in this repository; this document does not claim that
-those features have passed on physical hardware.
+Earlier batches introduced tenant-scoped router records, a site-agent command
+channel, voucher provisioning/expiry flow, and one-time WireGuard configuration.
+The site-agent runtime has since been removed. Their individual
+batch-to-finding mapping and historical test results are not captured here;
+none of those results establishes physical-hardware acceptance.
 
 ## Validation evidence
 
@@ -47,7 +55,7 @@ those features have passed on physical hardware.
 | `composer audit` | Passed: no security vulnerability advisories found |
 | `npm audit --omit=dev --audit-level=high` | Passed: 0 vulnerabilities |
 | Changed-area suite (tenant URLs, router provisioning, expiry, controls, health, and payments) | Passed: 63 tests, 339 assertions |
-| Provisioning watchdog and site-agent retry regression suite | Passed: 31 tests, 198 assertions |
+| Provisioning watchdog and site-agent retry regression suite (pre-removal snapshot) | Passed: 31 tests, 198 assertions |
 | Frontend production build (`npm run build`) | Passed |
 | Tenant secret encryption / legacy compatibility | Passed in targeted SQLite test |
 | Registration code and welcome email | Passed with Laravel notification fake; SMTP delivery not verified |

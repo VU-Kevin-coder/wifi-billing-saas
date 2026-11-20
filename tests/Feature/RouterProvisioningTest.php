@@ -234,10 +234,6 @@ class RouterProvisioningTest extends TestCase
 
     public function test_automated_provisioning_does_not_deploy_to_mikrotik_via_api(): void
     {
-        config([
-            'site_agent.required' => false,
-            'site_agent.allow_direct_router_connection' => true,
-        ]);
         MikroTik::shouldReceive('router')->never();
         $before = $this->router->fresh()->getRawOriginal();
         $response = $this->actingAs($this->operatorAdmin)

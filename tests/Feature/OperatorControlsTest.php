@@ -8,16 +8,11 @@ use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
-use App\Models\SiteAgent;
-use App\Models\SiteAgentCommand;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
-use App\Services\Tenancy\TenantContext;
-use App\Services\VoucherActivationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -116,21 +111,28 @@ class OperatorControlsTest extends TestCase
         $this->assertTrue($session->fresh()->pending_revocation);
     }
 
-    public function test_voiding_a_connected_voucher_asks_the_site_agent_to_remove_the_router_user(): void
+    public function test_voiding_a_legacy_non_radius_session_stays_pending_for_operator_review(): void
     {
-        config(['site_agent.required' => true]);
-        $site = Site::create(['tenant_id' => $this->tenant->id, 'name' => 'North']);
-        Router::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'R1', 'status' => 'online'])
-            ->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
-        SiteAgent::create(['tenant_id' => $this->tenant->id, 'site_id' => $site->id, 'name' => 'Agent', 'token_hash' => hash('sha256', 'tok'), 'last_seen_at' => now()]);
-        $voucher = $this->voucher('unused', 'VOID-003');
-        $session = app(TenantContext::class)->runAs($this->tenant, fn () => app(VoucherActivationService::class)
-            ->activate($this->tenant, $voucher, Request::create('/'), '0771234567'));
+        $router = Router::create(['tenant_id' => $this->tenant->id, 'name' => 'Legacy router'])
+            ->forceFill(['access_backend' => 'site_agent']);
+        $router->saveOrFail();
+        $voucher = $this->voucher('redeemed', 'VOID-003');
+        $session = Session::create([
+            'tenant_id' => $this->tenant->id,
+            'router_id' => $router->id,
+            'voucher_id' => $voucher->id,
+            'package_id' => $this->package->id,
+            'status' => 'active',
+            'started_at' => now()->subMinutes(5),
+            'expires_at' => now()->addHour(),
+        ]);
 
-        $this->actingAs($this->admin)->post(route('operator.vouchers.void', $voucher->id))->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)
+            ->post(route('operator.vouchers.void', $voucher->id))
+            ->assertSessionHas('warning', 'Voucher voided, but RADIUS revocation could not be confirmed. The session remains pending for reconciliation.');
 
-        $this->assertSame('pending', SiteAgentCommand::query()->where('operation', 'expire_user')->sole()->status);
-        $this->assertNotSame('expired', $session->fresh()->status, 'the agent confirms the removal');
+        $this->assertSame('disconnecting', $session->fresh()->status);
+        $this->assertTrue($session->fresh()->pending_revocation);
     }
 
     public function test_expired_session_pending_router_enforcement_is_visible_in_live_sessions(): void
@@ -157,7 +159,7 @@ class OperatorControlsTest extends TestCase
             ->get('http://acme.localhost/operator/sessions')
             ->assertOk()
             ->assertSee('EXPIRED-PENDING')
-            ->assertSee('Expired · awaiting router enforcement');
+            ->assertSee('Expired · pending RADIUS confirmation');
     }
 
     public function test_live_sessions_does_not_invent_network_metrics_for_untracked_vouchers(): void

@@ -14,6 +14,7 @@ use App\Models\VoucherBatch;
 use App\Observers\ActivityNotificationObserver;
 use App\Services\PlatformMailService;
 use App\Services\Policy\Policy;
+use App\Services\RouterMikrotikManager;
 use App\Services\SystemHealthService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Auth\Events\Failed;
@@ -33,6 +34,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use ZillEAli\MikrotikLaravel\MikrotikManager;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -45,6 +47,10 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->app->singleton(MikrotikManager::class, function ($app): RouterMikrotikManager {
+            return new RouterMikrotikManager($app['config']['mikrotik']);
+        });
+
         Password::defaults(function () {
             $rule = Password::min(max(8, (int) PlatformSetting::get('security.password_min', 10)));
 

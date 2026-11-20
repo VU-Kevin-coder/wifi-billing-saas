@@ -3,13 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Package;
-use App\Models\PlatformSetting;
-use App\Models\Router;
 use App\Models\Session;
-use App\Models\Site;
-use App\Models\SiteAgent;
 use App\Models\Tenant;
-use App\Models\Transaction;
 use App\Models\Voucher;
 use App\Models\VoucherBatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -45,16 +40,6 @@ class PortalPlanTest extends TestCase
         $this->assertDatabaseCount('transactions', 0);
         $this->assertDatabaseCount('vouchers', 0);
         Http::assertNothingSent();
-    }
-
-    private function createSyntheticAgentRouter(Tenant $tenant): void
-    {
-        // Synthetic only: fulfillment remains provisioning until an agent confirms it.
-        config(['site_agent.required' => true]);
-        $site = Site::create(['tenant_id' => $tenant->id, 'name' => 'Synthetic site']);
-        $router = Router::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic router', 'status' => 'online']);
-        $router->forceFill(['access_backend' => 'site_agent'])->save();
-        SiteAgent::create(['tenant_id' => $tenant->id, 'site_id' => $site->id, 'name' => 'Synthetic agent', 'token_hash' => hash('sha256', 'synthetic-unused-token')]);
     }
 
     private function package(Tenant $tenant, bool $published = true): Package
@@ -193,35 +178,18 @@ class PortalPlanTest extends TestCase
 
     // ── Renewing ────────────────────────────────────────────────────────────
 
-    public function test_renewing_goes_through_the_normal_purchase_flow(): void
+    public function test_renewal_purchase_is_blocked_until_radius_is_ready(): void
     {
-        PlatformSetting::set('payment.active_gateway', 'pawapay');
-        PlatformSetting::setSecret('payment.pawapay.api_token', 'pawa-test-token');
-        PlatformSetting::set('payment.pawapay.environment', 'sandbox');
-        config(['payments.simulation_enabled' => false]);
-        Http::fake(function ($request) {
-            if (str_ends_with($request->url(), '/v2/predict-provider')) {
-                return Http::response(['provider' => 'MTN_UGA', 'phoneNumber' => '256771234567']);
-            }
-
-            return Http::response(['status' => 'ACCEPTED', 'depositId' => $request['depositId']]);
-        });
-        $this->createSyntheticAgentRouter($this->tenant);
         $session = $this->createSession($this->tenant, $this->package, 'ACME-0007');
         $this->post('http://acme.localhost/portal/plan', ['voucher_code' => 'ACME-0007']);
-        $plan = $this->open($session)->assertOk();
-        preg_match('/name="_idempotency_key" value="([A-Za-z0-9._:-]{16,128})"/', $plan->getContent(), $matches);
-        $this->assertNotEmpty($matches[1] ?? null, 'the renewal form must include a valid idempotency key');
-
-        // exactly what the form on the page submits
-        $this->post('http://acme.localhost/portal/purchase', [
+        $this->open($session)->assertOk()->assertSee('Renew now');
+        $this->from('http://acme.localhost/portal/r/'.$session->renew_token)->post('http://acme.localhost/portal/purchase', [
             'package_id' => $this->package->id,
             'phone' => '0771234567',
-            '_idempotency_key' => $matches[1],
+            '_idempotency_key' => $this->idempotencyKey(),
         ])
-            ->assertSessionHasNoErrors();
+            ->assertSessionHasErrors(['error' => 'Wi-Fi access is temporarily unavailable. No payment was requested. Please contact the operator.']);
 
-        $sale = Transaction::withoutTenancy()->where('type', 'voucher_sale')->sole();
-        $this->assertSame(['pending', 2000.0], [$sale->status, (float) $sale->amount]);
+        $this->assertDatabaseCount('transactions', 0);
     }
 }

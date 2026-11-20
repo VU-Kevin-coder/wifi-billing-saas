@@ -225,7 +225,7 @@ class RouterGuidedProvisioningTest extends TestCase
             'bootstrap_token_hash' => hash('sha256', random_bytes(32)),
             'bootstrap_script' => '/system identity print',
             'bootstrap_command' => 'not-used',
-            'status' => 'connected',
+            'status' => 'radius_ready',
             'expires_at' => now()->addMinutes(30),
             'connected_at' => now(),
         ]);

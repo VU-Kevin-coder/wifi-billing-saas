@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Services\SiteAgentRouterService;
+use App\Services\HotspotProfileSynchronizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -15,34 +15,19 @@ class HotspotProfileSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_site_agent_creates_missing_profile(): void
+    public function test_it_creates_a_missing_router_profile(): void
     {
-        // The MikroTik facade is mocked; this opt-in is scoped to this test.
-        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => [
-            'host' => '10.0.0.1',
-            'username' => 'api',
-            'password' => 'secret',
-        ]]);
         $profile = $this->profileSettings();
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getProfiles')->once()->andReturn([]);
         $hotspot->shouldReceive('createProfile')->once()->with($profile);
-        MikroTik::shouldReceive('router')->once()->with('site-agent-router-7')->andReturnSelf();
-        MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
 
-        app(SiteAgentRouterService::class)->execute(7, 'sync_profile', ['profiles' => [$profile]]);
-
+        app(HotspotProfileSynchronizer::class)->sync('router-7', $hotspot, $profile);
         $this->addToAssertionCount(1);
     }
 
-    public function test_site_agent_updates_existing_profile(): void
+    public function test_it_updates_an_existing_router_profile_by_routeros_id(): void
     {
-        // The MikroTik facade is mocked; this opt-in is scoped to this test.
-        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => [
-            'host' => '10.0.0.1',
-            'username' => 'api',
-            'password' => 'secret',
-        ]]);
         $profile = $this->profileSettings();
         $hotspot = Mockery::mock(HotspotManager::class);
         $hotspot->shouldReceive('getProfiles')->once()->andReturn([
@@ -54,44 +39,25 @@ class HotspotProfileSyncTest extends TestCase
             ...$profile,
         ])->andReturn([]);
         $pool = Mockery::mock(ConnectionPool::class);
-        $pool->shouldReceive('get')->once()->with('site-agent-router-7')->andReturn($client);
-        MikroTik::shouldReceive('router')->once()->with('site-agent-router-7')->andReturnSelf();
-        MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
+        $pool->shouldReceive('get')->once()->with('router-7')->andReturn($client);
         MikroTik::shouldReceive('getPool')->once()->andReturn($pool);
 
-        app(SiteAgentRouterService::class)->execute(7, 'sync_profile', ['profiles' => [$profile]]);
-
+        app(HotspotProfileSynchronizer::class)->sync('router-7', $hotspot, $profile);
         $this->addToAssertionCount(1);
     }
 
-    public function test_user_provisioning_syncs_profile_before_add_without_profile_fields_on_user(): void
+    public function test_it_rejects_existing_profiles_without_routeros_id(): void
     {
-        // The MikroTik facade is mocked; this opt-in is scoped to this test.
-        config(['site_agent.testing_allow_plaintext_router_api' => true, 'site_agent.routers.7' => [
-            'host' => '10.0.0.1',
-            'username' => 'api',
-            'password' => 'secret',
-        ]]);
         $profile = $this->profileSettings();
         $hotspot = Mockery::mock(HotspotManager::class);
-        $hotspot->shouldReceive('getProfiles')->once()->ordered()->andReturn([]);
-        $hotspot->shouldReceive('createProfile')->once()->ordered()->with($profile);
-        $hotspot->shouldReceive('getUser')->once()->ordered()->with('VOUCHER-7')->andReturn(null);
-        $hotspot->shouldReceive('createUser')->once()->ordered()->with(Mockery::on(
-            fn (array $user): bool => $user['profile'] === $profile['name']
-                && ! array_key_exists('rate-limit', $user)
-                && ! array_key_exists('shared-users', $user)
-        ));
-        MikroTik::shouldReceive('router')->once()->with('site-agent-router-7')->andReturnSelf();
-        MikroTik::shouldReceive('hotspot')->once()->andReturn($hotspot);
-
-        app(SiteAgentRouterService::class)->execute(7, 'provision_user', [
-            'username' => 'VOUCHER-7',
-            'profile' => $profile['name'],
-            'profile_settings' => $profile,
+        $hotspot->shouldReceive('getProfiles')->once()->andReturn([
+            ['name' => $profile['name']],
         ]);
 
-        $this->addToAssertionCount(1);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('did not include its RouterOS identifier');
+
+        app(HotspotProfileSynchronizer::class)->sync('router-7', $hotspot, $profile);
     }
 
     private function profileSettings(): array

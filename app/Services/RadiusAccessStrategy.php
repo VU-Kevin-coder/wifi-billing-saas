@@ -4,14 +4,13 @@ namespace App\Services;
 
 use App\Models\Router;
 use App\Models\Session;
-use App\Models\SiteAgent;
 use App\Models\Tenant;
 use App\Models\Voucher;
 use LogicException;
 
 class RadiusAccessStrategy implements RouterAccessStrategy
 {
-    public function assertReady(Router $router, ?SiteAgent $siteAgent): void
+    public function assertReady(Router $router): void
     {
         RadiusReadiness::requireAvailable();
 
@@ -20,12 +19,12 @@ class RadiusAccessStrategy implements RouterAccessStrategy
         }
     }
 
-    public function initialSessionStatus(Router $router, ?SiteAgent $siteAgent): string
+    public function initialSessionStatus(Router $router): string
     {
         return 'provisioning';
     }
 
-    public function provision(Router $router, Session $session, Voucher $voucher, ?SiteAgent $siteAgent): void {}
+    public function provision(Router $router, Session $session, Voucher $voucher): void {}
 
     public function revoke(
         Tenant $tenant,
@@ -34,7 +33,7 @@ class RadiusAccessStrategy implements RouterAccessStrategy
         Voucher $voucher,
         string $finalSessionStatus,
     ): bool {
-        return app(RadiusAccountingService::class)->requestDisconnect(
+        return app(RouterCommandService::class)->requestKick(
             $session,
             "revocation:{$session->id}:{$finalSessionStatus}",
         );

@@ -105,6 +105,7 @@ class RadiusPolicyController extends Controller
             'status_type' => ['required', 'string', Rule::in(['Start', 'Interim-Update', 'Stop'])],
             'event_time' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9 :+.-]*$/D'],
             'session_time' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
+            'acct_unique_session_id' => ['nullable', 'string', 'max:255', 'not_regex:/[\x00-\x1f\x7f]/'],
             'input_octets' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'input_gigawords' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'output_octets' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
@@ -121,7 +122,9 @@ class RadiusPolicyController extends Controller
         if (($validated['service_type'] ?? '') === 'Framed-User') {
             $accounting->recordPppoeAccountingEvent($validated + $authenticatedIdentity);
         } else {
-            $accounting->recordLabAccountingObservation($validated + $authenticatedIdentity);
+            $accounting->ingestAccountingEvent($validated + [
+                'voucher_code' => $validated['username'] ?? null,
+            ] + $authenticatedIdentity);
         }
 
         return response()->noContent();
@@ -142,37 +145,5 @@ class RadiusPolicyController extends Controller
         ]);
 
         return response()->noContent();
-    }
-
-    public function disconnectCommands(RadiusAccountingService $accounting): JsonResponse
-    {
-        return response()->json(['commands' => $accounting->claimDisconnectCommands()]);
-    }
-
-    public function acknowledgeDisconnect(
-        Request $request,
-        string $command_id,
-        RadiusAccountingService $accounting,
-    ): JsonResponse {
-        $validated = $request->validate([
-            'result' => ['required', 'string', Rule::in(['delivered', 'retryable_failure'])],
-            'result_code' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9._-]*$/D'],
-        ]);
-
-        $result = $accounting->acknowledgeDisconnectCommand(
-            $command_id,
-            $validated['result'],
-            $validated['result_code'] ?? null,
-        );
-
-        if (! $result['found']) {
-            return response()->json(['message' => 'Command not found.'], 404);
-        }
-
-        return response()->json([
-            'accepted' => true,
-            'duplicate' => $result['duplicate'],
-            'delivery_state' => $result['state'],
-        ]);
     }
 }

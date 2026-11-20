@@ -30,8 +30,6 @@ if [ "$ROLE" = "web" ]; then
         fail "TENANT_BASE_DOMAIN must be set to your real base domain (tenant subdomains depend on it)."
     fi
 
-    [ "${SITE_AGENT_REQUIRED:-true}" = "false" ] && fail "SITE_AGENT_REQUIRED must not be false in production."
-
     case "${SESSION_DRIVER:-}" in
         array) fail "SESSION_DRIVER=array loses every session." ;;
         file)  warn "SESSION_DRIVER=file is lost on redeploy and cannot be shared across instances." ;;

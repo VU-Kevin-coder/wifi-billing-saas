@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Site extends Model
 {
@@ -31,10 +30,5 @@ class Site extends Model
     public function vouchers(): HasMany
     {
         return $this->hasMany(Voucher::class);
-    }
-
-    public function agent(): HasOne
-    {
-        return $this->hasOne(SiteAgent::class);
     }
 }

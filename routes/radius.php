@@ -11,7 +11,4 @@ Route::middleware([AuthenticateRadiusPolicyService::class, 'throttle:120,1'])
         Route::post('/authorize', [RadiusPolicyController::class, 'authorize']);
         Route::post('/accounting-events', [RadiusPolicyController::class, 'accountingEvent']);
         Route::post('/post-auth-events', [RadiusPolicyController::class, 'postAuthEvent']);
-        Route::get('/disconnect-commands', [RadiusPolicyController::class, 'disconnectCommands']);
-        Route::post('/disconnect-commands/{command_id}/ack', [RadiusPolicyController::class, 'acknowledgeDisconnect'])
-            ->whereUuid('command_id');
     });

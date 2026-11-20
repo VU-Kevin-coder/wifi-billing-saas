@@ -110,21 +110,4 @@ class PortalPurchaseReadinessSyntheticTest extends TestCase
         $this->assertSame('completed', $sale->fresh()->status);
         $this->assertDatabaseCount('transactions', 1);
     }
-
-    public function test_site_agent_only_tenant_can_initiate_and_other_tenants_radius_does_not_block(): void
-    {
-        Http::preventStrayRequests();
-        [$tenant, $package] = $this->fixture();
-        $this->router($tenant, 'site_agent');
-        $other = Tenant::create(['name' => 'Other', 'slug' => 'other', 'status' => 'active', 'kyc_status' => 'verified']);
-        $this->router($other, 'radius');
-        $payment = $this->partialMock(PaymentService::class);
-        $payment->shouldReceive('normalizePurchasePhone')->andReturn('256771234567');
-        $payment->shouldReceive('initiatePackagePayment')->once()->andReturn(['status' => 'pending']);
-        $this->post('/portal/synthetic/purchase', ['package_id' => $package->id, 'phone' => '0771234567', '_idempotency_key' => $this->idempotencyKey()])
-            ->assertSessionHasNoErrors();
-        $this->assertDatabaseCount('transactions', 1);
-        $this->assertSame('pending', Transaction::withoutGlobalScopes()->firstOrFail()->status);
-        Http::assertNothingSent();
-    }
 }

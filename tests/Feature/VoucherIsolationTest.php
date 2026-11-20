@@ -126,8 +126,9 @@ class VoucherIsolationTest extends TestCase
             ->assertDontSee('KL-XXXX-XXXX');
     }
 
-    public function test_redeemed_voucher_creates_active_session_and_appears_in_live_sessions(): void
+    public function test_redeemed_voucher_stays_provisioning_until_radius_confirms_access(): void
     {
+        config(['radius.enabled' => true]);
         Role::firstOrCreate(['name' => 'operator_admin', 'guard_name' => 'web']);
 
         $operator = User::factory()->create([
@@ -162,7 +163,11 @@ class VoucherIsolationTest extends TestCase
         });
 
         $router = Router::create(['tenant_id' => $this->acme->id, 'name' => 'Acme router']);
-        $router->forceFill(['access_backend' => 'site_agent'])->saveOrFail();
+        $router->forceFill([
+            'access_backend' => 'radius',
+            'radius_nas_identifier' => 'nas-'.$router->id,
+            'radius_shared_secret' => str_repeat('a', 64),
+        ])->saveOrFail();
 
         // 1. Redeem voucher through captive portal
         $response = $this->post('http://acme.localhost/portal/redeem', [
@@ -176,20 +181,19 @@ class VoucherIsolationTest extends TestCase
         $voucher->refresh();
         $this->assertEquals('redeemed', $voucher->status);
 
-        // 2. Active session must exist in database for this voucher
+        // Access is pending until genuine RADIUS accounting confirms it.
         $session = Session::where('voucher_id', $voucher->id)->first();
         $this->assertNotNull($session);
-        $this->assertEquals('active', $session->status);
+        $this->assertEquals('provisioning', $session->status);
         $this->assertEquals($this->acme->id, $session->tenant_id);
         $this->assertEquals($router->id, $session->router_id);
 
-        // 3. Live sessions UI must show this session
+        // A pending session must not be presented as a live connection.
         $sessionsUiResponse = $this->actingAs($operator)
             ->get('http://acme.localhost/operator/sessions');
 
         $sessionsUiResponse->assertStatus(200);
-        $sessionsUiResponse->assertSee('TEST-PASS-99');
-        $sessionsUiResponse->assertSee('Hotspot');
-        $sessionsUiResponse->assertSee('1 Hour Pass');
+        $sessionsUiResponse->assertDontSee('TEST-PASS-99');
+        $sessionsUiResponse->assertSee('No active sessions');
     }
 }

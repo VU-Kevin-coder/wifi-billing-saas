@@ -9,7 +9,6 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 
 for (const [method, marker, url, pendingField] of [
     ['revokeAccess', 'Void voucher and disconnect', 'disconnectUrl', 'pendingRevocation'],
-    ['banDevice', 'Ban the router-verified MAC without voiding the voucher', 'banUrl', 'pendingDeviceBan'],
 ]) {
     function fixture() {
         const part = view.slice(view.indexOf(marker));
@@ -23,7 +22,7 @@ for (const [method, marker, url, pendingField] of [
         }});
         const state = vm.runInContext(`(${data[1]})`, context); context.state = state;
         const select = session => { context.selectionVersion++; context.session = session; vm.runInContext(`with(state) { ${data[2]} }`, context); };
-        const session = id => ({ id, voucher: `voucher-${id}`, disconnectUrl: `/disconnect/${id}`, banUrl: `/ban/${id}`, siteAgentOnline: true });
+        const session = id => ({ id, voucher: `voucher-${id}`, disconnectUrl: `/disconnect/${id}` });
         return { state, select, session, calls, toasts, get confirmation() { return confirmation; }, get request() { return request; }, renew() { confirmation = deferred(); request = deferred(); } };
     }
     test(`${method}: selection ABA invalidates confirmation and lock survives selection`, async () => {
@@ -42,7 +41,7 @@ for (const [method, marker, url, pendingField] of [
             const first = f.state[method](); f.confirmation.resolve('reason'); await tick();
             assert.equal(f.calls.find(x => x[0] === 'fetch')[1], a[url]);
             f.select(b); f.select(a); assert.equal(f.state.loading, true); await f.state[method]();
-            if (reject) f.request.reject(new Error('stale')); else f.request.resolve({ success: true, message: 'queued', site_agent_online: true });
+            if (reject) f.request.reject(new Error('stale')); else f.request.resolve({ success: true, message: 'queued' });
             await first; assert.equal(f.state.loading, false); assert.equal(f.state.pending, false); assert.equal(a[pendingField], undefined); assert.deepEqual(f.toasts, []);
         }
     });
@@ -51,8 +50,8 @@ for (const [method, marker, url, pendingField] of [
         await f.state[method](); f.confirmation.resolve('reason'); await tick();
         const fetches = f.calls.filter(x => x[0] === 'fetch'); assert.equal(fetches.length, 1); assert.equal(fetches[0][1], a[url]);
         assert.equal(JSON.parse(fetches[0][2].body).reason, 'reason');
-        f.request.resolve({ success: true, message: 'queued', site_agent_online: false }); await first;
+        f.request.resolve({ success: true, message: 'queued' }); await first;
         assert.equal(f.state.pending, true); assert.equal(a[pendingField], true); assert.equal(a.disconnecting, true); assert.equal(f.state.loading, false);
-        assert.deepEqual(f.toasts, [['warning', 'queued']]);
+        assert.deepEqual(f.toasts, [['info', 'queued']]);
     });
 }

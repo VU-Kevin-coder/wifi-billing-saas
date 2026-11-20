@@ -8,7 +8,6 @@ use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Models\Session;
 use App\Models\Site;
-use App\Models\SiteAgentCommand;
 use App\Services\ActivityNotifier;
 use App\Services\RadiusReadiness;
 use App\Services\RadiusRouterCredentialService;
@@ -17,7 +16,6 @@ use App\Services\RouterIdentityEnrollmentService;
 use App\Services\RouterIdentityService;
 use App\Services\RouterOnboardingService;
 use App\Services\RouterProvisioningService;
-use App\Services\SiteAgentCommandService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
 use Illuminate\Http\Request;
@@ -42,7 +40,6 @@ class RouterController extends Controller
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('management_ip', 'like', "%{$search}%")
                     ->orWhere('serial_number', 'like', "%{$search}%")
                     ->orWhere('hardware_model', 'like', "%{$search}%")
                     ->orWhere('site', 'like', "%{$search}%")
@@ -118,14 +115,12 @@ class RouterController extends Controller
             'dns' => implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
             'domain' => config('services.mikrotik.hotspot_domain'),
         ];
-        $apiPort = PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port');
-
         $wireGuardReady = (bool) config('wireguard.enabled')
             && filled(config('wireguard.endpoint'))
             && str_starts_with((string) config('app.url'), 'https://');
 
         return view('operator.routers.onboarding-create', compact(
-            'tenant', 'defaultName', 'sites', 'wanInterface', 'defaultClientPorts', 'hotspotDefaults', 'apiPort',
+            'tenant', 'defaultName', 'sites', 'wanInterface', 'defaultClientPorts', 'hotspotDefaults',
             'wireGuardReady',
         ));
     }
@@ -159,27 +154,8 @@ class RouterController extends Controller
                 Rule::exists('sites', 'id')->where('tenant_id', $tenantId),
             ],
             'hardware_model' => ['nullable', 'string', 'max:255'],
-            'access_backend' => ['sometimes', 'required', Rule::in(['radius', 'site_agent'])],
-            'management_ip' => ['nullable', 'string', 'max:255'],
-            'management_subnet' => [
-                'nullable',
-                'string',
-                'max:18',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    if ($value === null || $value === '') {
-                        return;
-                    }
-
-                    $parts = explode('/', $value, 2);
-                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : (isset($parts[1]) ? -1 : 32);
-                    if (filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || $prefix < 8 || $prefix > 32) {
-                        $fail('The management subnet must be a valid IPv4 address or CIDR no broader than an IPv4 /8.');
-                    }
-                },
-            ],
             'api_username' => ['nullable', 'string', 'max:100'],
             'api_password' => ['nullable', 'string', 'max:255', 'not_regex:/[\r\n\x00]/'],
-            'api_port' => ['nullable', 'integer', 'between:1,65535'],
             'has_wireless' => ['nullable', 'boolean'],
             'wifi_ssid' => [
                 'nullable',
@@ -291,7 +267,7 @@ class RouterController extends Controller
             (array) config('services.mikrotik.client_ports', ['ether2', 'ether3', 'ether4', 'ether5']),
             fn (string $port): bool => $port !== $wanInterface,
         ));
-        $router = DB::transaction(function () use ($validated, $tenantId, $site, $wifiSsid, $hasWireless, $apiUsername, $apiPassword, $defaultClientPorts, $wanInterface, $request, $guidedOnboarding): Router {
+        $router = DB::transaction(function () use ($validated, $tenantId, $site, $wifiSsid, $hasWireless, $apiUsername, $apiPassword, $defaultClientPorts, $wanInterface, $request): Router {
             $router = Router::create([
                 'tenant_id' => $tenantId,
                 'site_id' => $site?->id,
@@ -299,7 +275,6 @@ class RouterController extends Controller
                 'wifi_ssid' => $wifiSsid,
                 'site' => $site?->name ?? ($validated['site'] ?? null),
                 'hardware_model' => $validated['hardware_model'] ?? null,
-                'management_ip' => $validated['management_ip'] ?? null,
                 'status' => 'provisioning',
                 'cpu_usage' => 0,
                 'memory_usage' => 0,
@@ -307,11 +282,7 @@ class RouterController extends Controller
                 'last_seen_at' => null,
                 'api_username' => $apiUsername,
                 'api_password' => $apiPassword,
-                'api_port' => $guidedOnboarding
-                    ? 8729
-                    : ($validated['api_port'] ?? (
-                        PlatformSetting::get('router.api_ssl', false) ? 8729 : config('services.mikrotik.api_port')
-                    )),
+                'api_port' => 8729,
                 'has_wireless' => $hasWireless,
                 'enable_hotspot' => $request->boolean('enable_hotspot', true),
                 'hotspot_config' => [
@@ -319,15 +290,12 @@ class RouterController extends Controller
                     'gateway' => $validated['gateway_ip'] ?? config('services.mikrotik.gateway'),
                     'dns' => $validated['dns_servers'] ?? implode(',', (array) PlatformSetting::get('hotspot.default_dns', explode(',', (string) config('services.mikrotik.dns_servers')))),
                     'domain' => $validated['hotspot_domain'] ?? config('services.mikrotik.hotspot_domain'),
-                    'management_subnet' => $validated['management_subnet'] ?? null,
                     'wan_interface' => $wanInterface,
                 ],
                 'ethernet_ports' => $request->input('ethernet_ports', $defaultClientPorts),
             ]);
 
-            $router->forceFill([
-                'access_backend' => $validated['access_backend'] ?? 'radius',
-            ])->saveOrFail();
+            $router->forceFill(['access_backend' => 'radius'])->saveOrFail();
 
             return $router;
         });
@@ -381,26 +349,8 @@ class RouterController extends Controller
             'serial_number' => ['nullable', 'string', 'max:255'],
             'site_id' => ['nullable', 'integer', Rule::exists('sites', 'id')->where('tenant_id', $tenantId)],
             'hardware_model' => ['nullable', 'string', 'max:255'],
-            'management_ip' => ['nullable', 'string', 'max:255'],
-            'management_subnet' => [
-                'nullable',
-                'string',
-                'max:18',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    if ($value === null || $value === '') {
-                        return;
-                    }
-
-                    $parts = explode('/', $value, 2);
-                    $prefix = isset($parts[1]) && ctype_digit($parts[1]) ? (int) $parts[1] : (isset($parts[1]) ? -1 : 32);
-                    if (filter_var($parts[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || $prefix < 8 || $prefix > 32) {
-                        $fail('The management subnet must be a valid IPv4 address or CIDR no broader than an IPv4 /8.');
-                    }
-                },
-            ],
             'api_username' => ['nullable', 'string', 'max:100'],
             'api_password' => ['nullable', 'string', 'max:255', 'not_regex:/[\r\n\x00]/'],
-            'api_port' => ['required', 'integer', 'between:1,65535'],
             'has_wireless' => ['nullable', 'boolean'],
             'wifi_ssid' => [
                 'nullable',
@@ -492,7 +442,6 @@ class RouterController extends Controller
             'gateway' => $validated['gateway_ip'] ?? null,
             'dns' => $validated['dns_servers'] ?? null,
             'domain' => $validated['hotspot_domain'] ?? null,
-            'management_subnet' => $validated['management_subnet'] ?? null,
         ]);
 
         $router->fill([
@@ -501,10 +450,9 @@ class RouterController extends Controller
             'site_id' => $site?->id,
             'site' => $site?->name,
             'hardware_model' => $validated['hardware_model'] ?? null,
-            'management_ip' => $validated['management_ip'] ?? null,
             'wifi_ssid' => $wifiSsid,
             'api_username' => $validated['api_username'] ?? null,
-            'api_port' => $validated['api_port'],
+            'api_port' => 8729,
             'has_wireless' => $hasWireless,
             'enable_hotspot' => $request->boolean('enable_hotspot'),
             'hotspot_config' => $hotspotConfig,
@@ -543,39 +491,23 @@ class RouterController extends Controller
                 ->find($router->site_id)
             : null;
         $liveData = $connectionService->liveStatus($router);
-        $agentLastReportedAt = $assignedSite?->agent?->last_seen_at;
-        if (config('site_agent.required')) {
-            $healthStatus = $router->status === 'online'
-                && $router->last_seen_at?->greaterThanOrEqualTo(now()->subMinutes(2))
-                    ? 'agent confirmed'
-                    : ($router->status === 'provisioning' ? 'provisioning' : ($router->status === 'offline' ? 'offline' : 'last known'));
-        } else {
-            $healthStatus = $liveData['ok']
-                ? 'online'
-                : ($router->status === 'provisioning' ? 'provisioning' : ($router->last_seen_at ? 'last known' : 'offline'));
-        }
-        $hasApiCredentials = (filled($router->management_ip) || $router->vpnPeer?->enabled)
+        $healthStatus = $liveData['ok']
+            ? 'online'
+            : ($router->status === 'provisioning' ? 'provisioning' : ($router->last_seen_at ? 'last known' : 'offline'));
+        $hasApiCredentials = $router->vpnPeer?->enabled
             && filled($router->api_username)
             && filled($router->api_password);
         $canProvisionRadius = $request->user()?->hasRole('operator_admin')
             && $router->getRawOriginal('radius_shared_secret') === null;
-        $latestConnectionTest = SiteAgentCommand::query()
-            ->where('router_id', $router->id)
-            ->whereNull('session_id')
-            ->where('operation', 'test_connection')
-            ->latest('id')
-            ->first();
 
         return view('operator.routers.show', compact(
             'tenant',
             'router',
             'assignedSite',
             'liveData',
-            'agentLastReportedAt',
             'healthStatus',
             'hasApiCredentials',
             'canProvisionRadius',
-            'latestConnectionTest',
         ));
     }
 
@@ -640,32 +572,11 @@ class RouterController extends Controller
     public function testConnection(
         Request $request,
         RouterConnectionService $connectionService,
-        SiteAgentCommandService $commandService,
         ActivityNotifier $notifier,
         ...$args,
     ) {
         $context = app(TenantContext::class);
         $router = $this->resolveTenantRouter($args, $context);
-
-        if (config('site_agent.required')) {
-            try {
-                $command = $commandService->testConnection($router);
-            } catch (\Throwable $exception) {
-                report($exception);
-
-                return response()->json([
-                    'ok' => false,
-                    'message' => 'A paired site agent is required to test this router, but no usable agent is available.',
-                ], 422);
-            }
-
-            return response()->json([
-                'ok' => true,
-                'queued' => true,
-                'command_id' => $command->id,
-                'message' => 'Router API test queued for the paired site agent. The router status will update when the agent reports back.',
-            ], 202);
-        }
 
         $result = $connectionService->test($router);
         if ($result['ok']) {
@@ -741,37 +652,6 @@ class RouterController extends Controller
         }
     }
 
-    public function telemetry(Request $request, SiteAgentCommandService $commandService, ...$args)
-    {
-        $context = app(TenantContext::class);
-        $router = $this->resolveTenantRouter($args, $context);
-
-        if (! config('site_agent.required')) {
-            return response()->json([
-                'ok' => false,
-                'message' => 'Router telemetry is collected through the paired site agent only.',
-            ], 409);
-        }
-
-        try {
-            $command = $commandService->telemetry($router);
-        } catch (\Throwable $exception) {
-            report($exception);
-
-            return response()->json([
-                'ok' => false,
-                'message' => 'A paired site agent is required to collect router telemetry.',
-            ], 422);
-        }
-
-        return response()->json([
-            'ok' => true,
-            'queued' => true,
-            'command_id' => $command->id,
-            'message' => 'Telemetry requested through the paired site agent. Metrics update when the agent reports back.',
-        ], 202);
-    }
-
     /**
      * Download or view the RouterOS provisioning configuration script.
      */
@@ -841,7 +721,7 @@ class RouterController extends Controller
     {
         $this->resolveTenantRouter($args, app(TenantContext::class));
 
-        return $this->unsupportedRouterOperation($request, 'Reboot is unavailable until the site agent supports reboot commands.');
+        return $this->unsupportedRouterOperation($request, 'Reboot is unavailable until an allowlisted WireGuard management command is implemented.');
     }
 
     /**
@@ -851,7 +731,7 @@ class RouterController extends Controller
     {
         $this->resolveTenantRouter($args, app(TenantContext::class));
 
-        return $this->unsupportedRouterOperation($request, 'Router synchronization is unavailable until the site agent supports sync commands.');
+        return $this->unsupportedRouterOperation($request, 'Router synchronization is unavailable until an allowlisted WireGuard management command is implemented.');
     }
 
     /**
@@ -915,7 +795,7 @@ class RouterController extends Controller
             case 'reboot':
             case 'sync':
                 return back()->withErrors([
-                    'bulk' => "Bulk {$action} is unavailable until the site agent supports this operation.",
+                    'bulk' => "Bulk {$action} is unavailable until a safe WireGuard management operation is implemented.",
                 ]);
 
             case 'delete':

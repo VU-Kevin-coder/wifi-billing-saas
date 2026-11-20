@@ -102,7 +102,8 @@ class RouterProvisioningService
         }
 
         $router->loadMissing(['vpnPeer', 'onboarding']);
-        if (! $router->vpnPeer?->enabled || $router->onboarding?->status !== 'connected') {
+        if (! $router->vpnPeer?->enabled
+            || ! in_array($router->onboarding?->status, ['radius_ready', 'complete'], true)) {
             return ['ok' => false, 'message' => 'Verify the router connection through WireGuard before provisioning services.'];
         }
 
@@ -357,7 +358,7 @@ class RouterProvisioningService
                 $escapedPkgName = $this->escapeRouterOs($profile['name']);
                 $escapedRateLimit = $this->escapeRouterOs($profile['rate-limit']);
                 $settings = "rate-limit=\"{$escapedRateLimit}\" shared-users={$profile['shared-users']}";
-                $lines[] = '# Voucher uptime and data caps are applied to each HotSpot user by the site agent.';
+                $lines[] = '# Voucher uptime and data caps are enforced by the RADIUS policy service.';
                 $lines[] = ":if ([:len [/ip hotspot user profile find name=\"{$escapedPkgName}\"]] = 0) do={ /ip hotspot user profile add name=\"{$escapedPkgName}\" {$settings} keepalive-timeout={$idleTimeout}m status-autorefresh=1m } else={ /ip hotspot user profile set [find name=\"{$escapedPkgName}\"] {$settings} keepalive-timeout={$idleTimeout}m }";
             }
             $lines[] = '';
@@ -537,31 +538,29 @@ class RouterProvisioningService
         }
 
         $tenant = $router->tenant ?? Tenant::find($router->tenant_id);
-        if (config('site_agent.required')) {
-            return [
-                'ok' => false,
-                'message' => 'Direct cloud-to-router deployment is disabled while site-agent mode is required.',
-            ];
-        }
-
         $router->loadMissing('vpnPeer');
-        $host = $router->vpnPeer?->enabled
-            ? $router->vpnPeer->tunnel_ip
-            : (config('site_agent.allow_direct_router_connection') ? $router->management_ip : null);
-
-        if (blank($host) || blank($router->api_username) || blank($router->api_password)) {
+        $peer = $router->vpnPeer;
+        if (! $peer?->enabled || ! $router->enrolled
+            || blank($router->api_username) || blank($router->api_password)) {
             return [
                 'ok' => false,
-                'message' => 'A WireGuard peer or explicitly enabled direct connection, API username and API password are required before deploying via API.',
+                'message' => 'An enrolled router with an enabled WireGuard peer and API credentials is required before provisioning.',
             ];
         }
 
+        $host = $peer->tunnel_ip;
         $key = 'provision-router-'.$router->id;
         try {
             DynamicMikrotikRouterConfig::set($key, [
                 'username' => $router->api_username,
                 'password' => $router->api_password,
-                ...RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: config('services.mikrotik.api_port')), $router->id),
+                ...RouterTransportConfig::forVerifiedWireGuardPeer(
+                    $host,
+                    (int) ($router->api_port ?: config('services.mikrotik.api_port')),
+                    $peer,
+                    $router->id,
+                    true,
+                ),
                 'timeout' => 8,
             ]);
             $client = MikroTik::router($key);

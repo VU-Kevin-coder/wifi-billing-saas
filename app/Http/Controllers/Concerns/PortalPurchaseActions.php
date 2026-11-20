@@ -54,9 +54,9 @@ trait PortalPurchaseActions
         $backends = Router::withoutGlobalScopes()
             ->where('tenant_id', $tenantModel->id)
             ->distinct()->pluck('access_backend');
-        if ($backends->isEmpty() || $backends->contains(fn ($backend) => ! in_array($backend, ['site_agent', 'radius'], true)
-            || ($backend === 'radius' && ! RadiusReadiness::available())
-        )) {
+        if ($backends->isEmpty()
+            || $backends->contains(fn ($backend) => $backend !== 'radius')
+            || ! RadiusReadiness::available()) {
             return back()->withErrors([
                 'error' => 'Wi-Fi access is temporarily unavailable. No payment was requested. Please contact the operator.',
             ]);

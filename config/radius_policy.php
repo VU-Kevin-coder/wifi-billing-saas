@@ -3,7 +3,7 @@
 $sourceCidrs = trim((string) env('RADIUS_POLICY_ALLOWED_SOURCE_CIDRS', ''));
 
 return [
-    // Must be independently generated; never reuse APP_KEY, router, site-agent,
+    // Must be independently generated; never reuse APP_KEY, router,
     // payment, or customer credentials.
     'service_secret' => env('RADIUS_LARAVEL_SERVICE_SECRET'),
     // Comma-separated direct TCP peer CIDRs for the private adapter channel.
@@ -13,5 +13,5 @@ return [
     'clock_skew_seconds' => (int) env('RADIUS_POLICY_CLOCK_SKEW_SECONDS', 60),
     'lease_seconds' => (int) env('RADIUS_POLICY_LEASE_SECONDS', 60),
     'retry_seconds' => (int) env('RADIUS_POLICY_RETRY_SECONDS', 30),
-    'accounting_reconciliation_enabled' => false,
+    'accounting_reconciliation_enabled' => true,
 ];

@@ -3,25 +3,18 @@
 namespace App\Console\Commands;
 
 use App\Models\Session;
-use App\Services\RadiusAccountingService;
-use App\Services\RouterConnectionService;
-use App\Services\SiteAgentCommandService;
+use App\Services\RouterCommandService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Throwable;
 
 class ExpireSessions extends Command
 {
     protected $signature = 'sessions:expire';
 
-    protected $description = 'Expire elapsed sessions and disconnect active MikroTik users';
+    protected $description = 'Expire elapsed sessions and request router session kicks';
 
-    public function handle(
-        RouterConnectionService $routerService,
-        SiteAgentCommandService $agentCommands,
-        RadiusAccountingService $radiusAccounting,
-    ): int {
-        $expiredCount = 0;
+    public function handle(RouterCommandService $commands): int
+    {
         $queuedCount = 0;
         $retryCount = 0;
 
@@ -29,108 +22,38 @@ class ExpireSessions extends Command
             ->with([
                 'router' => fn ($query) => $query->withoutTenancy(),
                 'voucher' => fn ($query) => $query->withoutTenancy(),
-                'router.assignedSite' => fn ($query) => $query->withoutTenancy(),
-                'router.assignedSite.agent',
             ])
             ->where('status', 'active')
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', now())
             ->orderBy('id')
-            ->chunkById(100, function ($sessions) use ($routerService, $agentCommands, $radiusAccounting, &$expiredCount, &$queuedCount, &$retryCount): void {
+            ->chunkById(100, function ($sessions) use ($commands, &$queuedCount, &$retryCount): void {
                 foreach ($sessions as $session) {
-                    if ($session->router?->access_backend === 'radius') {
-                        $session->update([
-                            'status' => 'disconnecting',
-                            'pending_revocation' => true,
-                            'pending_revocation_status' => 'expired',
-                        ]);
+                    $session->update([
+                        'status' => 'disconnecting',
+                        'pending_revocation' => true,
+                        'pending_revocation_status' => 'expired',
+                    ]);
 
-                        if ($radiusAccounting->requestDisconnect(
+                    if ($session->router?->access_backend === 'radius'
+                        && $commands->requestKick(
                             $session,
                             "revocation:{$session->id}:expired",
                         )) {
-                            $queuedCount++;
-                        } else {
-                            $retryCount++;
-                        }
+                        $queuedCount++;
 
                         continue;
                     }
 
-                    $siteAgent = $session->router?->assignedSite?->agent;
-                    if ($session->router?->site_id && $session->voucher
-                        && $siteAgent && ! $siteAgent->revoked_at) {
-                        try {
-                            $agentCommands->expire($session->router, $session, $session->voucher);
-                            $queuedCount++;
-                        } catch (Throwable $exception) {
-                            $retryCount++;
-                            Log::error('Unable to queue site-agent expiry command.', [
-                                'session_id' => $session->id,
-                                'router_id' => $session->router_id,
-                            ]);
-                        }
-
-                        continue;
-                    }
-
-                    if (config('site_agent.required') && $session->router && $session->voucher) {
-                        $session->update([
-                            'status' => 'disconnecting',
-                            'pending_revocation' => true,
-                            'pending_revocation_status' => 'expired',
-                        ]);
-                        $retryCount++;
-                        Log::error('Expired session has no paired site agent; it remains pending until router access is revoked.', [
-                            'session_id' => $session->id,
-                            'router_id' => $session->router_id,
-                        ]);
-
-                        continue;
-                    }
-
-                    if ($session->router && $session->voucher) {
-                        $session->update([
-                            'status' => 'disconnecting',
-                            'pending_revocation' => true,
-                            'pending_revocation_status' => 'expired',
-                        ]);
-
-                        try {
-                            $disconnected = $routerService->disconnectUser(
-                                $session->router,
-                                $session->voucher->code
-                            );
-
-                            if (! $disconnected) {
-                                Log::info('Expired voucher had no active MikroTik hotspot session.', [
-                                    'session_id' => $session->id,
-                                    'router_id' => $session->router_id,
-                                    'voucher_id' => $session->voucher_id,
-                                ]);
-                            }
-                        } catch (Throwable $exception) {
-                            $retryCount++;
-                            Log::error('Unable to disconnect expired MikroTik session; it will be retried.', [
-                                'session_id' => $session->id,
-                                'router_id' => $session->router_id,
-                                'voucher_id' => $session->voucher_id,
-                            ]);
-
-                            continue;
-                        }
-                    }
-
-                    $session->update([
-                        'status' => 'expired',
-                        'pending_revocation' => false,
-                        'pending_revocation_status' => null,
+                    $retryCount++;
+                    Log::error('Expired session revocation is pending without a router kick request.', [
+                        'session_id' => $session->id,
+                        'router_id' => $session->router_id,
                     ]);
-                    $expiredCount++;
                 }
             });
 
-        $this->info("Expired {$expiredCount} session(s); queued {$queuedCount} site-agent command(s); {$retryCount} operation(s) failed.");
+        $this->info("Requested {$queuedCount} router kick(s); {$retryCount} revocation(s) remain pending.");
 
         return $retryCount > 0 ? self::FAILURE : self::SUCCESS;
     }

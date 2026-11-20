@@ -86,17 +86,19 @@ class WireGuardService
         Router $router,
         string $enrollmentToken,
         string $radiusSecret,
+        string $pollingToken,
     ): string {
         $this->assertEnabled();
         if ((int) $peer->router_id !== (int) $router->id
             || blank($router->api_username)
             || blank($router->api_password)
             || ! preg_match('/^[A-Za-z0-9]{64}$/', $enrollmentToken)
-            || ! preg_match('/^[a-f0-9]{64}$/i', $radiusSecret)) {
+            || ! preg_match('/^[a-f0-9]{64}$/i', $radiusSecret)
+            || ! preg_match('/^[a-f0-9]{64}$/i', $pollingToken)) {
             throw new RuntimeException('The router API account must be configured before onboarding.');
         }
 
-        return $this->deliverRouterConfiguration($peer, $router, $enrollmentToken, $radiusSecret);
+        return $this->deliverRouterConfiguration($peer, $router, $enrollmentToken, $radiusSecret, $pollingToken);
     }
 
     public function refreshHandshakes(): void
@@ -181,16 +183,23 @@ class WireGuardService
         ?Router $router,
         ?string $enrollmentToken = null,
         ?string $radiusSecret = null,
+        ?string $pollingToken = null,
     ): string {
-        return DB::transaction(function () use ($peer, $router, $enrollmentToken, $radiusSecret): string {
+        return DB::transaction(function () use ($peer, $router, $enrollmentToken, $radiusSecret, $pollingToken): string {
             $lockedPeer = VpnPeer::query()->findOrFail($peer->id);
             if (! $lockedPeer->enabled || blank($lockedPeer->private_key) || $lockedPeer->config_downloaded_at) {
                 throw new RuntimeException('This WireGuard configuration is unavailable for download. Generate a new peer if it was already downloaded.');
             }
 
             $configuration = $this->buildRouterConfiguration($lockedPeer);
-            if ($router && $enrollmentToken !== null && $radiusSecret !== null) {
-                $configuration .= $this->buildApiConfiguration($router, $lockedPeer, $enrollmentToken, $radiusSecret);
+            if ($router && $enrollmentToken !== null && $radiusSecret !== null && $pollingToken !== null) {
+                $configuration .= $this->buildApiConfiguration(
+                    $router,
+                    $lockedPeer,
+                    $enrollmentToken,
+                    $radiusSecret,
+                    $pollingToken,
+                );
             }
 
             $updated = VpnPeer::query()
@@ -232,6 +241,8 @@ class WireGuardService
             ':if ([:len [/ip address find address="'.$tunnelIp.'/32" interface="'.$routerInterface.'"]] = 0) do={ /ip address add address="'.$tunnelIp.'/32" interface="'.$routerInterfaceQuoted.'" }',
             ':if ([:len [/interface wireguard peers find interface="'.$routerInterface.'" public-key="'.$serverPublicKey.'"]] = 0) do={ /interface wireguard peers add interface="'.$routerInterfaceQuoted.'" public-key="'.$publicKey.'" endpoint-address="'.$endpointHost.'" endpoint-port='.$endpointPort.' allowed-address="'.$serverAddress.'/32" persistent-keepalive='.$keepalive.'s }',
             ':if ([:len [/ip route find dst-address="'.$serverAddress.'/32" gateway="'.$routerInterface.'"]] = 0) do={ /ip route add dst-address="'.$serverAddress.'/32" gateway="'.$routerInterfaceQuoted.'" }',
+            '/ip cloud set update-time=yes',
+            ':delay 10s',
             '/ip service set api disabled=yes',
             '/ip service set api-ssl disabled=yes port=8729 address="'.$serverAddress.'/32"',
             '',
@@ -243,6 +254,7 @@ class WireGuardService
         VpnPeer $peer,
         string $enrollmentToken,
         string $radiusSecret,
+        string $pollingToken,
     ): string {
         $serverAddress = $this->routerOsQuote($this->serverAddress());
         $tunnelIp = $this->routerOsQuote($peer->tunnel_ip);
@@ -251,12 +263,24 @@ class WireGuardService
         $token = $this->routerOsQuote($enrollmentToken);
         $secret = $this->routerOsQuote($radiusSecret);
         $nasIdentifier = $this->routerOsQuote((string) $router->radius_nas_identifier);
+        $pollingToken = $this->routerOsQuote($pollingToken);
         $radiusServices = $router->enable_hotspot && $router->enable_pppoe
             ? 'hotspot,ppp'
             : ($router->enable_pppoe ? 'ppp' : 'hotspot');
         $enrollmentUrl = $this->routerOsQuote(
             rtrim((string) config('app.url'), '/').route('api.provision.enroll', [], false),
         );
+        $pollingUrl = $this->routerOsQuote(
+            rtrim((string) config('app.url'), '/').route('api.router-commands.poll', [], false),
+        );
+        $acknowledgementUrl = $this->routerOsQuote(
+            rtrim((string) config('app.url'), '/').route('api.router-commands.ack', [], false),
+        );
+        $pollingSource = $this->quoteRouterOsScript($this->pollingScript(
+            $pollingUrl,
+            $acknowledgementUrl,
+            $pollingToken,
+        ));
 
         return implode(PHP_EOL, [
             '# Router API is reachable only from the server through the encrypted WireGuard tunnel.',
@@ -268,15 +292,74 @@ class WireGuardService
             ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s }',
             ':if ([:len [/ip hotspot profile find name="prof-billing"]] = 0) do={ /ip hotspot profile add name="prof-billing" use-radius=yes radius-accounting=yes radius-interim-update=1m comment="Wi-Fi Billing managed profile" }',
             '/certificate export-certificate "wifi-billing-api" type=pem file-name="wifi-billing-api"',
-            ':local apiCertificate [/file get [find name="cert_export_wifi-billing-api.crt"] contents]',
+            ':local apiCertificate [/file get [find name="wifi-billing-api.crt"] contents]',
             ':local routerSerial [/system routerboard get serial-number]',
             ':if ([:len $routerSerial] = 0) do={ :set routerSerial [/system license get system-id] }',
             ':local routerModel [/system resource get board-name]',
             ':local enrollmentData {"token"="'.$token.'";"serial"=$routerSerial;"model"=$routerModel;"api_ca_certificate"=$apiCertificate}',
             ':local enrollmentBody [:serialize value=$enrollmentData to=json]',
             '/tool fetch url="'.$enrollmentUrl.'" http-method=post http-data=$enrollmentBody http-header-field="Content-Type: application/json" check-certificate=yes output=none',
+            '/file remove [find name="wifi-billing-api.crt"]',
+            ':if ([:len [/system script find name="wifi-billing-poll"]] = 0) do={ /system script add name="wifi-billing-poll" policy=read,write,test source="'.$pollingSource.'" } else={ /system script set [find name="wifi-billing-poll"] policy=read,write,test source="'.$pollingSource.'" }',
+            ':if ([:len [/system scheduler find name="wifi-billing-poll"]] = 0) do={ /system scheduler add name="wifi-billing-poll" interval=1m on-event="/system script run wifi-billing-poll" policy=read,write,test } else={ /system scheduler set [find name="wifi-billing-poll"] interval=1m on-event="/system script run wifi-billing-poll" policy=read,write,test }',
             '',
         ]);
+    }
+
+    private function pollingScript(string $pollingUrl, string $acknowledgementUrl, string $pollingToken): string
+    {
+        return implode(PHP_EOL, [
+            ':local totalMemory [/system resource get total-memory]',
+            ':local freeMemory [/system resource get free-memory]',
+            ':local memoryUsage 0',
+            ':if ($totalMemory > 0) do={ :set memoryUsage (100 - (($freeMemory * 100) / $totalMemory)) }',
+            ':local cpuUsage [/system resource get cpu-load]',
+            ':local activeUsers ([:len [/ip hotspot active find]] + [:len [/ppp active find]])',
+            ':local pollBody ("cpu_usage=" . $cpuUsage . "&memory_usage=" . $memoryUsage . "&active_users=" . $activeUsers)',
+            ':local pollResponse [/tool fetch url="'.$pollingUrl.'" http-method=post http-data=$pollBody http-header-field="Authorization: Bearer '.$pollingToken.',Content-Type: application/x-www-form-urlencoded" check-certificate=yes output=user as-value]',
+            ':local pollData ($pollResponse->"data")',
+            ':if ([:len $pollData] > 4) do={',
+            '  :local firstSeparator [:find $pollData "|"]',
+            '  :if ([:typeof $firstSeparator] = "num" && $firstSeparator > 0) do={',
+            '    :local commandId [:pick $pollData 0 $firstSeparator]',
+            '    :local firstRemainder [:pick $pollData ($firstSeparator + 1) [:len $pollData]]',
+            '    :local secondSeparator [:find $firstRemainder "|"]',
+            '    :if ([:typeof $secondSeparator] = "num" && $secondSeparator > 0) do={',
+            '      :local leaseToken [:pick $firstRemainder 0 $secondSeparator]',
+            '      :local secondRemainder [:pick $firstRemainder ($secondSeparator + 1) [:len $firstRemainder]]',
+            '      :local thirdSeparator [:find $secondRemainder "|"]',
+            '      :if ([:typeof $thirdSeparator] = "num" && $thirdSeparator > 0) do={',
+            '        :local operation [:pick $secondRemainder 0 $thirdSeparator]',
+            '        :local serviceAndUsername [:pick $secondRemainder ($thirdSeparator + 1) [:len $secondRemainder]]',
+            '        :local fourthSeparator [:find $serviceAndUsername "|"]',
+            '        :if ([:typeof $fourthSeparator] = "num" && $fourthSeparator > 0) do={',
+            '          :local targetService [:pick $serviceAndUsername 0 $fourthSeparator]',
+            '          :local username [:pick $serviceAndUsername ($fourthSeparator + 1) [:len $serviceAndUsername]]',
+            '          :if ($operation = "kick" && ($targetService = "hotspot" || $targetService = "pppoe") && [:len $username] > 0 && [:len $username] <= 64 && $username~"^[A-Za-z0-9._-]+$") do={',
+            '            :local activeIds [/ip hotspot active find where user=$username]',
+            '            :if ($targetService = "pppoe") do={ :set activeIds [/ppp active find where name=$username] }',
+            '            :if ($targetService = "hotspot") do={ :foreach activeId in=$activeIds do={ /ip hotspot active remove $activeId } }',
+            '            :if ($targetService = "pppoe") do={ :foreach activeId in=$activeIds do={ /ppp active remove $activeId } }',
+            '            :local resultCode "kicked"',
+            '            :if ([:len $activeIds] = 0) do={ :set resultCode "already_absent" }',
+            '            :local ackBody ("command_id=" . $commandId . "&lease_token=" . $leaseToken . "&result_code=" . $resultCode)',
+            '            /tool fetch url="'.$acknowledgementUrl.'" http-method=post http-data=$ackBody http-header-field="Authorization: Bearer '.$pollingToken.',Content-Type: application/x-www-form-urlencoded" check-certificate=yes output=none',
+            '          }',
+            '        }',
+            '      }',
+            '    }',
+            '  }',
+            '}',
+        ]);
+    }
+
+    private function quoteRouterOsScript(string $script): string
+    {
+        return str_replace(
+            ['\\', '"', '$', "\r", "\n"],
+            ['\\\\', '\\"', '\\$', '\\r', '\\n'],
+            $script,
+        );
     }
 
     private function assertEnabled(): void
@@ -335,7 +418,7 @@ class WireGuardService
 
     private function routerOsQuote(string $value): string
     {
-        return addcslashes(str_replace(["\r", "\n", "\0"], '', $value), '\\"');
+        return addcslashes(str_replace(["\r", "\n", "\0"], '', $value), '\\"$');
     }
 
     private function removePeerFromInterface(string $interface, VpnPeer $peer): void

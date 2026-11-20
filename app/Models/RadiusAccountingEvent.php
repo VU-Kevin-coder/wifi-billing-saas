@@ -14,6 +14,7 @@ class RadiusAccountingEvent extends Model
         'fingerprint',
         'status_type',
         'event_time',
+        'acct_unique_session_id',
         'session_time',
         'input_octets',
         'input_gigawords',

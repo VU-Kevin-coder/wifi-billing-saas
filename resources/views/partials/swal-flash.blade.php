@@ -16,7 +16,7 @@
             'platform.tenants.show', 'platform.vpn-peers.index', 'platform.revenue.index',
             'platform.revenue.adjustments.index', 'platform.configuration.control', 'platform.policies.index',
             'platform.refunds.index', 'profile.security.index', 'operator.wallet.index',
-            'operator.settings.index', 'operator.settings.router', 'operator.team.index', 'operator.staff.index',
+            'operator.settings.index', 'operator.team.index', 'operator.staff.index',
             'operator.customers.index', 'operator.sites.index', 'operator.vouchers.index',
             'operator.routers.index', 'operator.routers.show', 'operator.packages.index', 'operator.refunds.index',
         ],

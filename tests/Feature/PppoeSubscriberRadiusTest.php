@@ -212,6 +212,32 @@ class PppoeSubscriberRadiusTest extends TestCase
         }
     }
 
+    public function test_pppoe_accounting_fails_closed_when_radius_is_disabled(): void
+    {
+        config(['radius.enabled' => false]);
+        [$tenant, $router, $package] = $this->makeRadiusRouter();
+        $subscriber = $this->makeSubscriber($tenant, $package, ['username' => 'ppp-account-disabled']);
+
+        try {
+            app(RadiusAccountingService::class)->recordPppoeAccountingEvent([
+                'authenticated_router_id' => $router->id,
+                'authenticated_peer_ip' => '10.8.1.20',
+                'nas_identifier' => 'radius-nas-test',
+                'nas_session_id' => 'disabled-radius-session',
+                'username' => $subscriber->username,
+                'status_type' => 'Interim-Update',
+                'input_octets' => 100,
+                'output_octets' => 100,
+            ]);
+            $this->fail('Accounting must remain disabled when the RADIUS feature is disabled.');
+        } catch (RadiusUnavailableException) {
+            $this->assertSame(0, DB::table('radius_subscriber_sessions')
+                ->where('subscriber_id', $subscriber->id)
+                ->count());
+            $this->assertSame(0, $subscriber->fresh()->bytes_used);
+        }
+    }
+
     private function makeRadiusRouter(): array
     {
         $tenant = Tenant::create(['name' => 'PPPoE tenant', 'slug' => 'pppoe-tenant', 'status' => 'active']);

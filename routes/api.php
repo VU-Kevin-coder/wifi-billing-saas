@@ -2,9 +2,9 @@
 
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentGatewayWebhookController;
+use App\Http\Controllers\Api\RouterCommandController;
 use App\Http\Controllers\Api\RouterOnboardingBootstrapController;
 use App\Http\Controllers\Api\RouterProvisioningController;
-use App\Http\Controllers\Api\SiteAgentController;
 use App\Http\Controllers\PortalController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +22,12 @@ Route::middleware('throttle:public-api')->group(function () {
     Route::post('/provision/enroll', [RouterProvisioningController::class, 'enroll'])
         ->middleware('throttle:10,1')
         ->name('api.provision.enroll');
+    Route::post('/router/commands/poll', [RouterCommandController::class, 'poll'])
+        ->middleware('throttle:60,1')
+        ->name('api.router-commands.poll');
+    Route::post('/router/commands/ack', [RouterCommandController::class, 'acknowledge'])
+        ->middleware('throttle:60,1')
+        ->name('api.router-commands.ack');
 
     Route::post('/router-onboarding/bootstrap', RouterOnboardingBootstrapController::class)
         ->middleware('throttle:10,1')
@@ -58,15 +64,6 @@ Route::middleware('throttle:public-api')->group(function () {
             Route::post('/{notification}/read', [NotificationController::class, 'markRead'])->name('read');
             Route::post('/read-all', [NotificationController::class, 'markAllRead'])->name('read-all');
             Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('unread-count');
-        });
-
-    Route::prefix('site-agent')
-        ->middleware(['site-agent', 'throttle:120,1'])
-        ->group(function (): void {
-            Route::get('/commands', [SiteAgentController::class, 'poll'])->name('api.site-agent.commands');
-            Route::post('/commands/{command}/complete', [SiteAgentController::class, 'complete'])
-                ->whereNumber('command')
-                ->name('api.site-agent.commands.complete');
         });
 
 });

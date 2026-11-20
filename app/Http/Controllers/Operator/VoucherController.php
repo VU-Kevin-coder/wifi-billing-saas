@@ -156,8 +156,8 @@ class VoucherController extends Controller
         $response = back()->with('status', "Voucher {$model->code} was voided.");
 
         return $queued
-            ? $response->with('warning', 'Router revocation is pending until the site agent confirms the user was disabled.')
-            : $response->with('warning', 'Voucher voided, but router revocation could not be queued. The session remains pending; check the site agent and router.');
+            ? $response->with('warning', 'RADIUS revocation remains pending until accounting confirms the user session has ended.')
+            : $response->with('warning', 'Voucher voided, but RADIUS revocation could not be confirmed. The session remains pending for reconciliation.');
     }
 
     /**

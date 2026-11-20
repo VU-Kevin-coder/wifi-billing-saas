@@ -58,7 +58,6 @@ class PolicyEngineTest extends TestCase
             'wallet.min_withdrawal',
             'wallet.withdrawal_manual_review_hours',
             'provisioning.alert_after_minutes',
-            'provisioning.max_requeues',
             'provisioning.compensate_delay',
             'voucher.min_length',
             'voucher.max_per_batch',
