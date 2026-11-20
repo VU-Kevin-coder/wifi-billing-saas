@@ -87,6 +87,7 @@ class AuthenticateRadiusPolicyService
             '/internal/radius/v1/authorize',
             '/internal/radius/v1/accounting-events',
             '/internal/radius/v1/client-lookup',
+            '/internal/radius/v1/post-auth-events',
         ], true)) {
             return $this->unavailable();
         }

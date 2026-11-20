@@ -142,6 +142,7 @@ trait PortalPurchaseActions
             $phone,
             $transaction,
             $request->input('email'),
+            $this->portalUrl($request, 'pending', $tenantModel, $transaction),
         );
 
         if ($result['status'] === 'redirect') {

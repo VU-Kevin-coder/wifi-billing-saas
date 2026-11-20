@@ -7,7 +7,12 @@ use Illuminate\Support\Facades\Log;
 
 class RouterTransportConfig
 {
-    public static function forRouter(string $host, int $port, int|string $routerId): array
+    public static function forRouter(
+        string $host,
+        int $port,
+        int|string $routerId,
+        bool $requireRouterCertificate = false,
+    ): array
     {
         if ($port < 1 || $port > 65535) {
             throw new RouterTransportException('Router API port is invalid.');
@@ -17,6 +22,9 @@ class RouterTransportConfig
         // explicit opt-in is for tests only, not a deployment setting. Both
         // Laravel's actual and configured environments must say testing.
         $plaintext = $port === 8728;
+        if ($plaintext && $requireRouterCertificate) {
+            throw new RouterTransportException('Enrolled routers must use verified API-SSL on port 8729.');
+        }
         if ($plaintext && ! (app()->environment('testing')
             && config('app.env') === 'testing'
             && config('site_agent.testing_allow_plaintext_router_api') === true)) {
@@ -34,6 +42,11 @@ class RouterTransportConfig
             throw new RouterTransportException('Router API-SSL requires a valid IPv4 address or DNS hostname for certificate identity verification.');
         }
 
+        $routerCaPath = RouterApiCertificateTrustService::pathForRouter($routerId);
+        if ($requireRouterCertificate && ! is_file($routerCaPath)) {
+            throw new RouterTransportException('The enrolled router API certificate is unavailable; re-enrollment is required.');
+        }
+
         return [
             'host' => $host,
             'port' => $port,
@@ -42,7 +55,9 @@ class RouterTransportConfig
             // when verify_peer is true. The original host is passed unchanged,
             // so DNS resolution never substitutes an IP for the peer identity.
             'verify_peer' => true,
-            'ca_cert_path' => config('site_agent.router_ca_cert_path'),
+            'ca_cert_path' => is_file($routerCaPath)
+                ? $routerCaPath
+                : config('site_agent.router_ca_cert_path'),
         ];
     }
 
@@ -50,7 +65,13 @@ class RouterTransportConfig
      * The RouterOS plaintext API is acceptable only inside the authenticated,
      * encrypted WireGuard tunnel and only for that peer's assigned tunnel IP.
      */
-    public static function forVerifiedWireGuardPeer(string $host, int $port, VpnPeer $peer, int|string $routerId): array
+    public static function forVerifiedWireGuardPeer(
+        string $host,
+        int $port,
+        VpnPeer $peer,
+        int|string $routerId,
+        bool $requireRouterCertificate = false,
+    ): array
     {
         if (! $peer->enabled
             || filter_var($peer->tunnel_ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
@@ -59,6 +80,10 @@ class RouterTransportConfig
         }
 
         if ($port === 8728) {
+            if ($requireRouterCertificate) {
+                throw new RouterTransportException('Enrolled routers must use verified API-SSL on port 8729.');
+            }
+
             return [
                 'host' => $host,
                 'port' => $port,
@@ -68,7 +93,7 @@ class RouterTransportConfig
             ];
         }
 
-        return self::forRouter($host, $port, $routerId);
+        return self::forRouter($host, $port, $routerId, $requireRouterCertificate);
     }
 
     private static function isValidPeerHost(string $host): bool

@@ -17,6 +17,10 @@ use ZillEAli\MikrotikLaravel\Facades\MikroTik;
  */
 class RouterConnectionService
 {
+    public function __construct(
+        private RouterIdentityService $identityService,
+    ) {}
+
     public function test(Router $router): array
     {
         if (config('site_agent.required')) {
@@ -49,6 +53,15 @@ class RouterConnectionService
             // This is deliberately read-only: it proves API reachability
             // without changing hotspot, users, profiles or firewall rules.
             $resource = MikroTik::router($key)->system()->getResources();
+            $identity = $this->identityService->discover($router);
+            if (! $this->identityService->matches($router, $identity)) {
+                return [
+                    'ok' => false,
+                    'failure_type' => 'identity_not_verified',
+                    'message' => 'Router identity is not enrolled or does not match. Complete read-only discovery and operator-confirmed enrollment before writes.',
+                    'identity' => $identity,
+                ];
+            }
 
             return [
                 'ok' => filled($resource),
@@ -138,6 +151,48 @@ class RouterConnectionService
             ]);
 
             throw new RouterTransportException('Unable to read router interfaces through the verified WireGuard connection.');
+        }
+    }
+
+    public function hasOnboardingRadiusConfiguration(Router $router): bool
+    {
+        $router->loadMissing('vpnPeer');
+        $peer = $router->vpnPeer;
+        if (! $peer?->enabled || ! $router->enrolled) {
+            return false;
+        }
+
+        try {
+            $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
+            $radiusRows = $this->rawRows(MikroTik::router($key)->diagnostics()->getRaw('/radius/print'));
+            $radius = collect($radiusRows)->first(
+                fn (array $row): bool => ($row['comment'] ?? null) === 'Wi-Fi Billing RADIUS',
+            );
+            $profileRows = $this->rawRows(MikroTik::router($key)->diagnostics()->getRaw('/ip/hotspot/profile/print'));
+            $profile = collect($profileRows)->first(
+                fn (array $row): bool => ($row['name'] ?? null) === 'prof-billing',
+            );
+            $serverAddress = (string) config('wireguard.server_address');
+            $expectedServices = $router->enable_hotspot && $router->enable_pppoe
+                ? 'hotspot,ppp'
+                : ($router->enable_pppoe ? 'ppp' : 'hotspot');
+
+            return is_array($radius)
+                && ($radius['address'] ?? null) === $serverAddress
+                && ($radius['src-address'] ?? null) === $peer->tunnel_ip
+                && ($radius['service'] ?? null) === $expectedServices
+                && ($radius['authentication-port'] ?? null) === '1812'
+                && ($radius['accounting-port'] ?? null) === '1813'
+                && is_array($profile)
+                && in_array(strtolower((string) ($profile['use-radius'] ?? '')), ['yes', 'true'], true)
+                && in_array(strtolower((string) ($profile['radius-accounting'] ?? '')), ['yes', 'true'], true);
+        } catch (\Throwable $exception) {
+            Log::warning('Router RADIUS configuration could not be verified.', [
+                'router_id' => $router->id,
+                'exception' => $exception::class,
+            ]);
+
+            return false;
         }
     }
 
@@ -312,12 +367,59 @@ class RouterConnectionService
             'username' => $router->api_username,
             'password' => $router->api_password,
             ...($wireGuardPeer
-                ? RouterTransportConfig::forVerifiedWireGuardPeer($host, (int) ($router->api_port ?: 8728), $wireGuardPeer, $router->getKey())
-                : RouterTransportConfig::forRouter($host, (int) ($router->api_port ?: 8728), $router->getKey())),
+                ? RouterTransportConfig::forVerifiedWireGuardPeer(
+                    $host,
+                    (int) ($router->api_port ?: 8728),
+                    $wireGuardPeer,
+                    $router->getKey(),
+                    (bool) $router->enrolled,
+                )
+                : RouterTransportConfig::forRouter(
+                    $host,
+                    (int) ($router->api_port ?: 8728),
+                    $router->getKey(),
+                    (bool) $router->enrolled,
+                )),
             'timeout' => 5,
         ]);
 
         return $key;
+    }
+
+    /**
+     * @param  array<int, string>  $response
+     * @return array<int, array<string, string>>
+     */
+    private function rawRows(array $response): array
+    {
+        $rows = [];
+        $row = [];
+
+        foreach ($response as $word) {
+            if (str_starts_with($word, '!trap') || str_starts_with($word, '!fatal')) {
+                throw new RuntimeException('Router rejected a read-only configuration query.');
+            }
+            if ($word === '!re') {
+                if ($row !== []) {
+                    $rows[] = $row;
+                    $row = [];
+                }
+                continue;
+            }
+            if ($word === '' || $word === '!done') {
+                if ($row !== []) {
+                    $rows[] = $row;
+                    $row = [];
+                }
+                continue;
+            }
+            if (str_starts_with($word, '=')) {
+                [$key, $value] = array_pad(explode('=', substr($word, 1), 2), 2, '');
+                $row[$key] = $value;
+            }
+        }
+
+        return $rows;
     }
 
     private function hostForRouter(Router $router): ?string

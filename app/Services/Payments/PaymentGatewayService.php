@@ -28,6 +28,7 @@ class PaymentGatewayService
         string $customerName,
         ?string $email,
         Transaction $transaction,
+        ?string $returnUrl = null,
     ): array {
         $provider = PaymentGatewaySettings::active();
         if (! $provider || ! PaymentGatewaySettings::configured($provider)) {
@@ -68,7 +69,7 @@ class PaymentGatewayService
 
         try {
             $result = match ($provider) {
-                'obpay' => $this->startObPayCollection($transaction, $package, $normalizedPhone, $customerName, $email),
+                'obpay' => $this->startObPayCollection($transaction, $package, $normalizedPhone, $customerName, $email, $returnUrl),
                 'pawapay' => $this->startPawaPayCollection($transaction, $package, $normalizedPhone),
                 'iotec' => $this->startIotecCollection($transaction, $package, $normalizedPhone, $customerName),
             };
@@ -78,6 +79,9 @@ class PaymentGatewayService
                 'provider_submission' => $result['accepted'] ? 'submitted' : ($result['rejected'] ? 'failed' : 'unknown'),
                 'provider_transaction_id' => $result['provider_transaction_id'] ?? null,
             ]);
+            if (is_bool($result['prompt_sent'] ?? null)) {
+                $meta['provider_prompt_sent'] = $result['prompt_sent'];
+            }
             $attributes = ['meta' => $meta];
             if (is_string($result['provider_reference'] ?? null)) {
                 $attributes['provider_reference'] = $result['provider_reference'];
@@ -88,7 +92,13 @@ class PaymentGatewayService
             $this->updatePending($transaction, $attributes);
 
             if ($result['rejected']) {
-                return ['status' => 'failed', 'error' => 'The payment provider rejected the request.'];
+                return [
+                    'status' => 'failed',
+                    'error' => $result['error'] ?? 'The payment provider rejected the request.',
+                ];
+            }
+            if (is_string($result['redirect_url'] ?? null)) {
+                return ['status' => 'redirect', 'redirect_url' => $result['redirect_url']];
             }
 
             return ['status' => 'pending'];
@@ -187,6 +197,7 @@ class PaymentGatewayService
         string $phone,
         string $name,
         ?string $email,
+        ?string $returnUrl,
     ): array {
         $response = $this->obpay->collect(
             $transaction->reference,
@@ -194,18 +205,41 @@ class PaymentGatewayService
             $phone,
             $name,
             $email,
-            route('api.webhooks.obpay'),
+            $this->obpay->callbackUrl(),
+            $this->isHttpsUrl($returnUrl) ? $returnUrl : null,
         );
         $data = $response['data'] ?? [];
         $accepted = ($response['success'] ?? false) === true
             && ($data['reference'] ?? null) === $transaction->reference
             && strtolower((string) ($data['status'] ?? '')) === 'pending';
+        $promptSent = is_bool($data['prompt_sent'] ?? null) ? $data['prompt_sent'] : null;
+        $redirectUrl = $promptSent === false && $this->isHttpsUrl($data['checkout_url'] ?? null)
+            ? $data['checkout_url']
+            : null;
 
         return [
             'accepted' => $accepted,
             'rejected' => ! $accepted,
             'provider_transaction_id' => $data['reference'] ?? null,
+            'prompt_sent' => $promptSent,
+            'redirect_url' => $redirectUrl,
+            'error' => is_string($response['error'] ?? null) && trim($response['error']) !== ''
+                ? Str::limit(trim($response['error']), 200)
+                : null,
         ];
+    }
+
+    private function isHttpsUrl(mixed $value): bool
+    {
+        if (! is_string($value) || filter_var($value, FILTER_VALIDATE_URL) === false) {
+            return false;
+        }
+        $parts = parse_url($value);
+
+        return is_array($parts)
+            && strtolower((string) ($parts['scheme'] ?? '')) === 'https'
+            && ! isset($parts['user'])
+            && ! isset($parts['pass']);
     }
 
     private function startPawaPayCollection(Transaction $transaction, Package $package, string $phone): array

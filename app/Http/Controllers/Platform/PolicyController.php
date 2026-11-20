@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\PolicySetting;
 use App\Services\Policy\Policy;
 use App\Services\Policy\PolicyDefinitions;
+use App\Services\Policy\PolicyRiskChecker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,6 +25,15 @@ class PolicyController extends Controller
             ->limit(100)
             ->get();
         $definitions = PolicyDefinitions::all();
+        $storedPolicies = $policies->keyBy('key');
+        $policyValues = [];
+        foreach ($definitions as $key => $definition) {
+            $policyValues[$key] = $storedPolicies->has($key)
+                ? $storedPolicies->get($key)->value
+                : ($definition['default'] ?? null);
+        }
+        $riskChecks = app(PolicyRiskChecker::class)->evaluate($policyValues);
+        $riskCount = collect($riskChecks)->where('active', true)->count();
         $defaults = array_map(fn ($field) => $field['default'], $definitions);
         foreach ($catalog['lifecycle']['states'] as $state => $label) {
             foreach (array_keys($catalog['lifecycle']['actions']) as $index => $action) {
@@ -34,7 +44,7 @@ class PolicyController extends Controller
             }
         }
 
-        return view('platform.configuration.policy-center', compact('catalog', 'policies', 'history', 'defaults', 'definitions'));
+        return view('platform.configuration.policy-center', compact('catalog', 'policies', 'history', 'defaults', 'definitions', 'riskChecks', 'riskCount'));
     }
 
     public function updateAll(Request $request)

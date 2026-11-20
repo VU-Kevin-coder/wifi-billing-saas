@@ -106,6 +106,7 @@ class PlatformRevenueControllerTest extends TestCase
     {
         $tx = $this->withdrawal();
         $operatorAdmin = $this->operatorAdmin();
+        config(['services.obpay.callback_url' => 'https://billing.example.test/api/webhooks/obpay']);
 
         Http::fake([
             self::API_URL.'/payouts' => Http::response([
@@ -130,6 +131,8 @@ class PlatformRevenueControllerTest extends TestCase
             ])
             ->assertSessionHasNoErrors();
 
+        Http::assertSent(fn (\Illuminate\Http\Client\Request $request): bool => $request->url() === self::API_URL.'/payouts'
+            && $request['callback_url'] === 'https://billing.example.test/api/webhooks/obpay');
         $this->assertSame('completed', Transaction::withoutTenancy()->find($tx->id)->status);
         Notification::assertSentTo($operatorAdmin, WithdrawalApproved::class);
     }

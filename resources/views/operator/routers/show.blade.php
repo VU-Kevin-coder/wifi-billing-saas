@@ -9,7 +9,62 @@
 
     <div class="min-h-screen bg-gray-50 py-8">
         <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8"
-             x-data="{ testing: false, testResult: null, requestingTelemetry: false, telemetryResult: null }">
+             x-data="{
+                 testing: false,
+                 testResult: null,
+                 requestingTelemetry: false,
+                 telemetryResult: null,
+                 discoveringIdentity: false,
+                 enrollingIdentity: false,
+                 identityResult: null,
+                 async discoverIdentity() {
+                     this.discoveringIdentity = true;
+                     this.identityResult = null;
+                     try {
+                         const data = await window.apiFetch('{{ route('operator.routers.identity.discover', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                             method: 'POST',
+                             feedback: false,
+                         });
+                         this.identityResult = data;
+                         window.toast[data.ok ? 'success' : 'error'](data.message);
+                     } catch (error) {
+                         this.identityResult = { ok: false, message: error.message || 'Read-only identity discovery failed.' };
+                         window.toast.error(this.identityResult.message);
+                     } finally {
+                         this.discoveringIdentity = false;
+                     }
+                 },
+                 async enrollIdentity() {
+                     if (!this.identityResult?.identity) {
+                         window.toast.error('Discover the router identity before enrollment.');
+                         return;
+                     }
+                     if (!window.confirm('Enroll this exact router model and serial/system ID? Enrollment is permanent and cannot be replaced here.')) {
+                         return;
+                     }
+                     this.enrollingIdentity = true;
+                     try {
+                         const data = await window.apiFetch('{{ route('operator.routers.identity.enroll', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                             method: 'POST',
+                             feedback: false,
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ confirm_identity_enrollment: '1' }),
+                         });
+                         this.identityResult = data;
+                         if (data.ok) {
+                             window.toast.success(data.message);
+                             window.location.reload();
+                         } else {
+                             window.toast.error(data.message);
+                         }
+                     } catch (error) {
+                         this.identityResult = { ok: false, message: error.message || 'Identity enrollment failed.' };
+                         window.toast.error(this.identityResult.message);
+                     } finally {
+                         this.enrollingIdentity = false;
+                     }
+                 }
+             }">
             @if(session('status'))
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
                     {{ session('status') }}
@@ -87,6 +142,107 @@
                 </div>
             @endif
 
+            <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                    <div>
+                        <h2 class="text-base font-bold text-gray-900">Router identity lock</h2>
+                        <p class="mt-1 text-sm text-gray-500">
+                            Read-only discovery verifies the RouterOS model and serial/system ID over API-SSL. No router configuration is changed.
+                        </p>
+                    </div>
+                    @if($router->identity_verified_at)
+                        <span class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                            Enrolled {{ $router->identity_verified_at->diffForHumans() }}
+                        </span>
+                    @else
+                        <span class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                            Enrollment required
+                        </span>
+                    @endif
+                </div>
+
+                <dl class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div class="rounded-lg border border-gray-200 p-3">
+                        <dt class="text-xs font-medium text-gray-500">Enrolled model</dt>
+                        <dd class="mt-1 break-all font-mono text-sm font-semibold text-gray-900">{{ $router->identity_verified_at ? $router->hardware_model : 'Not enrolled' }}</dd>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 p-3">
+                        <dt class="text-xs font-medium text-gray-500">Enrolled serial / system ID</dt>
+                        <dd class="mt-1 break-all font-mono text-sm font-semibold text-gray-900">{{ $router->identity_verified_at ? $router->serial_number : 'Not enrolled' }}</dd>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 p-3">
+                        <dt class="text-xs font-medium text-gray-500">Write authorization</dt>
+                        <dd class="mt-1 text-sm font-semibold {{ $router->identity_verified_at ? 'text-emerald-700' : 'text-amber-700' }}">
+                            {{ $router->identity_verified_at ? 'Identity locked' : 'Blocked until enrollment' }}
+                        </dd>
+                    </div>
+                </dl>
+
+                <div x-cloak x-show="identityResult" role="status" aria-live="polite"
+                     :class="identityResult && identityResult.ok ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-red-200 bg-red-50 text-red-800'"
+                     class="mt-4 rounded-lg border p-4 text-sm">
+                    <p x-text="identityResult ? identityResult.message : ''"></p>
+                    <dl x-show="identityResult && identityResult.identity" class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div>
+                            <dt class="text-xs font-medium">Detected model</dt>
+                            <dd class="mt-1 break-all font-mono text-sm" x-text="identityResult?.identity?.hardware_model || 'Unavailable'"></dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-medium">Detected serial / system ID</dt>
+                            <dd class="mt-1 break-all font-mono text-sm" x-text="identityResult?.identity?.serial_number || 'Unavailable'"></dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <button type="button"
+                            @click="discoverIdentity()"
+                            :disabled="discoveringIdentity"
+                            class="inline-flex items-center justify-center rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">
+                        <span x-text="discoveringIdentity ? 'Discovering...' : 'Discover identity (read-only)'">Discover identity (read-only)</span>
+                    </button>
+                    <button type="button"
+                            x-show="identityResult?.ok && identityResult?.identity && {{ $router->identity_verified_at ? 'false' : 'true' }}"
+                            @click="enrollIdentity()"
+                            :disabled="enrollingIdentity"
+                            class="inline-flex items-center justify-center rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:cursor-wait disabled:opacity-60">
+                        <span x-text="enrollingIdentity ? 'Enrolling...' : 'Enroll discovered identity'">Enroll discovered identity</span>
+                    </button>
+                </div>
+            </section>
+
+            @if($router->pending_radius_activation)
+                <section class="rounded-xl border {{ $router->radius_activation_paused_at ? 'border-red-200 bg-red-50 text-red-900' : 'border-indigo-200 bg-indigo-50 text-indigo-900' }} p-6 text-sm" role="status">
+                    <h2 class="text-base font-bold">
+                        {{ $router->radius_activation_paused_at ? 'RADIUS activation paused' : 'Connected (Awaiting first customer)' }}
+                    </h2>
+                    @if($router->radius_activation_paused_at)
+                        <p class="mt-2">Three consecutive Access-Reject events paused activation. The existing access backend remains active; review the RADIUS configuration before retrying.</p>
+                    @else
+                        <p class="mt-2">The current access backend remains active until FreeRADIUS reports a genuine Access-Accept from this router.</p>
+                        <p class="mt-2">
+                            Readiness:
+                            <strong>{{ match($router->radius_readiness_status) {
+                                'ready' => 'ready',
+                                'blocked' => 'blocked; check the RADIUS services and router configuration',
+                                default => 'checking',
+                            } }}</strong>
+                            @if($router->radius_access_reject_streak > 0)
+                                — {{ $router->radius_access_reject_streak }} consecutive Access-Reject event(s)
+                            @endif
+                        </p>
+                        @if($router->radius_readiness_status === 'blocked')
+                            <form method="POST" action="{{ route('operator.routers.radius-readiness', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="mt-4">
+                                @csrf
+                                <button type="submit" class="inline-flex items-center rounded-lg border border-indigo-300 bg-white px-4 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100">
+                                    Retry readiness check
+                                </button>
+                            </form>
+                        @endif
+                    @endif
+                </section>
+            @endif
+
             @if(!\App\Services\RadiusReadiness::available() && ($canProvisionRadius || $router->access_backend === 'radius'))
                 <section class="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900" role="status">
                     <h2 class="text-base font-bold">RADIUS access unavailable</h2>
@@ -95,11 +251,11 @@
                         <p class="mt-2">This router is already configured for RADIUS. Its RADIUS access is unavailable; recovery requires an explicit operator action.</p>
                     @endif
                 </section>
-            @elseif($canProvisionRadius)
+            @elseif($canProvisionRadius && !$router->pending_radius_activation)
                 <section class="rounded-xl border border-indigo-200 bg-white p-6 shadow-sm">
                     <h2 class="text-base font-bold text-gray-900">RADIUS access for this router</h2>
                     <p class="mt-2 text-sm text-gray-600">
-                        RADIUS is an explicit per-router choice. Continuing switches only this router from its current access backend and generates a new router-specific secret. Existing site-agent routers and their behavior are unchanged.
+                        RADIUS is an explicit per-router choice. This action switches only this router from its current access backend and generates a router-specific secret. Existing site-agent routers and their behavior are unchanged.
                     </p>
                     @if($errors->has('nas_identifier') || $errors->has('confirm_radius_mode'))
                         <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">

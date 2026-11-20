@@ -12,7 +12,7 @@ class ReconcilePendingPaymentsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_reconciles_old_pending_mobile_money_transactions(): void
+    public function test_it_reconciles_old_pending_gateway_transactions(): void
     {
         $transaction = $this->createPendingTransaction();
         $this->mock(PaymentService::class, function ($mock) use ($transaction): void {
@@ -53,7 +53,7 @@ class ReconcilePendingPaymentsTest extends TestCase
             'status' => 'pending',
             'reference' => 'RECONCILE-001',
             'provider_reference' => 'provider-001',
-            'meta' => ['payment_provider' => 'MTN'],
+            'meta' => ['payment_provider' => 'obpay'],
         ]);
         $transaction->forceFill(['created_at' => now()->subMinutes(6)])->save();
 

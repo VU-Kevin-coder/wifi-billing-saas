@@ -38,6 +38,13 @@ class Router extends Model
         'hotspot_config',
         'pppoe_config',
         'ethernet_ports',
+        'identity_verified_at',
+        'enrolled',
+        'pending_radius_activation',
+        'radius_access_reject_streak',
+        'radius_activation_paused_at',
+        'radius_readiness_status',
+        'radius_readiness_checked_at',
     ];
 
     protected $casts = [
@@ -45,6 +52,12 @@ class Router extends Model
         'radius_shared_secret' => 'encrypted',
         'last_seen_at' => 'datetime',
         'telemetry_at' => 'datetime',
+        'identity_verified_at' => 'datetime',
+        'enrolled' => 'boolean',
+        'pending_radius_activation' => 'boolean',
+        'radius_access_reject_streak' => 'integer',
+        'radius_activation_paused_at' => 'datetime',
+        'radius_readiness_checked_at' => 'datetime',
         'has_wireless' => 'boolean',
         'enable_hotspot' => 'boolean',
         'enable_pppoe' => 'boolean',
@@ -93,7 +106,7 @@ class Router extends Model
      */
     public function hasUsableRadiusConfiguration(): bool
     {
-        if ($this->access_backend !== 'radius'
+        if (($this->access_backend !== 'radius' && ! $this->pending_radius_activation)
             || ! is_string($this->radius_nas_identifier)
             || trim($this->radius_nas_identifier) === '') {
             return false;

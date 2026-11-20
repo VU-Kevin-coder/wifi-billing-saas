@@ -14,6 +14,7 @@ use App\Models\VoucherBatch;
 use App\Observers\ActivityNotificationObserver;
 use App\Services\PlatformMailService;
 use App\Services\Policy\Policy;
+use App\Services\SystemHealthService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
@@ -22,10 +23,12 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\Looping;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -63,6 +66,15 @@ class AppServiceProvider extends ServiceProvider
         $this->registerAuthAuditing();
         $this->registerRateLimiters();
         $this->registerActivityNotifications();
+        Queue::looping(function (Looping $event): void {
+            try {
+                app(SystemHealthService::class)->recordQueueWorkerHeartbeat();
+            } catch (\Throwable $exception) {
+                Log::warning('Unable to write the queue worker heartbeat.', [
+                    'exception' => $exception::class,
+                ]);
+            }
+        });
 
         ResetPassword::createUrlUsing(function ($user, string $token) {
             return url(route('password.reset', [

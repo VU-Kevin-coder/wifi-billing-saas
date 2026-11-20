@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessObPayWebhook;
 use App\Models\Transaction;
 use App\Services\Payments\IotecGateway;
 use App\Services\Payments\ObPayGateway;
@@ -16,8 +17,6 @@ class PaymentGatewayWebhookController extends Controller
     public function obpay(
         Request $request,
         ObPayGateway $obpay,
-        PaymentGatewayService $payments,
-        PaymentPayoutService $payouts,
     ): JsonResponse {
         if (! $obpay->verifyWebhook($request->getContent(), (string) $request->header('X-ObPay-Signature'))) {
             return response()->json(['status' => 'unauthorized'], 401);
@@ -29,15 +28,22 @@ class PaymentGatewayWebhookController extends Controller
             return response()->json(['status' => 'invalid_payload'], 400);
         }
 
-        if (str_starts_with($event, 'collection.')) {
-            $result = $payments->reconcileCollectionWebhook('obpay', $payload);
-        } elseif (str_starts_with($event, 'payout.')) {
-            $result = $payouts->handleWebhook('obpay', $payload);
-        } else {
+        if (! in_array($event, [
+            'collection.success',
+            'collection.failed',
+            'payout.success',
+            'payout.failed',
+        ], true)) {
             return response()->json(['status' => 'ignored']);
         }
 
-        return $this->response($result);
+        if (config('queue.default') === 'sync') {
+            ProcessObPayWebhook::dispatchAfterResponse($payload);
+        } else {
+            ProcessObPayWebhook::dispatch($payload);
+        }
+
+        return response()->json(['status' => 'accepted']);
     }
 
     public function pawapay(

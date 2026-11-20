@@ -49,6 +49,23 @@ class SystemHealthTest extends TestCase
             ->assertJsonPath('checks.scheduler', 'unhealthy');
     }
 
+    public function test_queue_health_requires_a_recent_worker_heartbeat(): void
+    {
+        config(['queue.default' => 'redis']);
+        Cache::put('system-health:scheduler-heartbeat', now()->timestamp, 300);
+        Cache::put('system-health:queue-worker-heartbeat', now()->timestamp, 300);
+
+        $this->getJson('/health/ready')
+            ->assertOk()
+            ->assertJsonPath('checks.queue', 'healthy');
+
+        Cache::put('system-health:queue-worker-heartbeat', now()->subMinutes(5)->timestamp, 300);
+
+        $this->getJson('/health/ready')
+            ->assertStatus(503)
+            ->assertJsonPath('checks.queue', 'unhealthy');
+    }
+
     public function test_health_transition_emails_active_platform_admins_and_configured_recipients(): void
     {
         config(['queue.default' => 'database']);
@@ -74,6 +91,6 @@ class SystemHealthTest extends TestCase
 
         $this->getJson('/health/ready')
             ->assertStatus(503)
-            ->assertJsonPath('checks.queue', 'unverified');
+            ->assertJsonPath('checks.queue', 'unhealthy');
     }
 }

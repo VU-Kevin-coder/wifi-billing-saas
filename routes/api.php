@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentGatewayWebhookController;
 use App\Http\Controllers\Api\RouterOnboardingBootstrapController;
+use App\Http\Controllers\Api\RouterProvisioningController;
 use App\Http\Controllers\Api\SiteAgentController;
 use App\Http\Controllers\PortalController;
 use Illuminate\Support\Facades\Route;
@@ -14,6 +15,13 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::middleware('throttle:public-api')->group(function () {
+
+    Route::get('/provision/bootstrap', [RouterProvisioningController::class, 'bootstrap'])
+        ->middleware('throttle:10,1')
+        ->name('api.provision.bootstrap');
+    Route::post('/provision/enroll', [RouterProvisioningController::class, 'enroll'])
+        ->middleware('throttle:10,1')
+        ->name('api.provision.enroll');
 
     Route::post('/router-onboarding/bootstrap', RouterOnboardingBootstrapController::class)
         ->middleware('throttle:10,1')

@@ -13,32 +13,30 @@
     @endphp
 
     <style>
-        .control-page{--bg:#f5f7f8;--surface:#fff;--surface2:#eef2f4;--line:#dde3e7;--line2:#c5cdd3;--fg:#16202a;--fg2:#4a5966;--fg3:#73818d;--accent:#0b6e8a;--accent-soft:#dcf0f6;--ok:#17794a;--warn:#9a5b00;--bad:#b42318;background:var(--bg);color:var(--fg);min-height:calc(100vh - 64px);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+        .control-page{--bg:var(--app-page-bg);--surface:var(--app-surface);--surface2:var(--app-surface-subtle);--line:var(--app-border);--line2:var(--app-border-strong);--fg:var(--app-text-primary);--fg2:var(--app-text-secondary);--fg3:var(--app-text-muted);--accent:var(--app-accent);--accent-soft:var(--app-accent-subtle);--ok:var(--app-success-text);--warn:var(--app-warning-text);--bad:var(--app-danger-text);background:var(--bg);color:var(--fg);min-height:calc(100vh - 64px);font:inherit}
         .control-page *{box-sizing:border-box}.control-page button,.control-page input,.control-page select,.control-page textarea{font:inherit;color:inherit}.control-page a{color:var(--accent)}
         .control-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px max(16px,calc((100vw - 1280px)/2));border-bottom:1px solid var(--line);background:var(--surface)}
         .control-brand{font-weight:700;white-space:nowrap}.control-brand span{color:var(--fg3);font-weight:500}.control-search{position:relative;flex:1 1 260px;max-width:440px}.control-search input{width:100%;padding:8px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}
         .control-wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:28px;padding:22px 18px 128px;max-width:1280px;margin:auto}
         .control-nav{position:sticky;top:82px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;padding-right:4px}.control-nav h6{margin:16px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg3);font-weight:600}.control-nav h6:first-child{margin-top:0}
         .control-nav a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:8px;color:var(--fg2);text-decoration:none;font-weight:500}.control-nav a:hover{background:var(--surface2)}.control-nav a.active{background:var(--accent-soft);color:var(--accent)}
-        .control-dot,.control-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}.control-tag{background:#fdf0d5;color:var(--warn)}
+        .control-dot,.control-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}.control-tag{background:var(--app-warning-bg);color:var(--warn)}
         .control-content{min-width:0}.control-head{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px}.control-head h1{font-size:22px;margin:0 0 4px;letter-spacing:-.02em}.control-head p{margin:0;color:var(--fg2);max-width:72ch}
         .control-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;box-shadow:0 1px 2px #1020300f,0 6px 20px #1020300f;overflow:hidden}
         .control-card>header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.control-card>header h2{margin:0;font-size:15px}.control-card>header p{margin:2px 0 0;color:var(--fg3);font-size:12px}
         .control-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,320px);gap:10px 28px;padding:14px 18px;border-top:1px solid var(--line);align-items:start}.control-card>header+.control-row{border-top:0}.control-row.changed{background:linear-gradient(90deg,var(--accent-soft),transparent 40%)}
         .control-label{font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.control-help{color:var(--fg2);font-size:12px;margin-top:3px;max-width:65ch}.control-key{font:11px ui-monospace,Menlo,Consolas,monospace;color:var(--fg3);background:var(--surface2);border-radius:5px;padding:1px 6px;font-weight:400}
-        .control-live,.control-env{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;background:#dff3e8;color:var(--ok)}.control-env{background:#fdf0d5;color:var(--warn)}.control-planned{background:#fdf0d5;color:var(--warn)}
+        .control-live,.control-env{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;background:var(--app-success-bg);color:var(--ok)}.control-env,.control-planned{background:var(--app-warning-bg);color:var(--warn)}
         .control-input{width:100%;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}.control-input:focus{outline:2px solid var(--accent);outline-offset:1px}.control-textarea{min-height:76px;resize:vertical;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace}
         .control-unit{display:flex;align-items:center;gap:8px}.control-unit span{color:var(--fg3);font-size:12px;white-space:nowrap}
         .control-toggle{display:flex;gap:10px;align-items:center}.control-toggle input{width:18px;height:18px;accent-color:var(--accent)}.control-toggle small{color:var(--fg3)}
-        .control-actions{display:flex;gap:8px;flex-wrap:wrap}.control-btn{border:1px solid var(--line2);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;text-decoration:none}.control-btn:hover{background:var(--surface2)}.control-btn.primary{background:var(--accent);border-color:var(--accent);color:white}.control-btn.danger{border-color:var(--bad);color:var(--bad)}.control-btn:disabled{opacity:.5;cursor:not-allowed}
-        .control-banner{padding:11px 14px;border-radius:10px;margin-bottom:16px;background:var(--accent-soft)}.control-banner.warn{background:#fdf0d5}.control-banner.bad{background:#fde4e1}.control-note{padding:12px 18px;color:var(--fg2);background:var(--surface2);border-radius:0 0 12px 12px}
+        .control-actions{display:flex;gap:8px;flex-wrap:wrap}.control-btn{border:1px solid var(--line2);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;text-decoration:none}.control-btn:hover{background:var(--surface2)}.control-btn.primary{background:var(--app-accent-strong);border-color:var(--app-accent-strong);color:white}.control-btn.danger{border-color:var(--bad);color:var(--bad)}.control-btn:disabled{opacity:.5;cursor:not-allowed}
+        .control-banner{padding:11px 14px;border-radius:10px;margin-bottom:16px;background:var(--accent-soft)}.control-banner.warn{background:var(--app-warning-bg);color:var(--warn)}.control-banner.bad{background:var(--app-danger-bg);color:var(--bad)}.control-note{padding:12px 18px;color:var(--fg2);background:var(--surface2);border-radius:0 0 12px 12px}
         .control-table-wrap{overflow:auto} .control-table{border-collapse:collapse;width:100%;min-width:560px}.control-table th,.control-table td{text-align:left;padding:10px 14px;border-top:1px solid var(--line);vertical-align:middle}.control-table th{border-top:0;color:var(--fg3);font-size:10px;text-transform:uppercase;letter-spacing:.06em}.control-table input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent)}
-        .control-status{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;background:#dff3e8;color:var(--ok)}.control-status.warn{background:#fdf0d5;color:var(--warn)}.control-status.bad{background:#fde4e1;color:var(--bad)}.control-empty{padding:28px 18px;text-align:center;color:var(--fg3)}
+        .control-status{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;background:var(--app-success-bg);color:var(--ok)}.control-status.warn{background:var(--app-warning-bg);color:var(--warn)}.control-status.bad{background:var(--app-danger-bg);color:var(--bad)}.control-empty{padding:28px 18px;text-align:center;color:var(--fg3)}
         .control-danger-row{padding:14px 18px;border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,300px);gap:10px 20px;align-items:center}.control-danger-row form{display:flex;gap:6px;flex-wrap:wrap}
         .control-savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border-top:1px solid var(--line2);box-shadow:0 -8px 24px #0002}.control-savebar.show{display:flex}.control-savebar input{width:min(420px,100%);padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg)}
         @media(max-width:900px){.control-wrap{grid-template-columns:minmax(0,1fr);gap:14px}.control-nav{position:static;max-height:none;display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}.control-nav h6{display:none}.control-nav a{white-space:nowrap;border:1px solid var(--line);background:var(--surface)}.control-row,.control-danger-row{grid-template-columns:minmax(0,1fr)}}
-        @media(prefers-color-scheme:dark){html:not([data-app-theme=light]):not([data-app-theme=dark]) .control-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}}
-        html[data-app-theme=dark] .control-page{--bg:#0f161b;--surface:#161f26;--surface2:#1d2830;--line:#26333c;--line2:#364652;--fg:#e6edf1;--fg2:#a7b4be;--fg3:#7d8b96;--accent:#4fb8d6;--accent-soft:#12323d}
     </style>
 
     <div class="control-page" id="controlPage">
@@ -110,7 +108,13 @@
                         @method('PUT')
                         <input type="hidden" name="section" value="{{ $activeSection['id'] }}">
                         @foreach($fieldGroups as $groupName => $groupFields)
-                            <section class="control-card" data-group>
+                            @php
+                                $gatewayGroup = $activeSection['id'] === 'payments'
+                                    ? ['OBPay' => 'obpay', 'PawaPay' => 'pawapay', 'ioTec' => 'iotec'][$groupName] ?? null
+                                    : null;
+                            @endphp
+                            <section class="control-card" data-group
+                                @if($gatewayGroup !== null) data-payment-gateway-group="{{ $gatewayGroup }}" @if(($settings['payment.active_gateway'] ?? '') !== $gatewayGroup) hidden @endif @endif>
                                 <header><div><h2>{{ $groupName }}</h2></div></header>
                                 @foreach($groupFields as $key => $field)
                                     @php
@@ -118,8 +122,16 @@
                                         $isPolicy = in_array($field['type'], ['policy','policy_select'], true);
                                         $fieldName = $isPolicy ? "policies[$key]" : "settings[$key]";
                                         $searchText = strtolower($field['label'].' '.$key.' '.($field['help'] ?? '').' '.($field['env'] ?? ''));
+                                        $gatewayRequired = isset($field['required_when'])
+                                            && ($settings['payment.active_gateway'] ?? '') === $field['required_when']
+                                            && ($field['type'] !== 'secret' || ! $value);
                                     @endphp
-                                    <div class="control-row" data-setting-row data-search="{{ $searchText }}">
+                                    <div class="control-row" data-setting-row data-search="{{ $searchText }}"
+                                        @if(isset($field['required_when']))
+                                            data-required-when="{{ $field['required_when'] }}"
+                                            data-required-secret="{{ $field['type'] === 'secret' ? 'true' : 'false' }}"
+                                            data-required-configured="{{ $field['type'] === 'secret' && $value ? 'true' : 'false' }}"
+                                        @endif>
                                         <div>
                                             <div class="control-label">
                                                 {{ $field['label'] }}
@@ -143,7 +155,7 @@
                                                     <small>{{ $value ? 'On' : 'Off' }}</small>
                                                 </div>
                                             @elseif($field['type'] === 'select' || $field['type'] === 'policy_select')
-                                                <select class="control-input" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" aria-label="{{ $field['label'] }}">
+                                                <select class="control-input" data-setting-input data-reset-default="{{ $field['default'] }}" name="{{ $fieldName }}" aria-label="{{ $field['label'] }}" @if($key === 'payment.active_gateway') data-payment-gateway-selector @endif>
                                                     @foreach($field['options'] as $option)
                                                         <option value="{{ $option }}" @selected((string) $value === (string) $option)>{{ $field['option_labels'][$option] ?? $option }}</option>
                                                     @endforeach
@@ -158,11 +170,11 @@
                                             @elseif($field['type'] === 'textarea')
                                                 <textarea class="control-input control-textarea" data-setting-input data-reset-default="{{ $field['default'] ?? '' }}" name="{{ $fieldName }}" aria-label="{{ $field['label'] }}">{{ $value }}</textarea>
                                             @elseif($field['type'] === 'secret')
-                                                <input class="control-input" type="password" data-setting-input name="{{ $fieldName }}" value="" autocomplete="new-password" placeholder="{{ $key === 'sms.api_key' ? ($value ? 'Stored — see SMS status' : 'Not set') : ($value ? 'Saved — type to replace' : 'Not set') }}" aria-label="{{ $field['label'] }}">
+                                                <input class="control-input" type="password" data-setting-input name="{{ $fieldName }}" value="" autocomplete="new-password" placeholder="{{ $key === 'sms.api_key' ? ($value ? 'Stored — see SMS status' : 'Not set') : ($value ? 'Saved — type to replace' : 'Not set') }}" aria-label="{{ $field['label'] }}" @if($gatewayRequired) required @endif>
                                             @elseif($field['type'] === 'readonly')
                                                 <input class="control-input" type="text" value="{{ $value }}" readonly aria-label="{{ $field['label'] }}">
                                             @else
-                                                <input class="control-input" type="{{ $field['type'] }}" data-setting-input data-reset-default="{{ $field['default'] ?? '' }}" name="{{ $fieldName }}" value="{{ $value }}" @isset($field['max']) maxlength="{{ $field['max'] }}" @endisset aria-label="{{ $field['label'] }}">
+                                                <input class="control-input" type="{{ $field['type'] }}" data-setting-input data-reset-default="{{ $field['default'] ?? '' }}" name="{{ $fieldName }}" value="{{ $value }}" @isset($field['max']) maxlength="{{ $field['max'] }}" @endisset @isset($field['pattern']) pattern="{{ $field['pattern'] }}" title="Use a public HTTPS URL." @endisset aria-label="{{ $field['label'] }}" @if($gatewayRequired) required @endif>
                                             @endif
                                         </div>
                                     </div>
@@ -288,9 +300,20 @@
             const reason = document.getElementById('auditReason');
             let dirty = false;
             let submission = null;
+            let resettingSection = false;
             const controls = form ? [...form.querySelectorAll('[data-setting-input]')] : [];
+            const gatewaySelector = form?.querySelector('[data-payment-gateway-selector]');
+            const gatewayGroups = form ? [...form.querySelectorAll('[data-payment-gateway-group]')] : [];
+            let selectedGateway = gatewaySelector?.value ?? '';
             const valueOf = control => control.type === 'checkbox' ? (control.checked ? '1' : '0') : control.value;
             controls.forEach(control => { control.dataset.initialValue = valueOf(control); });
+            const restoreControl = control => {
+                if (control.type === 'checkbox') {
+                    control.checked = control.dataset.initialValue === '1';
+                } else {
+                    control.value = control.dataset.initialValue;
+                }
+            };
             // Remove drafts from the former implementation without reading their contents.
             // Storage may be blocked, so this cleanup is best-effort.
             try {
@@ -307,7 +330,57 @@
                 bar.classList.toggle('show', dirty);
                 save.disabled = !!submission || form?.dataset.uiSubmitting === 'true' || form?.dataset.uiSaveUncertain === 'true' || !dirty || reason.value.trim().length < 5;
             };
+            const applySearch = () => {
+                const query = search.value.trim().toLowerCase();
+                document.querySelectorAll('[data-setting-row]').forEach(row => {
+                    row.hidden = query !== '' && !row.dataset.search.includes(query);
+                });
+                document.querySelectorAll('[data-group]').forEach(group => {
+                    const inactiveGateway = group.hasAttribute('data-payment-gateway-group')
+                        && group.dataset.paymentGatewayGroup !== (gatewaySelector?.value ?? '');
+                    const noSearchResults = query !== '' && !group.querySelector('[data-setting-row]:not([hidden])');
+                    group.hidden = inactiveGateway || noSearchResults;
+                });
+            };
+            const syncGatewayFields = () => {
+                const activeGateway = gatewaySelector?.value ?? '';
+                gatewayGroups.forEach(group => {
+                    const active = group.dataset.paymentGatewayGroup === activeGateway;
+                    group.hidden = !active;
+                    group.querySelectorAll('[data-setting-input]').forEach(control => {
+                        control.disabled = !active;
+                    });
+                });
+                form?.querySelectorAll('[data-required-when]').forEach(row => {
+                    const control = row.querySelector('[data-setting-input]');
+                    if (!control) return;
+                    const configuredSecret = row.dataset.requiredSecret === 'true'
+                        && row.dataset.requiredConfigured === 'true';
+                    control.required = row.dataset.requiredWhen === activeGateway && !configuredSecret;
+                });
+                applySearch();
+            };
             if (form) {
+                gatewaySelector?.addEventListener('change', () => {
+                    const nextGateway = gatewaySelector.value;
+                    const previousGroup = gatewayGroups.find(group => group.dataset.paymentGatewayGroup === selectedGateway);
+                    const pendingControls = previousGroup
+                        ? [...previousGroup.querySelectorAll('[data-setting-input]')].filter(control => valueOf(control) !== control.dataset.initialValue)
+                        : [];
+                    if (!resettingSection && pendingControls.length > 0) {
+                        const providerName = previousGroup.querySelector('h2')?.textContent.trim() || 'gateway';
+                        if (!window.confirm(`Discard unsaved changes for ${providerName}?`)) {
+                            gatewaySelector.value = selectedGateway;
+                            syncGatewayFields();
+                            updateBar();
+                            return;
+                        }
+                        pendingControls.forEach(restoreControl);
+                    }
+                    selectedGateway = nextGateway;
+                    syncGatewayFields();
+                    updateBar();
+                });
                 form.addEventListener('formdata', event => {
                     const credential = controls.find(control => control.name === 'settings[sms.api_key]');
                     controls.forEach(control => {
@@ -345,7 +418,11 @@
                 form.addEventListener('change', updateBar);
                 document.getElementById('discardChanges').addEventListener('click', () => location.reload());
                 document.getElementById('resetSection')?.addEventListener('click', () => {
+                    const gatewayToReset = gatewaySelector?.value ?? '';
+                    resettingSection = true;
                     controls.forEach(control => {
+                        const group = control.closest('[data-payment-gateway-group]');
+                        if (group && group.dataset.paymentGatewayGroup !== gatewayToReset) return;
                         if (!control.hasAttribute('data-reset-default')) return;
                         if (control.type === 'checkbox') {
                             control.checked = control.dataset.resetDefault === '1';
@@ -355,6 +432,9 @@
                         control.dispatchEvent(new Event('input', { bubbles: true }));
                         control.dispatchEvent(new Event('change', { bubbles: true }));
                     });
+                    resettingSection = false;
+                    syncGatewayFields();
+                    updateBar();
                 });
                 reason.addEventListener('input', updateBar);
                 // A submit does not prove which navigation will unload first; warn on both.
@@ -362,17 +442,10 @@
                     if (!dirty) return;
                     event.preventDefault(); event.returnValue = '';
                 });
+                syncGatewayFields();
                 updateBar();
             }
-            search.addEventListener('input', () => {
-                const query = search.value.trim().toLowerCase();
-                document.querySelectorAll('[data-setting-row]').forEach(row => {
-                    row.hidden = query !== '' && !row.dataset.search.includes(query);
-                });
-                document.querySelectorAll('[data-group]').forEach(group => {
-                    group.hidden = query !== '' && !group.querySelector('[data-setting-row]:not([hidden])');
-                });
-            });
+            search.addEventListener('input', applySearch);
         })();
     </script>
 </x-app-layout>

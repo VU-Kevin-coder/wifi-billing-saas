@@ -29,6 +29,15 @@ services:
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
+      MIKROTIK_HOST: ${MIKROTIK_HOST:-chr.local}
+      MIKROTIK_PORT: ${MIKROTIK_PORT:-8729}
+      MIKROTIK_USERNAME: ${MIKROTIK_USERNAME:-admin}
+      MIKROTIK_PASSWORD: ${MIKROTIK_PASSWORD:-}
+      MIKROTIK_SSL: ${MIKROTIK_SSL:-true}
+      MIKROTIK_SSL_VERIFY: ${MIKROTIK_SSL_VERIFY:-true}
+      MIKROTIK_SSL_CA_CERT: ${MIKROTIK_SSL_CA_CERT:-/var/www/html/storage/app/certs/chr-ca.crt}
+      MIKROTIK_SSL_VERIFY_PEER: ${MIKROTIK_SSL_VERIFY_PEER:-true}
+      MIKROTIK_CA_CERT_PATH: ${MIKROTIK_CA_CERT_PATH:-/var/www/html/storage/app/certs/chr-ca.crt}
       WIREGUARD_ENABLED: ${WIREGUARD_ENABLED:-false}
       WIREGUARD_INTERFACE: ${WIREGUARD_INTERFACE:-wg0}
       WIREGUARD_SERVER_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:-10.8.0.1}
@@ -41,6 +50,9 @@ services:
       RADIUS_POLICY_ALLOWED_SOURCE_CIDRS: ${RADIUS_POLICY_ALLOWED_SOURCE_CIDRS:-}
       RADIUS_POLICY_NONCE_CACHE_STORE: ${RADIUS_POLICY_NONCE_CACHE_STORE:-redis}
       RADIUS_LAB_ACCOUNTING_LOG: ${RADIUS_LAB_ACCOUNTING_LOG:-true}
+      RADIUS_HEALTH_SECRET: ${RADIUS_HEALTH_SECRET:-}
+      RADIUS_HEALTH_HOST: ${RADIUS_HEALTH_HOST:-app}
+      RADIUS_HEALTH_PORT: ${RADIUS_HEALTH_PORT:-18121}
       ROUTER_LAB_PROVISIONING_ENABLED: ${ROUTER_LAB_PROVISIONING_ENABLED:-false}
     cap_add:
       - NET_ADMIN
@@ -86,12 +98,73 @@ services:
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
+      MIKROTIK_SSL: ${MIKROTIK_SSL:-true}
+      MIKROTIK_SSL_VERIFY: ${MIKROTIK_SSL_VERIFY:-true}
+      MIKROTIK_SSL_CA_CERT: ${MIKROTIK_SSL_CA_CERT:-/var/www/html/storage/app/certs/chr-ca.crt}
+      MIKROTIK_SSL_VERIFY_PEER: ${MIKROTIK_SSL_VERIFY_PEER:-true}
+      MIKROTIK_CA_CERT_PATH: ${MIKROTIK_CA_CERT_PATH:-/var/www/html/storage/app/certs/chr-ca.crt}
       RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
       RADIUS_PRODUCTION_ENABLED: ${RADIUS_PRODUCTION_ENABLED:-false}
       RADIUS_LARAVEL_SERVICE_SECRET: ${RADIUS_LARAVEL_SERVICE_SECRET:-}
       RADIUS_POLICY_ALLOWED_SOURCE_CIDRS: ${RADIUS_POLICY_ALLOWED_SOURCE_CIDRS:-}
       RADIUS_POLICY_NONCE_CACHE_STORE: ${RADIUS_POLICY_NONCE_CACHE_STORE:-redis}
       RADIUS_LAB_ACCOUNTING_LOG: ${RADIUS_LAB_ACCOUNTING_LOG:-true}
+      RADIUS_HEALTH_SECRET: ${RADIUS_HEALTH_SECRET:-}
+      RADIUS_HEALTH_HOST: ${RADIUS_HEALTH_HOST:-app}
+      RADIUS_HEALTH_PORT: ${RADIUS_HEALTH_PORT:-18121}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wifi-net
+
+  # ─────────────────────────────────────────────────────────
+  # Laravel Redis queue worker
+  # ─────────────────────────────────────────────────────────
+  queue-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wifi-billing-saas-app:dev
+    container_name: wifi-billing-queue-worker
+    restart: unless-stopped
+    entrypoint: ["php"]
+    command: ["artisan", "queue:work", "redis", "--sleep=3", "--tries=3", "--timeout=90"]
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html:delegated
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-wifi_billing}
+      DB_USERNAME: ${DB_USERNAME:-wifi_app}
+      DB_PASSWORD: ${DB_PASSWORD:-change_me_in_local_env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-local_dev_redis_password_change_me}
+      REDIS_CLIENT: phpredis
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      WIREGUARD_ENABLED: ${WIREGUARD_ENABLED:-false}
+      WIREGUARD_INTERFACE: ${WIREGUARD_INTERFACE:-wg0}
+      WIREGUARD_SERVER_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:-10.8.0.1}
+      WIREGUARD_ENDPOINT: ${WIREGUARD_ENDPOINT:-}
+      WIREGUARD_LISTEN_PORT: ${WIREGUARD_LISTEN_PORT:-51820}
+      WIREGUARD_KEEPALIVE: ${WIREGUARD_KEEPALIVE:-25}
+      RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
+      RADIUS_PRODUCTION_ENABLED: ${RADIUS_PRODUCTION_ENABLED:-false}
+      RADIUS_LARAVEL_SERVICE_SECRET: ${RADIUS_LARAVEL_SERVICE_SECRET:-}
+      RADIUS_POLICY_ALLOWED_SOURCE_CIDRS: ${RADIUS_POLICY_ALLOWED_SOURCE_CIDRS:-}
+      RADIUS_POLICY_NONCE_CACHE_STORE: ${RADIUS_POLICY_NONCE_CACHE_STORE:-redis}
+      RADIUS_LAB_ACCOUNTING_LOG: ${RADIUS_LAB_ACCOUNTING_LOG:-true}
+      RADIUS_HEALTH_SECRET: ${RADIUS_HEALTH_SECRET:-}
+      RADIUS_HEALTH_HOST: ${RADIUS_HEALTH_HOST:-app}
+      RADIUS_HEALTH_PORT: ${RADIUS_HEALTH_PORT:-18121}
     depends_on:
       db:
         condition: service_healthy
@@ -174,13 +247,16 @@ services:
       - "127.0.0.1:8728:8728"   # RouterOS API
       - "127.0.0.1:8729:8729"   # RouterOS API-SSL (ADD THIS)
       - "127.0.0.1:2222:22"     # SSH
+      - "127.0.0.1:8291:8291"  # winbox
     cap_add:
       - NET_ADMIN
     devices:
       - /dev/net/tun
     restart: unless-stopped
     networks:
-      - wifi-net   # <-- THIS IS THE CRUCIAL FIX
+      wifi-net:
+        aliases:
+          - chr.local
 
   radius-policy-bridge:
     profiles:
@@ -223,6 +299,9 @@ services:
       WIREGUARD_INTERFACE: ${WIREGUARD_INTERFACE:-wg0}
       RADIUS_LISTEN_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:-10.8.0.1}
       RADIUS_BRIDGE_TOKEN: ${RADIUS_BRIDGE_TOKEN:-}
+      RADIUS_HEALTH_SECRET: ${RADIUS_HEALTH_SECRET:-}
+      RADIUS_HEALTH_ADDRESS: ${RADIUS_HEALTH_ADDRESS:-0.0.0.0}
+      RADIUS_HEALTH_PORT: ${RADIUS_HEALTH_PORT:-18121}
     depends_on:
       app:
         condition: service_started

@@ -28,9 +28,13 @@
                 </div>
                 @if ($bootstrapCommand)
                     <pre id="bootstrap-command" class="mt-5 overflow-x-auto rounded-lg bg-gray-100 p-4 text-sm text-blue-900">{{ $bootstrapCommand }}</pre>
+                @elseif ($onboarding->status === 'connected')
+                    <p class="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                        The one-line bootstrap completed and the router identity is locked. Continue to service setup when readiness checks pass.
+                    </p>
                 @else
                     <p class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                        This bootstrap command is unavailable or expired. Restart onboarding to generate a fresh one.
+                        This bootstrap command is unavailable or expired. Generate a new enrollment token before retrying.
                     </p>
                 @endif
 

@@ -81,16 +81,23 @@ class WireGuardService
         return $this->deliverRouterConfiguration($peer, null);
     }
 
-    public function onboardingConfiguration(VpnPeer $peer, Router $router): string
+    public function onboardingConfiguration(
+        VpnPeer $peer,
+        Router $router,
+        string $enrollmentToken,
+        string $radiusSecret,
+    ): string
     {
         $this->assertEnabled();
         if ((int) $peer->router_id !== (int) $router->id
             || blank($router->api_username)
-            || blank($router->api_password)) {
+            || blank($router->api_password)
+            || ! preg_match('/^[A-Za-z0-9]{64}$/', $enrollmentToken)
+            || ! preg_match('/^[a-f0-9]{64}$/i', $radiusSecret)) {
             throw new RuntimeException('The router API account must be configured before onboarding.');
         }
 
-        return $this->deliverRouterConfiguration($peer, $router);
+        return $this->deliverRouterConfiguration($peer, $router, $enrollmentToken, $radiusSecret);
     }
 
     public function refreshHandshakes(): void
@@ -170,17 +177,22 @@ class WireGuardService
         return $key;
     }
 
-    private function deliverRouterConfiguration(VpnPeer $peer, ?Router $router): string
+    private function deliverRouterConfiguration(
+        VpnPeer $peer,
+        ?Router $router,
+        ?string $enrollmentToken = null,
+        ?string $radiusSecret = null,
+    ): string
     {
-        return DB::transaction(function () use ($peer, $router): string {
+        return DB::transaction(function () use ($peer, $router, $enrollmentToken, $radiusSecret): string {
             $lockedPeer = VpnPeer::query()->findOrFail($peer->id);
             if (! $lockedPeer->enabled || blank($lockedPeer->private_key) || $lockedPeer->config_downloaded_at) {
                 throw new RuntimeException('This WireGuard configuration is unavailable for download. Generate a new peer if it was already downloaded.');
             }
 
             $configuration = $this->buildRouterConfiguration($lockedPeer);
-            if ($router) {
-                $configuration .= $this->buildApiConfiguration($router);
+            if ($router && $enrollmentToken !== null && $radiusSecret !== null) {
+                $configuration .= $this->buildApiConfiguration($router, $lockedPeer, $enrollmentToken, $radiusSecret);
             }
 
             $updated = VpnPeer::query()
@@ -223,23 +235,49 @@ class WireGuardService
             ':if ([:len [/interface wireguard peers find interface="'.$routerInterface.'" public-key="'.$serverPublicKey.'"]] = 0) do={ /interface wireguard peers add interface="'.$routerInterfaceQuoted.'" public-key="'.$publicKey.'" endpoint-address="'.$endpointHost.'" endpoint-port='.$endpointPort.' allowed-address="'.$serverAddress.'/32" persistent-keepalive='.$keepalive.'s }',
             ':if ([:len [/ip route find dst-address="'.$serverAddress.'/32" gateway="'.$routerInterface.'"]] = 0) do={ /ip route add dst-address="'.$serverAddress.'/32" gateway="'.$routerInterfaceQuoted.'" }',
             '/ip service set api disabled=yes',
-            '/ip service set api-ssl disabled=no port=8729 address="'.$serverAddress.'/32"',
+            '/ip service set api-ssl disabled=yes port=8729 address="'.$serverAddress.'/32"',
             '',
         ]);
     }
 
-    private function buildApiConfiguration(Router $router): string
+    private function buildApiConfiguration(
+        Router $router,
+        VpnPeer $peer,
+        string $enrollmentToken,
+        string $radiusSecret,
+    ): string
     {
         $serverAddress = $this->routerOsQuote($this->serverAddress());
+        $tunnelIp = $this->routerOsQuote($peer->tunnel_ip);
         $username = $this->routerOsQuote((string) $router->api_username);
         $password = $this->routerOsQuote((string) $router->api_password);
+        $token = $this->routerOsQuote($enrollmentToken);
+        $secret = $this->routerOsQuote($radiusSecret);
+        $nasIdentifier = $this->routerOsQuote((string) $router->radius_nas_identifier);
+        $radiusServices = $router->enable_hotspot && $router->enable_pppoe
+            ? 'hotspot,ppp'
+            : ($router->enable_pppoe ? 'ppp' : 'hotspot');
+        $enrollmentUrl = $this->routerOsQuote(
+            rtrim((string) config('app.url'), '/').route('api.provision.enroll', [], false),
+        );
 
         return implode(PHP_EOL, [
             '# Router API is reachable only from the server through the encrypted WireGuard tunnel.',
             ':if ([:len [/user group find name="wifi-billing-api"]] = 0) do={ /user group add name="wifi-billing-api" policy=api,read,write comment="Wi-Fi Billing onboarding" }',
             ':if ([:len [/user find name="'.$username.'"]] = 0) do={ /user add name="'.$username.'" group="wifi-billing-api" password="'.$password.'" comment="Wi-Fi Billing API" } else={ /user set [find name="'.$username.'"] group="wifi-billing-api" password="'.$password.'" }',
-            '/ip service set api-ssl disabled=yes',
-            '/ip service set api port=8728 address="'.$serverAddress.'/32" disabled=no',
+            ':if ([:len [/certificate find name="wifi-billing-api"]] = 0) do={ /certificate add name="wifi-billing-api" common-name="'.$tunnelIp.'" subject-alt-name="IP:'.$tunnelIp.'" key-usage=key-cert-sign,crl-sign,digital-signature,key-encipherment,tls-server; /certificate sign [find name="wifi-billing-api"] name="wifi-billing-api" }',
+            '/ip service set api disabled=yes',
+            '/ip service set api-ssl certificate="wifi-billing-api" port=8729 address="'.$serverAddress.'/32" disabled=no',
+            ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s }',
+            ':if ([:len [/ip hotspot profile find name="prof-billing"]] = 0) do={ /ip hotspot profile add name="prof-billing" use-radius=yes radius-accounting=yes radius-interim-update=1m comment="Wi-Fi Billing managed profile" }',
+            '/certificate export-certificate "wifi-billing-api" type=pem file-name="wifi-billing-api"',
+            ':local apiCertificate [/file get [find name="cert_export_wifi-billing-api.crt"] contents]',
+            ':local routerSerial [/system routerboard get serial-number]',
+            ':if ([:len $routerSerial] = 0) do={ :set routerSerial [/system license get system-id] }',
+            ':local routerModel [/system resource get board-name]',
+            ':local enrollmentData {"token"="'.$token.'";"serial"=$routerSerial;"model"=$routerModel;"api_ca_certificate"=$apiCertificate}',
+            ':local enrollmentBody [:serialize value=$enrollmentData to=json]',
+            '/tool fetch url="'.$enrollmentUrl.'" http-method=post http-data=$enrollmentBody http-header-field="Content-Type: application/json" check-certificate=yes output=none',
             '',
         ]);
     }

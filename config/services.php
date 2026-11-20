@@ -43,6 +43,13 @@ return [
         'environment' => env('FLUTTERWAVE_ENVIRONMENT', 'sandbox'),
     ],
 
+    'obpay' => [
+        'base_url' => env('OBPAY_BASE_URL', 'https://obpay.online/api/public/v1'),
+        'secret_key' => env('OBPAY_SECRET_KEY'),
+        'webhook_secret' => env('OBPAY_WEBHOOK_SECRET'),
+        'callback_url' => env('OBPAY_CALLBACK_URL'),
+    ],
+
     'mikrotik' => [
         'api_port' => (int) env('MIKROTIK_DEFAULT_API_PORT', 8728),
         'api_username' => env('MIKROTIK_DEFAULT_API_USERNAME', 'billing_api'),

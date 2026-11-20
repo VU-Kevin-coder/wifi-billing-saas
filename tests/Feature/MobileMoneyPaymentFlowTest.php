@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ProcessObPayWebhook;
 use App\Models\Package;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
@@ -11,6 +12,7 @@ use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -173,6 +175,123 @@ class MobileMoneyPaymentFlowTest extends TestCase
             && $request['reference'] === $transaction->reference
             && $request['amount'] === 1000
             && $request['callback_url'] === route('api.webhooks.obpay'));
+    }
+
+    public function test_obpay_env_configuration_and_hosted_checkout_are_used(): void
+    {
+        PlatformSetting::set('payment.active_gateway', 'obpay');
+        config([
+            'services.obpay.base_url' => 'https://obpay.online/api/public/v1',
+            'services.obpay.secret_key' => 'obpay-env-secret',
+            'services.obpay.webhook_secret' => 'obpay-env-webhook-secret',
+            'services.obpay.callback_url' => 'https://billing.example.test/api/webhooks/obpay',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake(function (ClientRequest $request) {
+            return Http::response([
+                'success' => true,
+                'data' => [
+                    'reference' => $request['reference'],
+                    'status' => 'pending',
+                    'prompt_sent' => false,
+                    'checkout_url' => 'https://checkout.obpay.online/pay/ORDER-1001',
+                ],
+            ]);
+        });
+        [$tenant, $package, $transaction] = $this->createPendingPayment();
+
+        $result = app(PaymentService::class)->initiatePackagePayment(
+            $tenant,
+            $package,
+            '0771234567',
+            $transaction,
+            null,
+            'https://billing.example.test/portal/test-wifi/pending/'.$transaction->id,
+        );
+
+        $this->assertSame('redirect', $result['status']);
+        $this->assertSame('https://checkout.obpay.online/pay/ORDER-1001', $result['redirect_url']);
+        $this->assertFalse($transaction->fresh()->meta['provider_prompt_sent']);
+        $this->assertSame('pending', $transaction->fresh()->status);
+        Http::assertSent(fn (ClientRequest $request): bool => $request->url() === 'https://obpay.online/api/public/v1/collect'
+            && $request->hasHeader('Authorization', 'Bearer obpay-env-secret')
+            && $request['callback_url'] === 'https://billing.example.test/api/webhooks/obpay'
+            && $request['redirect_url'] === 'https://billing.example.test/portal/test-wifi/pending/'.$transaction->id);
+    }
+
+    public function test_obpay_does_not_redirect_to_a_non_https_checkout_url(): void
+    {
+        PlatformSetting::set('payment.active_gateway', 'obpay');
+        PlatformSetting::setSecret('payment.obpay.secret_key', 'obpay-test-secret');
+        PlatformSetting::setSecret('payment.obpay.webhook_secret', 'obpay-webhook-secret');
+        Http::fake(function (ClientRequest $request) {
+            return Http::response([
+                'success' => true,
+                'data' => [
+                    'reference' => $request['reference'],
+                    'status' => 'pending',
+                    'prompt_sent' => false,
+                    'checkout_url' => 'http://checkout.example.test/pay',
+                ],
+            ]);
+        });
+        [$tenant, $package, $transaction] = $this->createPendingPayment();
+
+        $result = app(PaymentService::class)->initiatePackagePayment(
+            $tenant,
+            $package,
+            '0771234567',
+            $transaction,
+        );
+
+        $this->assertSame('pending', $result['status']);
+        $this->assertArrayNotHasKey('redirect_url', $result);
+        $this->assertFalse($transaction->fresh()->meta['provider_prompt_sent']);
+    }
+
+    public function test_obpay_webhook_verifies_raw_signature_and_dispatches_processing(): void
+    {
+        config(['queue.default' => 'database']);
+        PlatformSetting::setSecret('payment.obpay.webhook_secret', 'obpay-webhook-secret');
+        Queue::fake();
+
+        $payload = [
+            'event' => 'collection.success',
+            'data' => ['reference' => 'ONL-WEBHOOK-001'],
+        ];
+        $rawBody = json_encode($payload, JSON_THROW_ON_ERROR);
+        $signature = hash_hmac('sha256', $rawBody, 'obpay-webhook-secret');
+
+        $this->call('POST', '/api/webhooks/obpay', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_OBPAY_SIGNATURE' => $signature,
+        ], $rawBody)
+            ->assertOk()
+            ->assertJson(['status' => 'accepted']);
+
+        Queue::assertPushed(ProcessObPayWebhook::class, fn (ProcessObPayWebhook $job): bool => $job->payload === $payload);
+    }
+
+    public function test_obpay_webhook_rejects_an_invalid_signature_without_dispatching(): void
+    {
+        config(['queue.default' => 'database']);
+        PlatformSetting::setSecret('payment.obpay.webhook_secret', 'obpay-webhook-secret');
+        Queue::fake();
+
+        $payload = [
+            'event' => 'collection.success',
+            'data' => ['reference' => 'ONL-WEBHOOK-001'],
+        ];
+        $rawBody = json_encode($payload, JSON_THROW_ON_ERROR);
+
+        $this->call('POST', '/api/webhooks/obpay', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_OBPAY_SIGNATURE' => 'invalid',
+        ], $rawBody)
+            ->assertUnauthorized()
+            ->assertJson(['status' => 'unauthorized']);
+
+        Queue::assertNothingPushed();
     }
 
     public function test_unconfigured_active_gateway_fails_closed(): void

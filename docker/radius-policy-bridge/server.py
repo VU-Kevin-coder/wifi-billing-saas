@@ -81,6 +81,16 @@ def policy_payload(path, form):
         payload["service_type"] = safe_value(form.get("service_type", ""), "service type", 32, required=False)
         return payload
 
+    if path == "/post-auth":
+        outcome = safe_value(form.get("outcome", ""), "authentication outcome", 16)
+        if outcome not in {"accept", "reject"}:
+            raise ValueError("Invalid RADIUS authentication outcome")
+        payload.update({
+            "outcome": outcome,
+            "username": safe_value(form.get("username", ""), "username", 128, required=False),
+        })
+        return payload
+
     status_type = safe_value(form.get("status_type", ""), "accounting status", 32)
     if status_type not in ALLOWED_STATUS_TYPES or not nas_session_id:
         raise ValueError("Invalid RADIUS accounting event")
@@ -128,6 +138,19 @@ def upstream_url(path):
     raise RuntimeError("The RADIUS policy API must use HTTPS outside the local lab")
 
 
+def application_health_url():
+    base = os.environ.get("RADIUS_POLICY_API_URL", "").rstrip("/")
+    parsed = urlparse(base)
+    app_env = os.environ.get("APP_ENV", "production").lower()
+    if parsed.scheme == "https" and parsed.hostname:
+        return base + "/up"
+    if (parsed.scheme == "http" and parsed.hostname in {"web", "localhost", "127.0.0.1"}
+            and os.environ.get("RADIUS_BRIDGE_ALLOW_HTTP") == "true"
+            and app_env in {"local", "testing"}):
+        return base + "/up"
+    raise RuntimeError("The RADIUS policy API must use HTTPS outside the local lab")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "RadiusPolicyBridge"
 
@@ -145,12 +168,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            self.send_body(200, b"ok", "text/plain")
+            try:
+                request = Request(application_health_url(), headers={"Accept": "text/plain"})
+                with UPSTREAM_OPENER.open(request, timeout=2) as response:
+                    if response.status != 200:
+                        self.send_body(503, b"upstream unavailable", "text/plain")
+                        return
+                self.send_body(200, b"ok", "text/plain")
+            except (HTTPError, URLError, TimeoutError, RuntimeError):
+                self.send_body(503, b"upstream unavailable", "text/plain")
             return
         self.send_body(404, b"")
 
     def do_POST(self):
-        if self.path not in {"/authorize", "/accounting", "/client-lookup"}:
+        if self.path not in {"/authorize", "/accounting", "/client-lookup", "/post-auth"}:
             self.send_body(404, b"")
             return
 
@@ -173,6 +204,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/authorize": "/authorize",
                 "/accounting": "/accounting-events",
                 "/client-lookup": "/client-lookup",
+                "/post-auth": "/post-auth-events",
             }[self.path]
             path = "/internal/radius/v1" + endpoint
             body, headers = signed_policy_request(path, payload, required_secret("RADIUS_POLICY_SERVICE_SECRET"))
