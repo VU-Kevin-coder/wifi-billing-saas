@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\VpnPeer;
 use App\Services\RouterConnectionService;
+use App\Services\RouterProvisioningService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -139,7 +140,7 @@ class RouterManagementTest extends TestCase
                 'download' => 1,
             ]));
 
-        $script->assertStatus(423)->assertSee('Router provisioning is disabled');
+        $script->assertStatus(423)->assertSee(RouterProvisioningService::SAFETY_BLOCK);
         $script->assertDontSee('supersecretpass123');
         $this->assertFalse($script->headers->has('Content-Disposition'));
         $this->assertSame('provisioning', $router->fresh()->status);

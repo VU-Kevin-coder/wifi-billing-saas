@@ -8,11 +8,11 @@ use App\Models\Tenant;
 use App\Models\VpnPeer;
 use App\Services\RouterApiCertificateTrustService;
 use App\Services\RouterOnboardingService;
-use Illuminate\Http\Request;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
