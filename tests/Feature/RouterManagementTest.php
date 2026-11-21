@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\VpnPeer;
 use App\Services\RouterConnectionService;
+use App\Services\RouterProvisioningService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -139,10 +140,36 @@ class RouterManagementTest extends TestCase
                 'download' => 1,
             ]));
 
-        $script->assertStatus(423)->assertSee('Router provisioning is disabled');
+        $script->assertStatus(423)->assertSee(RouterProvisioningService::SAFETY_BLOCK);
         $script->assertDontSee('supersecretpass123');
         $this->assertFalse($script->headers->has('Content-Disposition'));
         $this->assertSame('provisioning', $router->fresh()->status);
+    }
+
+    public function test_generated_router_api_password_uses_only_alphanumeric_characters(): void
+    {
+        $response = $this->actingAs($this->acmeUser)
+            ->post('http://acme.localhost/operator/routers', [
+                'name' => 'GENERATED-PASSWORD-ROUTER',
+                'management_ip' => '10.20.1.11',
+                'management_subnet' => '10.20.1.0/24',
+                'api_port' => 8728,
+                'site' => 'Kampala Central',
+                'hardware_model' => 'CCR2004',
+                'has_wireless' => 1,
+                'wifi_ssid' => 'Kampala Guest',
+                'enable_hotspot' => 1,
+                'hotspot_network' => '10.10.0.0/16',
+                'gateway_ip' => '10.10.0.1',
+                'dns_servers' => '8.8.8.8,8.8.4.4',
+                'hotspot_domain' => 'hotspot.local',
+                'ethernet_ports' => ['ether2', 'ether3'],
+                '_idempotency_key' => $this->idempotencyKey(),
+            ]);
+
+        $response->assertRedirect();
+        $router = Router::where('name', 'GENERATED-PASSWORD-ROUTER')->firstOrFail();
+        $this->assertMatchesRegularExpression('/\A[A-Za-z0-9]+\z/', $router->api_password);
     }
 
     public function test_router_detail_page_can_be_rendered(): void

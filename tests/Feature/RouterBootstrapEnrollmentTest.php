@@ -9,7 +9,10 @@ use App\Models\VpnPeer;
 use App\Services\RouterApiCertificateTrustService;
 use App\Services\RouterOnboardingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -22,12 +25,61 @@ class RouterBootstrapEnrollmentTest extends TestCase
         config(['app.url' => 'https://billing.example.test']);
 
         $command = app(RouterOnboardingService::class)->bootstrapCommand(str_repeat('A', 64));
+        $commands = explode(PHP_EOL, $command);
 
-        $this->assertStringStartsWith('/ip cloud set update-time=yes; :delay 10s; /tool fetch url="https://billing.example.test/api/provision/bootstrap?token=', $command);
-        $this->assertStringContainsString('mode=https check-certificate=yes', $command);
-        $this->assertStringContainsString('/import file-name="wifi-billing-bootstrap.rsc"', $command);
-        $this->assertStringContainsString('/file remove "wifi-billing-bootstrap.rsc"', $command);
+        $this->assertCount(3, $commands);
+        $this->assertStringStartsWith('/tool fetch url="https://billing.example.test/api/provision/bootstrap?token=', $commands[0]);
+        $this->assertStringEndsWith('" mode=https check-certificate=yes dst-path="wifi-billing-bootstrap.rsc"', $commands[0]);
+        $this->assertSame('/import file-name="wifi-billing-bootstrap.rsc" verbose=yes', $commands[1]);
+        $this->assertSame('/file remove "wifi-billing-bootstrap.rsc"', $commands[2]);
         $this->assertStringNotContainsString('check-certificate=no', $command);
+    }
+
+    public function test_provisioning_routes_are_not_rate_limited(): void
+    {
+        foreach (['api.provision.bootstrap', 'api.provision.enroll'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+            $this->assertNotNull($route);
+
+            foreach ($route->gatherMiddleware() as $middleware) {
+                $this->assertStringNotContainsString('throttle', strtolower($middleware));
+            }
+        }
+    }
+
+    public function test_enrollment_logs_validation_errors_without_logging_payload_values(): void
+    {
+        Log::shouldReceive('error')
+            ->once()
+            ->withArgs(function (string $message, array $context): bool {
+                return $message === 'ENROLL VALIDATION FAILED: '
+                    && isset($context['errors']['token'], $context['errors']['model'])
+                    && $context['payload_keys'] === ['serial'];
+            });
+
+        $this->postJson(route('api.provision.enroll'), ['serial' => 'safe-test-value'])
+            ->assertUnprocessable()
+            ->assertJsonStructure([
+                'errors' => ['token', 'model', 'api_ca_certificate'],
+            ]);
+    }
+
+    public function test_cloudflare_forwarded_https_is_trusted_from_the_configured_local_proxy(): void
+    {
+        Route::get('/_testing/proxy-scheme', static function (Request $request) {
+            return response()->json([
+                'host' => $request->getHost(),
+                'secure' => $request->isSecure(),
+            ]);
+        });
+
+        $this->withServerVariables([
+            'REMOTE_ADDR' => '172.18.0.1',
+            'HTTP_X_FORWARDED_HOST' => 'tunnel.example.test',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ])->get('/_testing/proxy-scheme')
+            ->assertOk()
+            ->assertJson(['host' => 'tunnel.example.test', 'secure' => true]);
     }
 
     public function test_bootstrap_returns_plain_text_and_successful_enrollment_burns_token_without_switching_backend(): void
@@ -35,19 +87,6 @@ class RouterBootstrapEnrollmentTest extends TestCase
         $token = Str::random(64);
         [$router, $onboarding] = $this->makeOnboarding($token);
         $certificate = "-----BEGIN CERTIFICATE-----\n".base64_encode('test-router-ca')."\n-----END CERTIFICATE-----";
-        $this->mock(RouterApiCertificateTrustService::class, function ($mock) use ($router, $certificate): void {
-            $mock->shouldReceive('store')
-                ->once()
-                ->withArgs(function (Router $target, string $received) use ($router, $certificate): bool {
-                    if ($target->id !== $router->id || $received !== $certificate) {
-                        return false;
-                    }
-
-                    $target->forceFill(['api_ca_certificate' => $received])->saveOrFail();
-
-                    return true;
-                });
-        });
 
         $bootstrap = $this->get(route('api.provision.bootstrap', ['token' => $token]));
         $bootstrap
@@ -64,7 +103,7 @@ class RouterBootstrapEnrollmentTest extends TestCase
         ];
         $this->postJson(route('api.provision.enroll'), $payload)
             ->assertOk()
-            ->assertJsonPath('status', 'enrolled');
+            ->assertExactJson(['status' => 'success']);
 
         $router->refresh();
         $onboarding->refresh();
@@ -80,13 +119,12 @@ class RouterBootstrapEnrollmentTest extends TestCase
         $this->assertNull($onboarding->bootstrap_script);
         $this->assertArrayNotHasKey('api_ca_certificate', $router->toArray());
 
-        $certificatePath = RouterApiCertificateTrustService::pathForRouter($router->id);
-        $this->assertIsString($certificatePath);
-        $this->assertFileExists($certificatePath);
-        unlink($certificatePath);
-        $this->assertSame($certificatePath, RouterApiCertificateTrustService::pathForRouter($router->id));
-        $this->assertSame($certificate.PHP_EOL, file_get_contents($certificatePath));
-        unlink($certificatePath);
+        try {
+            RouterApiCertificateTrustService::pathForRouter($router->id);
+            $this->fail('Certificate validation should be deferred until the trust file is needed.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('The router API certificate is invalid.', $exception->getMessage());
+        }
 
         $this->postJson(route('api.provision.enroll'), $payload)->assertUnprocessable();
         $this->get(route('api.provision.bootstrap', ['token' => $token]))->assertNotFound();

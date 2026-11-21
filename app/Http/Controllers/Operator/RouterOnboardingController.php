@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\VerifyRadiusReadinessJob;
+use App\Models\AuditLog;
 use App\Models\PlatformSetting;
 use App\Models\Router;
 use App\Services\RadiusReadiness;
@@ -23,8 +24,9 @@ use RuntimeException;
 
 class RouterOnboardingController extends Controller
 {
-    public function retryRadiusReadiness(TenantContext $context, int $router)
+    public function retryRadiusReadiness(TenantContext $context, string $tenant, int $router)
     {
+        abort_unless($context->getTenant()?->slug === $tenant, 404);
         $routerModel = Router::query()
             ->where('tenant_id', $context->getTenantId())
             ->with('onboarding')
@@ -42,9 +44,11 @@ class RouterOnboardingController extends Controller
 
     public function services(
         TenantContext $context,
+        string $tenant,
         int $router,
         RouterConnectionService $connection,
     ) {
+        abort_unless($context->getTenant()?->slug === $tenant, 404);
         $tenant = $context->getTenant();
         $routerModel = Router::query()
             ->where('tenant_id', $context->getTenantId())
@@ -68,8 +72,9 @@ class RouterOnboardingController extends Controller
             ->map(fn ($interface): ?string => is_array($interface) ? ($interface['name'] ?? null) : null)
             ->filter(fn ($name): bool => is_string($name)
                 && preg_match('/^ether\d+$/', $name) === 1
-                && $name !== $wanInterface)
-            ->values();
+            )
+            ->values()
+            ->all();
         $pppoeDefaults = $this->pppoeDefaults();
 
         return response()
@@ -79,6 +84,7 @@ class RouterOnboardingController extends Controller
                 'interfaces' => $interfaces,
                 'availablePorts' => $availablePorts,
                 'wanInterface' => $wanInterface,
+                'managementInterface' => $routerModel->hotspot_config['management_interface'] ?? '',
                 'pppoeNetwork' => $pppoeDefaults['network'],
                 'pppoeGateway' => $pppoeDefaults['gateway'],
                 'pppoeDnsServers' => $pppoeDefaults['dns'],
@@ -89,11 +95,13 @@ class RouterOnboardingController extends Controller
     public function configure(
         Request $request,
         TenantContext $context,
+        string $tenant,
         int $router,
         RouterConnectionService $connection,
         RouterProvisioningService $provisioning,
         RouterOnboardingService $onboardingService,
     ) {
+        abort_unless($context->getTenant()?->slug === $tenant, 404);
         $routerModel = Router::query()
             ->where('tenant_id', $context->getTenantId())
             ->with(['onboarding', 'vpnPeer'])
@@ -110,10 +118,12 @@ class RouterOnboardingController extends Controller
             ->map(fn ($interface): ?string => is_array($interface) ? ($interface['name'] ?? null) : null)
             ->filter(fn ($name): bool => is_string($name)
                 && preg_match('/^ether\d+$/', $name) === 1
-                && $name !== $wanInterface)
+            )
             ->values()
             ->all();
         $validated = $request->validate([
+            'wan_interface' => ['required', 'string', Rule::in($availablePorts)],
+            'management_interface' => ['required', 'string', Rule::in($availablePorts)],
             'enable_hotspot' => ['required', 'boolean'],
             'enable_pppoe' => ['required', 'boolean'],
             'hotspot_network' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:50'],
@@ -121,11 +131,23 @@ class RouterOnboardingController extends Controller
             'dns_servers' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:100'],
             'hotspot_domain' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/'],
             'ethernet_ports' => ['required_if:enable_hotspot,1', 'array', 'min:1'],
-            'ethernet_ports.*' => ['string', Rule::in($availablePorts), Rule::notIn([$wanInterface])],
+            'ethernet_ports.*' => ['string', Rule::in($availablePorts)],
             'pppoe_interface' => ['required_if:enable_pppoe,1', 'nullable', 'string', Rule::in($availablePorts)],
             'pppoe_vlan_id' => ['nullable', 'integer', 'between:1,4094'],
             'confirm_dedicated_router' => ['accepted'],
         ]);
+        $wanInterface = $validated['wan_interface'];
+        $managementInterface = $validated['management_interface'];
+        $selectedInterfaces = array_merge(
+            [$wanInterface, $managementInterface],
+            $validated['enable_hotspot'] ? ($validated['ethernet_ports'] ?? []) : [],
+            $validated['enable_pppoe'] ? [$validated['pppoe_interface']] : [],
+        );
+        if (count($selectedInterfaces) !== count(array_unique($selectedInterfaces))) {
+            return back()->withInput()->withErrors([
+                'management_interface' => 'WAN, management, HotSpot, and PPPoE roles must use separate interfaces.',
+            ]);
+        }
 
         if (! $validated['enable_hotspot'] && ! $validated['enable_pppoe']) {
             return back()->withInput()->withErrors([
@@ -179,7 +201,10 @@ class RouterOnboardingController extends Controller
             ];
         }
 
-        $hotspotConfig = $routerModel->hotspot_config ?? [];
+        $hotspotConfig = array_merge($routerModel->hotspot_config ?? [], [
+            'wan_interface' => $wanInterface,
+            'management_interface' => $managementInterface,
+        ]);
         if ($validated['enable_hotspot']) {
             $network = (string) $validated['hotspot_network'];
             $gateway = (string) $validated['gateway_ip'];
@@ -191,8 +216,8 @@ class RouterOnboardingController extends Controller
                 'gateway' => $gateway,
                 'dns' => implode(',', $dnsServers),
                 'domain' => (string) $validated['hotspot_domain'],
-                'management_subnet' => (string) config('wireguard.server_address').'/32',
                 'wan_interface' => $wanInterface,
+                'management_interface' => $managementInterface,
             ];
         }
 
@@ -234,13 +259,26 @@ class RouterOnboardingController extends Controller
             'hotspot_config' => $hotspotConfig,
             'pppoe_config' => $pppoeConfig,
             'ethernet_ports' => array_values($validated['ethernet_ports'] ?? []),
-        ])->saveOrFail();
+        ]);
 
-        $result = $provisioning->deployGuided($routerModel->fresh(), (bool) $validated['confirm_dedicated_router']);
+        $result = $provisioning->deployGuided($routerModel, (bool) $validated['confirm_dedicated_router']);
         if (! $result['ok']) {
+            AuditLog::record('router.provisioning_blocked', $routerModel, [
+                'message' => $result['message'],
+                'backup_name' => $result['backup_name'] ?? null,
+            ]);
+
             return back()->withInput()->withErrors(['provisioning' => $result['message']]);
         }
 
+        $routerModel->saveOrFail();
+        AuditLog::record('router.provisioned', $routerModel, [
+            'wan_interface' => $wanInterface,
+            'management_interface' => $managementInterface,
+            'hotspot_interfaces' => array_values($validated['ethernet_ports'] ?? []),
+            'pppoe_interface' => $pppoeConfig['interface'] ?? null,
+            'backup_name' => $result['backup_name'] ?? null,
+        ]);
         $onboardingService->markCompleted($routerModel->onboarding);
         $routerModel->forceFill([
             'status' => 'online',
@@ -253,8 +291,9 @@ class RouterOnboardingController extends Controller
         ])->with('status', $result['message']);
     }
 
-    public function show(TenantContext $context, int $router)
+    public function show(TenantContext $context, string $tenant, int $router)
     {
+        abort_unless($context->getTenant()?->slug === $tenant, 404);
         $tenant = $context->getTenant();
         $routerModel = Router::query()
             ->where('tenant_id', $context->getTenantId())
@@ -276,11 +315,13 @@ class RouterOnboardingController extends Controller
 
     public function status(
         TenantContext $context,
+        string $tenant,
         int $router,
         WireGuardService $wireGuard,
         RouterConnectionService $connection,
         RouterOnboardingService $onboardingService,
     ): JsonResponse {
+        abort_unless($context->getTenant()?->slug === $tenant, 404);
         $routerModel = Router::query()
             ->where('tenant_id', $context->getTenantId())
             ->with(['onboarding', 'vpnPeer'])
@@ -336,7 +377,7 @@ class RouterOnboardingController extends Controller
             || $routerModel->vpnPeer->last_handshake_at->lt(now()->subMinutes(2))) {
             return response()->json([
                 'status' => $onboarding->status,
-                'message' => 'Paste the provisioning command into the MikroTik terminal. Waiting for the router tunnel.',
+                'message' => 'Run the three RouterOS commands in order. Waiting for the router tunnel.',
             ]);
         }
 

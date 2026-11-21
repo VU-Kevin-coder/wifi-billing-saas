@@ -524,10 +524,11 @@ RouterOS CHR on the Compose network. The app container creates `wg0` at startup,
 retains its server key in the `wireguard-data` volume, and restores enabled peers
 from the database. Compose publishes the UDP port on loopback by default;
 set `WIREGUARD_BIND_ADDRESS` to an address reachable by your test router when
-testing beyond the Compose network. For a real router, configure a public DNS
-name or IP in `WIREGUARD_ENDPOINT`, bind/publish the UDP port appropriately,
-and forward it through the host firewall/NAT. Do not use the Docker service name
-as an endpoint for routers outside the Compose network.
+testing beyond the Compose network. For a physical router on the same LAN as the host, set `WIREGUARD_ENDPOINT` to
+the host's LAN IP; a public UDP port-forward is not needed for this direct path.
+For a remote router, use a public DNS name or IP and forward UDP 51820 through
+the host firewall/NAT. HTTPS tunnels do not carry WireGuard UDP. Do not use the
+Docker service name as an endpoint for routers outside the Compose network.
 
 The local CHR RADIUS listener is available only through the `radius-lab` Compose
 profile. It shares the app network namespace to bind to the WireGuard address;
@@ -612,6 +613,8 @@ APP_DEBUG=true
 APP_URL=http://localhost:8000
 # Optional. Defaults to the host (and non-standard port) in APP_URL.
 TENANT_BASE_DOMAIN=
+# Use "path" for a single-host reverse proxy or HTTPS tunnel; "subdomain" is the default.
+TENANT_ROUTING_MODE=subdomain
 
 DB_CONNECTION=mysql
 DB_HOST=db
@@ -652,6 +655,22 @@ PAYMENT_SIMULATION_ENABLED=false
 ```
 
 These values are illustrative. The final settings must match the service names, credentials, and ports defined by the actual Compose configuration. `APP_URL` supplies the tenant-domain default; set `TENANT_BASE_DOMAIN` only when tenant subdomains live on a different host. The configurable MikroTik hotspot domain (default `hotspot.local`) is a RouterOS captive-portal DNS name, not the SaaS application URL.
+
+### Single-host HTTPS tunnel (for example, Cloudflare Tunnel)
+
+Set `APP_URL` to the tunnel's public HTTPS URL and `TENANT_ROUTING_MODE=path`.
+Generated CSS and JavaScript asset URLs use `APP_URL` by default; set
+`ASSET_URL` only when assets are served from a different public host.
+Tenant workspaces and their captive portals will use paths such as
+`https://your-tunnel.example/<tenant>/operator/dashboard` and
+`https://your-tunnel.example/<tenant>/portal`; no wildcard DNS or subdomain
+routing is required. Set `TRUSTED_PROXIES` to the exact IP address or CIDR of
+the tunnel connector/reverse proxy so Laravel can safely honor its forwarded
+host and HTTPS headers. Do not use `*` for this value.
+
+Build frontend assets with `npm run build` before starting the tunneled web
+server. Do not expose the Vite development server (`npm run dev`) through the
+tunnel: its local asset and HMR URLs are not reachable from visitors' browsers.
 
 ### Rules for environment variables
 

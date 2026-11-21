@@ -104,4 +104,16 @@ class TenantContext
 
         return Tenant::where('slug', $slug)->first();
     }
+
+    /**
+     * Resolve a tenant from the path parameter used when tenant subdomains are unavailable.
+     */
+    public function resolveFromPath(?string $slug): ?Tenant
+    {
+        if (! is_string($slug) || $slug === '') {
+            return null;
+        }
+
+        return Tenant::where('slug', $slug)->first();
+    }
 }

@@ -235,14 +235,19 @@ class WireGuardService
         $endpointPort = $endpoint['port'];
 
         return implode(PHP_EOL, [
+            '/file remove [find name="wifi-billing-bootstrap.rsc"]',
             '# One-time RouterOS WireGuard setup for router ID '.$peer->router_id,
             '# Apply only to the assigned router after reviewing its existing VPN configuration.',
             ':if ([:len [/interface wireguard find name="'.$routerInterface.'"]] = 0) do={ /interface wireguard add name="'.$routerInterfaceQuoted.'" listen-port=13231 private-key="'.$privateKey.'" }',
             ':if ([:len [/ip address find address="'.$tunnelIp.'/32" interface="'.$routerInterface.'"]] = 0) do={ /ip address add address="'.$tunnelIp.'/32" interface="'.$routerInterfaceQuoted.'" }',
-            ':if ([:len [/interface wireguard peers find interface="'.$routerInterface.'" public-key="'.$serverPublicKey.'"]] = 0) do={ /interface wireguard peers add interface="'.$routerInterfaceQuoted.'" public-key="'.$publicKey.'" endpoint-address="'.$endpointHost.'" endpoint-port='.$endpointPort.' allowed-address="'.$serverAddress.'/32" persistent-keepalive='.$keepalive.'s }',
+            ':if ([:len [/interface wireguard peers find interface="'.$routerInterface.'" public-key="'.$serverPublicKey.'"]] = 0) do={',
+            '  /interface wireguard peers add interface="'.$routerInterfaceQuoted.'" public-key="'.$publicKey.'" endpoint-address="'.$endpointHost.'" endpoint-port='.$endpointPort.' allowed-address="'.$serverAddress.'/32" persistent-keepalive='.$keepalive.'s',
+            '}',
             ':if ([:len [/ip route find dst-address="'.$serverAddress.'/32" gateway="'.$routerInterface.'"]] = 0) do={ /ip route add dst-address="'.$serverAddress.'/32" gateway="'.$routerInterfaceQuoted.'" }',
+            '/system ntp client servers remove [find where address="time.cloudflare.com"]',
+            ':do { /system ntp client servers add address="time.cloudflare.com" disabled=no } on-error={}',
+            '/system ntp client set enabled=yes mode=unicast',
             '/ip cloud set update-time=yes',
-            ':delay 10s',
             '/ip service set api disabled=yes',
             '/ip service set api-ssl disabled=yes port=8729 address="'.$serverAddress.'/32"',
             '',
@@ -276,32 +281,49 @@ class WireGuardService
         $acknowledgementUrl = $this->routerOsQuote(
             rtrim((string) config('app.url'), '/').route('api.router-commands.ack', [], false),
         );
-        $pollingSource = $this->quoteRouterOsScript($this->pollingScript(
+        $pollingSource = $this->pollingScript(
             $pollingUrl,
             $acknowledgementUrl,
             $pollingToken,
-        ));
+        );
 
         return implode(PHP_EOL, [
             '# Router API is reachable only from the server through the encrypted WireGuard tunnel.',
-            ':if ([:len [/user group find name="wifi-billing-api"]] = 0) do={ /user group add name="wifi-billing-api" policy=api,read,write comment="Wi-Fi Billing onboarding" }',
-            ':if ([:len [/user find name="'.$username.'"]] = 0) do={ /user add name="'.$username.'" group="wifi-billing-api" password="'.$password.'" comment="Wi-Fi Billing API" } else={ /user set [find name="'.$username.'"] group="wifi-billing-api" password="'.$password.'" }',
-            ':if ([:len [/certificate find name="wifi-billing-api"]] = 0) do={ /certificate add name="wifi-billing-api" common-name="'.$tunnelIp.'" subject-alt-name="IP:'.$tunnelIp.'" key-usage=key-cert-sign,crl-sign,digital-signature,key-encipherment,tls-server; /certificate sign [find name="wifi-billing-api"] name="wifi-billing-api" }',
+            ':if ([:len [/user group find name="wifi-billing-api"]] = 0) do={ /user group add name="wifi-billing-api" policy=api,read,write }',
+            '/user group set [find name="wifi-billing-api"] comment="WiFiBillingOnboarding"',
+            ':if ([:len [/user find name="'.$username.'"]] = 0) do={ /user add name="'.$username.'" group="wifi-billing-api" password="'.$password.'" }',
+            ':if ([:len [/user find name="'.$username.'"]] > 0) do={ /user set [find name="'.$username.'"] group="wifi-billing-api" password="'.$password.'" }',
+            '/user set [find name="'.$username.'"] comment="WiFiBillingAPI"',
+            ':do { /certificate remove [find name="wifi-billing-api-template"] } on-error={}',
+            ':do { /certificate remove [find name="wifi-billing-api-server"] } on-error={}',
+            '/certificate add name="wifi-billing-api-template" common-name="'.$tunnelIp.'" subject-alt-name="IP:'.$tunnelIp.'" key-usage=key-cert-sign,crl-sign,digital-signature,key-encipherment,tls-server',
+            '/certificate sign [find name="wifi-billing-api-template"] name="wifi-billing-api-server"',
             '/ip service set api disabled=yes',
-            '/ip service set api-ssl certificate="wifi-billing-api" port=8729 address="'.$serverAddress.'/32" disabled=no',
-            ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s }',
-            ':if ([:len [/ip hotspot profile find name="prof-billing"]] = 0) do={ /ip hotspot profile add name="prof-billing" use-radius=yes radius-accounting=yes radius-interim-update=1m comment="Wi-Fi Billing managed profile" }',
-            '/certificate export-certificate "wifi-billing-api" type=pem file-name="wifi-billing-api"',
+            '/ip service set api-ssl certificate="wifi-billing-api-server" port=8729 address="'.$serverAddress.'/32" disabled=no',
+            ':if ([:len [/radius find address="'.$serverAddress.'" and src-address="'.$tunnelIp.'"]] > 0) do={ /radius set [find address="'.$serverAddress.'" and src-address="'.$tunnelIp.'"] comment="WiFiBillingRADIUS" }',
+            ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] = 0) do={ /radius add address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s }',
+            ':if ([:len [/radius find address="'.$serverAddress.'" and src-address="'.$tunnelIp.'"]] > 0) do={ /radius set [find address="'.$serverAddress.'" and src-address="'.$tunnelIp.'"] comment="WiFiBillingRADIUS" }',
+            ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] > 0) do={',
+            '  /radius set [find comment="WiFiBillingRADIUS"] address="'.$serverAddress.'" src-address="'.$tunnelIp.'" secret="'.$secret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s',
+            '}',
+            '/ip hotspot profile remove [find name="prof-billing"]',
+            '/ip hotspot profile add name="prof-billing"',
+            '/ip hotspot profile set [find name="prof-billing"] use-radius=yes radius-accounting=yes',
+            '/ip hotspot profile set [find name="prof-billing"] radius-interim-update=00:01:00',
+            '/certificate export-certificate "wifi-billing-api-server" type=pem file-name="wifi-billing-api"',
             ':local apiCertificate [/file get [find name="wifi-billing-api.crt"] contents]',
             ':local routerSerial [/system routerboard get serial-number]',
-            ':if ([:len $routerSerial] = 0) do={ :set routerSerial [/system license get system-id] }',
             ':local routerModel [/system resource get board-name]',
             ':local enrollmentData {"token"="'.$token.'";"serial"=$routerSerial;"model"=$routerModel;"api_ca_certificate"=$apiCertificate}',
             ':local enrollmentBody [:serialize value=$enrollmentData to=json]',
-            '/tool fetch url="'.$enrollmentUrl.'" http-method=post http-data=$enrollmentBody http-header-field="Content-Type: application/json" check-certificate=yes output=none',
+            '/tool fetch url="'.$enrollmentUrl.'" http-method=post http-data=$enrollmentBody http-header-field="Content-Type: application/json,Accept: application/json" check-certificate=yes output=user',
             '/file remove [find name="wifi-billing-api.crt"]',
-            ':if ([:len [/system script find name="wifi-billing-poll"]] = 0) do={ /system script add name="wifi-billing-poll" policy=read,write,test source="'.$pollingSource.'" } else={ /system script set [find name="wifi-billing-poll"] policy=read,write,test source="'.$pollingSource.'" }',
-            ':if ([:len [/system scheduler find name="wifi-billing-poll"]] = 0) do={ /system scheduler add name="wifi-billing-poll" interval=1m on-event="/system script run wifi-billing-poll" policy=read,write,test } else={ /system scheduler set [find name="wifi-billing-poll"] interval=1m on-event="/system script run wifi-billing-poll" policy=read,write,test }',
+            ':if ([:len [/system script find name="wifi-billing-poll"]] = 0) do={ /system script add name="wifi-billing-poll" policy=read,write,test }',
+            '/system script set [find name="wifi-billing-poll"] policy=read,write,test source={',
+            $pollingSource,
+            '}',
+            ':if ([:len [/system scheduler find name="wifi-billing-poll"]] = 0) do={ /system scheduler add name="wifi-billing-poll" interval=1m on-event="/system script run wifi-billing-poll" policy=read,write,test }',
+            ':if ([:len [/system scheduler find name="wifi-billing-poll"]] > 0) do={ /system scheduler set [find name="wifi-billing-poll"] interval=1m on-event="/system script run wifi-billing-poll" policy=read,write,test }',
             '',
         ]);
     }
@@ -316,7 +338,9 @@ class WireGuardService
             ':local cpuUsage [/system resource get cpu-load]',
             ':local activeUsers ([:len [/ip hotspot active find]] + [:len [/ppp active find]])',
             ':local pollBody ("cpu_usage=" . $cpuUsage . "&memory_usage=" . $memoryUsage . "&active_users=" . $activeUsers)',
-            ':local pollResponse [/tool fetch url="'.$pollingUrl.'" http-method=post http-data=$pollBody http-header-field="Authorization: Bearer '.$pollingToken.',Content-Type: application/x-www-form-urlencoded" check-certificate=yes output=user as-value]',
+            ':local authHeader "Authorization: Bearer "',
+            ':set authHeader ($authHeader . "'.$pollingToken.',Content-Type: application/x-www-form-urlencoded")',
+            ':local pollResponse [/tool fetch url="'.$pollingUrl.'" http-method=post http-data=$pollBody http-header-field=$authHeader check-certificate=yes output=user as-value]',
             ':local pollData ($pollResponse->"data")',
             ':if ([:len $pollData] > 4) do={',
             '  :local firstSeparator [:find $pollData "|"]',
@@ -335,7 +359,7 @@ class WireGuardService
             '        :if ([:typeof $fourthSeparator] = "num" && $fourthSeparator > 0) do={',
             '          :local targetService [:pick $serviceAndUsername 0 $fourthSeparator]',
             '          :local username [:pick $serviceAndUsername ($fourthSeparator + 1) [:len $serviceAndUsername]]',
-            '          :if ($operation = "kick" && ($targetService = "hotspot" || $targetService = "pppoe") && [:len $username] > 0 && [:len $username] <= 64 && $username~"^[A-Za-z0-9._-]+$") do={',
+            '          :if ($operation = "kick" && ($targetService = "hotspot" || $targetService = "pppoe") && [:len $username] > 0 && [:len $username] <= 64 && $username~"^[A-Za-z0-9._-]+\$") do={',
             '            :local activeIds [/ip hotspot active find where user=$username]',
             '            :if ($targetService = "pppoe") do={ :set activeIds [/ppp active find where name=$username] }',
             '            :if ($targetService = "hotspot") do={ :foreach activeId in=$activeIds do={ /ip hotspot active remove $activeId } }',
@@ -343,7 +367,7 @@ class WireGuardService
             '            :local resultCode "kicked"',
             '            :if ([:len $activeIds] = 0) do={ :set resultCode "already_absent" }',
             '            :local ackBody ("command_id=" . $commandId . "&lease_token=" . $leaseToken . "&result_code=" . $resultCode)',
-            '            /tool fetch url="'.$acknowledgementUrl.'" http-method=post http-data=$ackBody http-header-field="Authorization: Bearer '.$pollingToken.',Content-Type: application/x-www-form-urlencoded" check-certificate=yes output=none',
+            '            /tool fetch url="'.$acknowledgementUrl.'" http-method=post http-data=$ackBody http-header-field=$authHeader check-certificate=yes output=none',
             '          }',
             '        }',
             '      }',
@@ -351,15 +375,6 @@ class WireGuardService
             '  }',
             '}',
         ]);
-    }
-
-    private function quoteRouterOsScript(string $script): string
-    {
-        return str_replace(
-            ['\\', '"', '$', "\r", "\n"],
-            ['\\\\', '\\"', '\\$', '\\r', '\\n'],
-            $script,
-        );
     }
 
     private function assertEnabled(): void
@@ -397,12 +412,12 @@ class WireGuardService
         $endpoint = trim((string) config('wireguard.endpoint', ''));
         $port = (int) config('wireguard.listen_port', 51820);
         if ($endpoint === '' || $port < 1 || $port > 65535) {
-            throw new RuntimeException('Set a public WireGuard endpoint and valid UDP listen port before generating peers.');
+            throw new RuntimeException('Set a router-reachable WireGuard endpoint and valid UDP listen port before generating peers.');
         }
 
         if (filter_var($endpoint, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
             && ! preg_match('/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/', $endpoint)) {
-            throw new RuntimeException('WireGuard endpoint must be a public IPv4 address or valid hostname.');
+            throw new RuntimeException('WireGuard endpoint must be an IPv4 address or valid hostname reachable by the router over UDP.');
         }
 
         return ['host' => $endpoint, 'port' => $port];

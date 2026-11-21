@@ -5,6 +5,8 @@ APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://wifi.example.com
 TENANT_BASE_DOMAIN=wifi.example.com
+# Use "path" when the public host does not support tenant subdomains.
+TENANT_ROUTING_MODE=subdomain
 # Set only the exact reverse-proxy IPs/CIDRs that overwrite X-Forwarded-* headers.
 TRUSTED_PROXIES=
 

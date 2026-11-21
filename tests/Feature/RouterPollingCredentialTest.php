@@ -63,8 +63,8 @@ class RouterPollingCredentialTest extends TestCase
         $router->refresh();
         $script = $created['onboarding']->bootstrap_script;
 
-        $this->assertMatchesRegularExpression('/Authorization: Bearer ([a-f0-9]{64})/', $script);
-        preg_match('/Authorization: Bearer ([a-f0-9]{64})/', $script, $matches);
+        $pattern = '/^:set authHeader \(\$authHeader \. "([a-f0-9]{64}),Content-Type: application\/x-www-form-urlencoded"\)\r?$/m';
+        $this->assertSame(1, preg_match($pattern, $script, $matches));
         $this->assertSame(hash('sha256', $matches[1]), $router->polling_token_hash);
         $this->assertArrayNotHasKey('polling_token_hash', $router->toArray());
         $this->assertNotSame($created['onboarding']->bootstrap_token_hash, $router->polling_token_hash);
