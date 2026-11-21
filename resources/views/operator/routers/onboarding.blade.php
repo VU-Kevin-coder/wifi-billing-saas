@@ -4,7 +4,7 @@
         <div class="mx-auto max-w-5xl">
             <a href="{{ route('operator.routers.index') }}" class="text-sm text-gray-500 hover:text-gray-800">Mikro Tiks</a>
             <h1 class="mt-3 text-2xl font-bold text-gray-900">Add MikroTik Device</h1>
-            <p class="mt-2 text-sm text-gray-600">Run the provisioning command on {{ $router->name }}. The system will detect its secure connection.</p>
+            <p class="mt-2 text-sm text-gray-600">Run the three commands in order on {{ $router->name }}. The system will detect its secure connection.</p>
 
             <div class="mt-8 grid grid-cols-3 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-200 p-4">
@@ -23,8 +23,8 @@
 
             <section class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div class="flex items-center justify-between border-b border-gray-200 pb-4">
-                    <h2 class="font-semibold">Provisioning Command</h2>
-                    <button type="button" @click="copyCommand()" class="text-sm font-semibold text-orange-700 hover:text-orange-800">Click to copy</button>
+                    <h2 class="font-semibold">RouterOS Commands</h2>
+                    <button type="button" @click="copyCommand()" class="text-sm font-semibold text-orange-700 hover:text-orange-800">Copy commands</button>
                 </div>
                 @if ($bootstrapCommand)
                     <pre id="bootstrap-command" class="mt-5 overflow-x-auto rounded-lg bg-gray-100 p-4 text-sm text-blue-900">{{ $bootstrapCommand }}</pre>
@@ -39,7 +39,7 @@
                 @endif
 
                 <p class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-                    Paste and execute the command in the MikroTik terminal. It establishes the router's WireGuard tunnel and a management API restricted to that tunnel. Use a fresh or dedicated router and keep an out-of-band recovery path.
+                    Run these three commands one at a time, in order, in the MikroTik terminal. They download and import the one-time configuration, then remove the downloaded file. The configuration establishes the router's WireGuard tunnel and a management API restricted to that tunnel. Use a fresh or dedicated router and keep an out-of-band recovery path.
                 </p>
                 <p class="mt-3 text-xs text-gray-600">
                     If RouterOS reports “device mode not allowed”, review MikroTik's device-mode requirements on the router before retrying.
@@ -72,7 +72,7 @@
                 message: @js(in_array($onboarding->status, ['radius_ready', 'complete'], true)
                     ? 'Router connection and RADIUS readiness verified.'
                     : ($onboarding->status === 'awaiting_bootstrap'
-                        ? 'Paste the provisioning command into your MikroTik terminal to begin.'
+                        ? 'Run the three RouterOS commands in order to begin.'
                         : 'Router onboarding is in progress.')),
                 attempt: 0,
                 timer: null,

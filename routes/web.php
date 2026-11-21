@@ -136,10 +136,12 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
         Route::post('/stop-impersonating', [PlatformDashboard::class, 'stopImpersonating'])->name('stop-impersonate');
     });
 
-// ─── Operator Workspace (Tenant Subdomains) ────────────────
-// If they visit acme.localhost:8000/operator/dashboard, it routes here.
-Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'))
-    ->group(function () {
+// ─── Operator Workspace ────────────────────────────────────
+$tenantRouteGroup = config('tenancy.routing_mode') === 'path'
+    ? Route::prefix('{tenant}')
+    : Route::domain('{tenant}.'.config('tenancy.base_domain', 'localhost'));
+
+$tenantRouteGroup->group(function () {
         // ─── Public Captive Portal (No Auth Required) ─────────────
         Route::prefix('portal')
             ->name('portal.')

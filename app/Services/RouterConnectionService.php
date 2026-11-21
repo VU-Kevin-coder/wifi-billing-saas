@@ -234,7 +234,7 @@ class RouterConnectionService
             $key = $this->configureRouter($router, $peer->tunnel_ip, $peer);
             $radiusRows = $this->rawRows(MikroTik::router($key)->diagnostics()->getRaw('/radius/print'));
             $radius = collect($radiusRows)->first(
-                fn (array $row): bool => ($row['comment'] ?? null) === 'Wi-Fi Billing RADIUS',
+                fn (array $row): bool => in_array($row['comment'] ?? null, ['WiFiBillingRADIUS', 'Wi-Fi Billing RADIUS'], true),
             );
             $profileRows = $this->rawRows(MikroTik::router($key)->diagnostics()->getRaw('/ip/hotspot/profile/print'));
             $profile = collect($profileRows)->first(

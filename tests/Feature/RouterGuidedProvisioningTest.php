@@ -73,7 +73,20 @@ class RouterGuidedProvisioningTest extends TestCase
         $result = app(RouterProvisioningService::class)->deployGuided($router, true);
 
         $this->assertTrue($result['ok']);
-        $this->assertStringContainsString('use-radius=yes radius-accounting=yes radius-interim-update=1m', $script);
+        foreach (explode("\r\n", $script) as $line) {
+            $this->assertSame(0, preg_match('/\badd\b.*\bcomment\s*=/', $line), $line);
+            $this->assertLessThanOrEqual(300, strlen($line), 'RouterOS physical line exceeds 300 characters: '.$line);
+        }
+        $this->assertStringContainsString(
+            '/ip hotspot profile remove [find name=prof-billing]',
+            $script,
+        );
+        $this->assertStringContainsString(
+            '/ip hotspot profile add name=prof-billing',
+            $script,
+        );
+        $this->assertStringContainsString('/ip hotspot profile set [find name=prof-billing] use-radius=yes radius-accounting=yes', $script);
+        $this->assertStringContainsString('/ip hotspot profile set [find name=prof-billing] radius-interim-update=00:01:00', $script);
         $this->assertStringContainsString('address="10.8.0.1" src-address="10.8.1.20"', $script);
         $this->assertStringContainsString('secret="'.str_repeat('a', 64).'"', $script);
         $this->assertStringContainsString('name="radius-nas-test"', $script);
@@ -228,6 +241,53 @@ class RouterGuidedProvisioningTest extends TestCase
 
         $this->assertFalse($result['ok']);
         $this->assertStringContainsString('RouterOS 7.x', $result['message']);
+    }
+
+    public function test_bootstrap_managed_hotspot_profile_without_comment_passes_preflight(): void
+    {
+        config(['radius.enabled' => true]);
+        $this->mockOperationalRadius();
+        $router = $this->makeConnectedRouter();
+        $state = $this->safeRouterState();
+        $state['hotspot_profiles'][] = [
+            'name' => 'prof-billing',
+            'use-radius' => 'true',
+            'radius-accounting' => 'true',
+            'radius-interim-update' => '00:01:00',
+        ];
+        $connection = Mockery::mock(RouterConnectionService::class);
+        $connection->shouldReceive('inspectProvisioningTarget')->once()->andReturn($state);
+        $connection->shouldReceive('createProvisioningBackup')->once()->andReturn('wifi-billing-pre-test.backup');
+        $connection->shouldReceive('executeOnboardingScript')->once();
+        $this->app->instance(RouterConnectionService::class, $connection);
+
+        $result = app(RouterProvisioningService::class)->deployGuided($router, true);
+
+        $this->assertTrue($result['ok']);
+    }
+
+    public function test_unmarked_hotspot_profile_without_bootstrap_signature_is_refused(): void
+    {
+        config(['radius.enabled' => true]);
+        $this->mockOperationalRadius();
+        $router = $this->makeConnectedRouter();
+        $state = $this->safeRouterState();
+        $state['hotspot_profiles'][] = [
+            'name' => 'prof-billing',
+            'use-radius' => 'false',
+            'radius-accounting' => 'false',
+            'radius-interim-update' => '00:00:00',
+        ];
+        $connection = Mockery::mock(RouterConnectionService::class);
+        $connection->shouldReceive('inspectProvisioningTarget')->once()->andReturn($state);
+        $connection->shouldReceive('createProvisioningBackup')->never();
+        $connection->shouldReceive('executeOnboardingScript')->never();
+        $this->app->instance(RouterConnectionService::class, $connection);
+
+        $result = app(RouterProvisioningService::class)->deployGuided($router, true);
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('not marked as app-managed', $result['message']);
     }
 
     public function test_failed_backup_prevents_all_service_configuration_writes(): void

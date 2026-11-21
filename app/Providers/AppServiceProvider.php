@@ -24,6 +24,7 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Queue\Events\Looping;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
@@ -32,6 +33,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use ZillEAli\MikrotikLaravel\MikrotikManager;
@@ -47,6 +49,14 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $trustedProxies = config('app.trusted_proxies');
+        TrustProxies::at($trustedProxies ?: []);
+
+        if ($this->app->environment('production')
+            && parse_url((string) config('app.url'), PHP_URL_SCHEME) === 'https') {
+            URL::forceScheme('https');
+        }
+
         $this->app->singleton(MikrotikManager::class, function ($app): RouterMikrotikManager {
             return new RouterMikrotikManager($app['config']['mikrotik']);
         });

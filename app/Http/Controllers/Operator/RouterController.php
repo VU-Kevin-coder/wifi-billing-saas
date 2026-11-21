@@ -257,7 +257,7 @@ class RouterController extends Controller
 
         $apiPassword = ! empty($validated['api_password'])
             ? $validated['api_password']
-            : Str::password(max(16, (int) PlatformSetting::get('router.password_length', 24)));
+            : Str::password(max(16, (int) PlatformSetting::get('router.password_length', 24)), true, true, false);
 
         $apiUsername = ! empty($validated['api_username'])
             ? $validated['api_username']

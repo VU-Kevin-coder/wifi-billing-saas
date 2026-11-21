@@ -10,14 +10,13 @@ use RuntimeException;
 class RouterBootstrapEnrollmentService
 {
     public function __construct(
-        private RouterApiCertificateTrustService $certificateTrust,
         private RouterOnboardingService $onboarding,
     ) {}
 
     /**
      * @return array{router_id: int, status: string}
      */
-    public function enroll(string $token, string $serial, string $model, string $certificate): array
+    public function enroll(string $token, string $serial, string $model, string $certificate): void
     {
         if (! preg_match('/^[A-Za-z0-9]{64}$/', $token)
             || ! preg_match('/^[A-Za-z0-9._-]{1,128}$/', $serial)
@@ -27,7 +26,7 @@ class RouterBootstrapEnrollmentService
             throw new RuntimeException('Router enrollment identity is invalid.');
         }
 
-        return DB::transaction(function () use ($token, $serial, $model, $certificate): array {
+        DB::transaction(function () use ($token, $serial, $model, $certificate): void {
             $onboarding = RouterOnboarding::query()
                 ->where('bootstrap_token_hash', hash('sha256', $token))
                 ->lockForUpdate()
@@ -50,8 +49,8 @@ class RouterBootstrapEnrollmentService
                 throw new RuntimeException('Router enrollment is not available for this device.');
             }
 
-            $this->certificateTrust->store($router, $certificate);
             $router->forceFill([
+                'api_ca_certificate' => $certificate,
                 'hardware_model' => trim($model),
                 'serial_number' => trim($serial),
                 'identity_verified_at' => now(),
@@ -59,13 +58,6 @@ class RouterBootstrapEnrollmentService
             ])->saveOrFail();
 
             $this->onboarding->markEnrolled($onboarding);
-
-            return [
-                'router_id' => (int) $router->id,
-                'status' => 'enrolled',
-            ];
         });
-
-        return $result;
     }
 }

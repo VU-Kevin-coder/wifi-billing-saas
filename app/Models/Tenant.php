@@ -114,12 +114,18 @@ class Tenant extends Model
      */
     public function host(): string
     {
+        if (config('tenancy.routing_mode') === 'path') {
+            return self::domainSuffix();
+        }
+
         return $this->slug.'.'.self::domainSuffix();
     }
 
     public static function domainSuffix(): string
     {
-        $host = (string) config('tenancy.base_domain');
+        $host = config('tenancy.routing_mode') === 'path'
+            ? (parse_url((string) config('app.url'), PHP_URL_HOST) ?: (string) config('tenancy.base_domain'))
+            : (string) config('tenancy.base_domain');
         $port = parse_url((string) config('app.url'), PHP_URL_PORT);
 
         return $port && ! in_array((int) $port, [80, 443], true) ? $host.':'.$port : $host;
@@ -131,8 +137,11 @@ class Tenant extends Model
     public function url(string $path = '/'): string
     {
         $scheme = parse_url((string) config('app.url'), PHP_URL_SCHEME) ?: 'https';
+        $tenantPath = config('tenancy.routing_mode') === 'path'
+            ? $this->slug.'/'
+            : '';
 
-        return $scheme.'://'.$this->host().'/'.ltrim($path, '/');
+        return $scheme.'://'.$this->host().'/'.$tenantPath.ltrim($path, '/');
     }
 
     /**

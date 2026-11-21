@@ -228,7 +228,7 @@ services:
       - redis-data:/data
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-local_dev_redis_password_change_me}
-    command: sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"; else exec redis-server --appendonly yes; fi'
+    command: sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --appendonly yes --stop-writes-on-bgsave-error no --requirepass "$$REDIS_PASSWORD"; else exec redis-server --appendonly yes --stop-writes-on-bgsave-error no; fi'
     healthcheck:
       test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG; else redis-cli ping | grep -q PONG; fi"]
       interval: 5s

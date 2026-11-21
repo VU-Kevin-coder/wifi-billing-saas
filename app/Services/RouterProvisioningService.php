@@ -86,8 +86,14 @@ class RouterProvisioningService
             '# Review the existing HotSpot profile before importing this script.',
             "/system identity set name=\"{$nasIdentifier}\"",
             ':if ([:len [/ip hotspot profile find name=prof-billing]] = 0) do={ :error "Required HotSpot profile prof-billing does not exist." }',
-            ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$server.'" src-address="'.$source.'" secret="'.$secret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$server.'" src-address="'.$source.'" secret="'.$secret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s }',
-            '/ip hotspot profile set [find name=prof-billing] use-radius=yes radius-accounting=yes radius-interim-update=1m',
+            ':if ([:len [/radius find address="'.$server.'" and src-address="'.$source.'"]] > 0) do={ /radius set [find address="'.$server.'" and src-address="'.$source.'"] comment="WiFiBillingRADIUS" }',
+            ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] = 0) do={ /radius add address="'.$server.'" src-address="'.$source.'" secret="'.$secret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s }',
+            ':if ([:len [/radius find address="'.$server.'" and src-address="'.$source.'"]] > 0) do={ /radius set [find address="'.$server.'" and src-address="'.$source.'"] comment="WiFiBillingRADIUS" }',
+            ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] > 0) do={',
+            '  /radius set [find comment="WiFiBillingRADIUS"] address="'.$server.'" src-address="'.$source.'" secret="'.$secret.'" service=hotspot authentication-port=1812 accounting-port=1813 timeout=1s',
+            '}',
+            '/ip hotspot profile set [find name=prof-billing] use-radius=yes radius-accounting=yes',
+            '/ip hotspot profile set [find name=prof-billing] radius-interim-update=00:01:00',
             '',
         ]);
     }
@@ -336,12 +342,24 @@ class RouterProvisioningService
             }
         }
 
+        $hasManagedHotspotServer = collect($state['hotspot_servers'] ?? [])
+            ->contains(fn (array $server): bool => ($server['name'] ?? null) === 'hs-billing'
+                && ($server['profile'] ?? null) === 'prof-billing'
+                && ($server['comment'] ?? null) === $managedNames['hotspot'][1]);
         $unmanagedBillingProfile = collect($state['hotspot_profiles'] ?? [])
             ->filter(fn (array $profile): bool => ($profile['name'] ?? null) === 'prof-billing')
-            ->contains(fn (array $profile): bool => ! in_array($profile['comment'] ?? null, [
-                'Wi-Fi Billing managed profile',
-                'Wi-Fi Billing HotSpot Profile',
-            ], true));
+            ->contains(function (array $profile) use ($hasManagedHotspotServer): bool {
+                $hasBootstrapSignature = in_array(strtolower((string) ($profile['use-radius'] ?? '')), ['yes', 'true'], true)
+                    && in_array(strtolower((string) ($profile['radius-accounting'] ?? '')), ['yes', 'true'], true)
+                    && in_array($profile['radius-interim-update'] ?? null, ['00:01:00', '1m'], true);
+                $hasLegacyManagedComment = in_array($profile['comment'] ?? null, [
+                    'WiFiBillingManagedProfile',
+                    'Wi-Fi Billing managed profile',
+                    'Wi-Fi Billing HotSpot Profile',
+                ], true);
+
+                return ! $hasBootstrapSignature && ! $hasLegacyManagedComment && ! $hasManagedHotspotServer;
+            });
         if ($unmanagedBillingProfile) {
             return ['ok' => false, 'message' => 'The prof-billing HotSpot profile is not marked as app-managed. No changes were made.'];
         }
@@ -461,12 +479,12 @@ class RouterProvisioningService
         $radiusClients = $state['radius_clients'] ?? [];
         if (count(array_filter(
             $radiusClients,
-            fn (array $client): bool => ($client['comment'] ?? null) === 'Wi-Fi Billing RADIUS',
+            fn (array $client): bool => in_array($client['comment'] ?? null, ['WiFiBillingRADIUS', 'Wi-Fi Billing RADIUS'], true),
         )) > 1) {
             return ['ok' => false, 'message' => 'Multiple Wi-Fi Billing RADIUS clients exist. Resolve the duplicate before provisioning.'];
         }
         foreach ($radiusClients as $radiusClient) {
-            if (($radiusClient['comment'] ?? null) !== 'Wi-Fi Billing RADIUS') {
+            if (! in_array($radiusClient['comment'] ?? null, ['WiFiBillingRADIUS', 'Wi-Fi Billing RADIUS'], true)) {
                 return ['ok' => false, 'message' => 'An unmanaged RADIUS client is configured. Review it before changing router authentication settings.'];
             }
         }
@@ -604,25 +622,41 @@ class RouterProvisioningService
         $lines[] = '';
 
         // 2. Client bridge configuration. Review existing membership before running.
-        $lines[] = ':if ([:len [/interface bridge find name=br-hotspot]] = 0) do={ /interface bridge add name=br-hotspot comment="Wi-Fi Billing Client Bridge" disabled=no }';
+        $lines[] = ':if ([:len [/interface bridge find name=br-hotspot]] = 0) do={ /interface bridge add name=br-hotspot disabled=no }';
+        $lines[] = '/interface bridge set [find name=br-hotspot] comment="Wi-Fi Billing Client Bridge"';
         foreach ($ports as $port) {
-            $lines[] = ":if ([:len [/interface bridge port find interface=\"{$port}\"]] = 0) do={ /interface bridge port add bridge=br-hotspot interface=\"{$port}\" comment=\"Client access port\" } else={ /interface bridge port set [find interface=\"{$port}\"] bridge=br-hotspot comment=\"Client access port\" }";
+            $lines[] = ":if ([:len [/interface bridge port find interface=\"{$port}\"]] = 0) do={ /interface bridge port add bridge=br-hotspot interface=\"{$port}\" }";
+            $lines[] = ":if ([:len [/interface bridge port find interface=\"{$port}\"]] > 0) do={ /interface bridge port set [find interface=\"{$port}\"] bridge=br-hotspot }";
+            $lines[] = ":if ([:len [/interface bridge port find interface=\"{$port}\"]] > 0) do={ /interface bridge port set [find interface=\"{$port}\"] comment=\"Client access port\" }";
         }
         $lines[] = '';
 
         // 3. IP Pool and Addressing (Idempotent + configured network prefix)
-        $lines[] = ":if ([:len [/ip pool find name=pool-hotspot]] = 0) do={ /ip pool add name=pool-hotspot ranges={$poolStart}-{$poolEnd} comment=\"Wi-Fi Billing HotSpot Pool\" } else={ /ip pool set [find name=pool-hotspot] ranges={$poolStart}-{$poolEnd} comment=\"Wi-Fi Billing HotSpot Pool\" }";
-        $lines[] = ":if ([:len [/ip address find interface=br-hotspot and address=\"{$gatewayWithPrefix}\"]] = 0) do={ /ip address add address={$gatewayWithPrefix} interface=br-hotspot comment=\"Wi-Fi Billing HotSpot Gateway\" }";
-        $lines[] = ':if ([:len [/ip dhcp-server find name=dhcp-hotspot]] = 0) do={ /ip dhcp-server add address-pool=pool-hotspot disabled=no interface=br-hotspot lease-time=1h name=dhcp-hotspot comment="Wi-Fi Billing HotSpot DHCP" } else={ /ip dhcp-server set [find name=dhcp-hotspot] address-pool=pool-hotspot interface=br-hotspot comment="Wi-Fi Billing HotSpot DHCP" }';
-        $lines[] = ":if ([:len [/ip dhcp-server network find address=\"{$network}\"]] = 0) do={ /ip dhcp-server network add address=\"{$network}\" dns-server=\"{$escapedDnsServers}\" gateway={$gatewayIp} comment=\"Wi-Fi Billing HotSpot Network\" } else={ /ip dhcp-server network set [find address=\"{$network}\"] dns-server=\"{$escapedDnsServers}\" gateway={$gatewayIp} comment=\"Wi-Fi Billing HotSpot Network\" }";
+        $lines[] = ":if ([:len [/ip pool find name=pool-hotspot]] = 0) do={ /ip pool add name=pool-hotspot ranges={$poolStart}-{$poolEnd} }";
+        $lines[] = ":if ([:len [/ip pool find name=pool-hotspot]] > 0) do={ /ip pool set [find name=pool-hotspot] ranges={$poolStart}-{$poolEnd} }";
+        $lines[] = ':if ([:len [/ip pool find name=pool-hotspot]] > 0) do={ /ip pool set [find name=pool-hotspot] comment="Wi-Fi Billing HotSpot Pool" }';
+        $lines[] = ":if ([:len [/ip address find interface=br-hotspot and address=\"{$gatewayWithPrefix}\"]] = 0) do={ /ip address add address={$gatewayWithPrefix} interface=br-hotspot }";
+        $lines[] = ":if ([:len [/ip address find interface=br-hotspot and address=\"{$gatewayWithPrefix}\"]] > 0) do={ /ip address set [find interface=br-hotspot and address=\"{$gatewayWithPrefix}\"] comment=\"Wi-Fi Billing HotSpot Gateway\" }";
+        $lines[] = ':if ([:len [/ip dhcp-server find name=dhcp-hotspot]] = 0) do={ /ip dhcp-server add address-pool=pool-hotspot disabled=no interface=br-hotspot lease-time=1h name=dhcp-hotspot }';
+        $lines[] = ':if ([:len [/ip dhcp-server find name=dhcp-hotspot]] > 0) do={ /ip dhcp-server set [find name=dhcp-hotspot] address-pool=pool-hotspot interface=br-hotspot }';
+        $lines[] = ':if ([:len [/ip dhcp-server find name=dhcp-hotspot]] > 0) do={ /ip dhcp-server set [find name=dhcp-hotspot] comment="Wi-Fi Billing HotSpot DHCP" }';
+        $lines[] = ":if ([:len [/ip dhcp-server network find address=\"{$network}\"]] = 0) do={ /ip dhcp-server network add address=\"{$network}\" dns-server=\"{$escapedDnsServers}\" gateway={$gatewayIp} }";
+        $lines[] = ":if ([:len [/ip dhcp-server network find address=\"{$network}\"]] > 0) do={ /ip dhcp-server network set [find address=\"{$network}\"] dns-server=\"{$escapedDnsServers}\" gateway={$gatewayIp} }";
+        $lines[] = ":if ([:len [/ip dhcp-server network find address=\"{$network}\"]] > 0) do={ /ip dhcp-server network set [find address=\"{$network}\"] comment=\"Wi-Fi Billing HotSpot Network\" }";
         $lines[] = '';
 
         // 4. Hotspot Profile and Server (Idempotent)
         $radiusMode = $radiusEnabled ? 'yes' : 'no';
         $radiusAccounting = $radiusEnabled ? 'yes' : 'no';
-        $interimUpdate = $radiusEnabled ? '1m' : '0s';
-        $lines[] = ":if ([:len [/ip hotspot profile find name=prof-billing]] = 0) do={ /ip hotspot profile add name=prof-billing dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} html-directory=hotspot login-by=http-chap use-radius={$radiusMode} radius-accounting={$radiusAccounting} radius-interim-update={$interimUpdate} comment=\"Wi-Fi Billing HotSpot Profile\" } else={ /ip hotspot profile set [find name=prof-billing] dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} login-by=http-chap use-radius={$radiusMode} radius-accounting={$radiusAccounting} radius-interim-update={$interimUpdate} comment=\"Wi-Fi Billing HotSpot Profile\" }";
-        $lines[] = ':if ([:len [/ip hotspot find name=hs-billing]] = 0) do={ /ip hotspot add address-pool=pool-hotspot disabled=no interface=br-hotspot name=hs-billing profile=prof-billing comment="Wi-Fi Billing HotSpot Server" } else={ /ip hotspot set [find name=hs-billing] address-pool=pool-hotspot interface=br-hotspot profile=prof-billing comment="Wi-Fi Billing HotSpot Server" }';
+        $interimUpdate = $radiusEnabled ? '00:01:00' : '00:00:00';
+        $lines[] = '/ip hotspot profile remove [find name=prof-billing]';
+        $lines[] = '/ip hotspot profile add name=prof-billing';
+        $lines[] = "/ip hotspot profile set [find name=prof-billing] dns-name=\"{$escapedDomain}\" hotspot-address={$gatewayIp} html-directory=hotspot login-by=http-chap";
+        $lines[] = '/ip hotspot profile set [find name=prof-billing] use-radius='.$radiusMode.' radius-accounting='.$radiusAccounting;
+        $lines[] = '/ip hotspot profile set [find name=prof-billing] radius-interim-update='.$interimUpdate;
+        $lines[] = ':if ([:len [/ip hotspot find name=hs-billing]] = 0) do={ /ip hotspot add address-pool=pool-hotspot disabled=no interface=br-hotspot name=hs-billing profile=prof-billing }';
+        $lines[] = ':if ([:len [/ip hotspot find name=hs-billing]] > 0) do={ /ip hotspot set [find name=hs-billing] address-pool=pool-hotspot interface=br-hotspot profile=prof-billing }';
+        $lines[] = ':if ([:len [/ip hotspot find name=hs-billing]] > 0) do={ /ip hotspot set [find name=hs-billing] comment="Wi-Fi Billing HotSpot Server" }';
         $lines[] = '';
 
         if ($radiusEnabled) {
@@ -631,7 +665,12 @@ class RouterProvisioningService
             $escapedRadiusSecret = $this->escapeRouterOs((string) $radiusSecret);
             $lines[] = '# --- Private RADIUS server over WireGuard ---';
             $radiusServices = $router->enable_pppoe ? 'hotspot,ppp' : 'hotspot';
-            $lines[] = ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s }';
+            $lines[] = ':if ([:len [/radius find address="'.$radiusAddress.'" and src-address="'.$radiusSource.'"]] > 0) do={ /radius set [find address="'.$radiusAddress.'" and src-address="'.$radiusSource.'"] comment="WiFiBillingRADIUS" }';
+            $lines[] = ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] = 0) do={ /radius add address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s }';
+            $lines[] = ':if ([:len [/radius find address="'.$radiusAddress.'" and src-address="'.$radiusSource.'"]] > 0) do={ /radius set [find address="'.$radiusAddress.'" and src-address="'.$radiusSource.'"] comment="WiFiBillingRADIUS" }';
+            $lines[] = ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] > 0) do={';
+            $lines[] = '  /radius set [find comment="WiFiBillingRADIUS"] address="'.$radiusAddress.'" src-address="'.$radiusSource.'" secret="'.$escapedRadiusSecret.'" service='.$radiusServices.' authentication-port=1812 accounting-port=1813 timeout=1s';
+            $lines[] = '}';
             $lines[] = '';
         }
 
@@ -653,9 +692,11 @@ class RouterProvisioningService
         foreach ($walledHosts as $host => $comment) {
             $escapedHost = $this->escapeRouterOs($host);
             $escapedComment = $this->escapeRouterOs($comment);
-            $lines[] = ":if ([:len [/ip hotspot walled-garden find dst-host=\"{$escapedHost}\"]] = 0) do={ /ip hotspot walled-garden add dst-host=\"{$escapedHost}\" comment=\"{$escapedComment}\" action=allow }";
+            $lines[] = ":if ([:len [/ip hotspot walled-garden find dst-host=\"{$escapedHost}\"]] = 0) do={ /ip hotspot walled-garden add dst-host=\"{$escapedHost}\" action=allow }";
+            $lines[] = ":if ([:len [/ip hotspot walled-garden find dst-host=\"{$escapedHost}\"]] > 0) do={ /ip hotspot walled-garden set [find dst-host=\"{$escapedHost}\"] comment=\"{$escapedComment}\" }";
         }
-        $lines[] = ":if ([:len [/ip hotspot walled-garden ip find dst-address=\"{$gatewayIp}\"]] = 0) do={ /ip hotspot walled-garden ip add dst-address={$gatewayIp} action=accept comment=\"Local Gateway\" }";
+        $lines[] = ":if ([:len [/ip hotspot walled-garden ip find dst-address=\"{$gatewayIp}\"]] = 0) do={ /ip hotspot walled-garden ip add dst-address={$gatewayIp} action=accept }";
+        $lines[] = ":if ([:len [/ip hotspot walled-garden ip find dst-address=\"{$gatewayIp}\"]] > 0) do={ /ip hotspot walled-garden ip set [find dst-address=\"{$gatewayIp}\"] comment=\"Local Gateway\" }";
         $lines[] = '';
 
         // API-SSL and its dedicated account are configured during verified bootstrap.
@@ -669,7 +710,8 @@ class RouterProvisioningService
                 $escapedRateLimit = $this->escapeRouterOs($profile['rate-limit']);
                 $settings = "rate-limit=\"{$escapedRateLimit}\" shared-users={$profile['shared-users']}";
                 $lines[] = '# Voucher uptime and data caps are enforced by the RADIUS policy service.';
-                $lines[] = ":if ([:len [/ip hotspot user profile find name=\"{$escapedPkgName}\"]] = 0) do={ /ip hotspot user profile add name=\"{$escapedPkgName}\" {$settings} keepalive-timeout={$idleTimeout}m status-autorefresh=1m } else={ /ip hotspot user profile set [find name=\"{$escapedPkgName}\"] {$settings} keepalive-timeout={$idleTimeout}m }";
+                $lines[] = ":if ([:len [/ip hotspot user profile find name=\"{$escapedPkgName}\"]] = 0) do={ /ip hotspot user profile add name=\"{$escapedPkgName}\" {$settings} keepalive-timeout={$idleTimeout}m status-autorefresh=1m }";
+                $lines[] = ":if ([:len [/ip hotspot user profile find name=\"{$escapedPkgName}\"]] > 0) do={ /ip hotspot user profile set [find name=\"{$escapedPkgName}\"] {$settings} keepalive-timeout={$idleTimeout}m }";
             }
             $lines[] = '';
         }
@@ -725,7 +767,9 @@ class RouterProvisioningService
         if ($vlanId !== null) {
             $serviceInterface = 'pppoe-vlan-'.$router->id;
             $escapedServiceInterface = $this->escapeRouterOs($serviceInterface);
-            $vlanLines[] = ':if ([:len [/interface vlan find name="'.$escapedServiceInterface.'"]] = 0) do={ /interface vlan add name="'.$escapedServiceInterface.'" interface="'.$escapedInterface.'" vlan-id='.(int) $vlanId.' disabled=no comment="Wi-Fi Billing PPPoE VLAN" } else={ /interface vlan set [find name="'.$escapedServiceInterface.'"] interface="'.$escapedInterface.'" vlan-id='.(int) $vlanId.' disabled=no comment="Wi-Fi Billing PPPoE VLAN" }';
+            $vlanLines[] = ':if ([:len [/interface vlan find name="'.$escapedServiceInterface.'"]] = 0) do={ /interface vlan add name="'.$escapedServiceInterface.'" interface="'.$escapedInterface.'" vlan-id='.(int) $vlanId.' disabled=no }';
+            $vlanLines[] = ':if ([:len [/interface vlan find name="'.$escapedServiceInterface.'"]] > 0) do={ /interface vlan set [find name="'.$escapedServiceInterface.'"] interface="'.$escapedInterface.'" vlan-id='.(int) $vlanId.' disabled=no }';
+            $vlanLines[] = ':if ([:len [/interface vlan find name="'.$escapedServiceInterface.'"]] > 0) do={ /interface vlan set [find name="'.$escapedServiceInterface.'"] comment="Wi-Fi Billing PPPoE VLAN" }';
         }
         $escapedServiceInterface = $this->escapeRouterOs($serviceInterface);
         $localAddress = $this->escapeRouterOs($gateway);
@@ -739,12 +783,23 @@ class RouterProvisioningService
         foreach ($vlanLines as $vlanLine) {
             $lines[] = $vlanLine;
         }
-        $lines[] = ':if ([:len [/ip pool find name="'.$poolName.'"]] = 0) do={ /ip pool add name="'.$poolName.'" ranges='.$poolStart.'-'.$poolEnd.' comment="Wi-Fi Billing PPPoE Pool" } else={ /ip pool set [find name="'.$poolName.'"] ranges='.$poolStart.'-'.$poolEnd.' comment="Wi-Fi Billing PPPoE Pool" }';
-        $lines[] = ':if ([:len [/ppp profile find name="'.$profileName.'"]] = 0) do={ /ppp profile add name="'.$profileName.'" local-address='.$localAddress.' remote-address="'.$poolName.'" dns-server="'.$escapedDnsServers.'" use-encryption=no only-one=no comment="Wi-Fi Billing PPPoE Profile" } else={ /ppp profile set [find name="'.$profileName.'"] local-address='.$localAddress.' remote-address="'.$poolName.'" dns-server="'.$escapedDnsServers.'" use-encryption=no only-one=no comment="Wi-Fi Billing PPPoE Profile" }';
-        $lines[] = ':if ([:len [/interface pppoe-server server find interface="'.$escapedServiceInterface.'"]] = 0) do={ /interface pppoe-server server add interface="'.$escapedServiceInterface.'" service-name="wifi-billing-pppoe" default-profile="'.$profileName.'" authentication=pap max-mtu=1480 max-mru=1480 disabled=no comment="Wi-Fi Billing PPPoE Server" } else={ /interface pppoe-server server set [find interface="'.$escapedServiceInterface.'"] service-name="wifi-billing-pppoe" default-profile="'.$profileName.'" authentication=pap max-mtu=1480 max-mru=1480 disabled=no comment="Wi-Fi Billing PPPoE Server" }';
+        $lines[] = ':if ([:len [/ip pool find name="'.$poolName.'"]] = 0) do={ /ip pool add name="'.$poolName.'" ranges='.$poolStart.'-'.$poolEnd.' }';
+        $lines[] = ':if ([:len [/ip pool find name="'.$poolName.'"]] > 0) do={ /ip pool set [find name="'.$poolName.'"] ranges='.$poolStart.'-'.$poolEnd.' }';
+        $lines[] = ':if ([:len [/ip pool find name="'.$poolName.'"]] > 0) do={ /ip pool set [find name="'.$poolName.'"] comment="Wi-Fi Billing PPPoE Pool" }';
+        $lines[] = ':if ([:len [/ppp profile find name="'.$profileName.'"]] = 0) do={ /ppp profile add name="'.$profileName.'" local-address='.$localAddress.' remote-address="'.$poolName.'" dns-server="'.$escapedDnsServers.'" use-encryption=no only-one=no }';
+        $lines[] = ':if ([:len [/ppp profile find name="'.$profileName.'"]] > 0) do={ /ppp profile set [find name="'.$profileName.'"] local-address='.$localAddress.' remote-address="'.$poolName.'" dns-server="'.$escapedDnsServers.'" use-encryption=no only-one=no }';
+        $lines[] = ':if ([:len [/ppp profile find name="'.$profileName.'"]] > 0) do={ /ppp profile set [find name="'.$profileName.'"] comment="Wi-Fi Billing PPPoE Profile" }';
+        $lines[] = ':if ([:len [/interface pppoe-server server find interface="'.$escapedServiceInterface.'"]] = 0) do={ /interface pppoe-server server add interface="'.$escapedServiceInterface.'" service-name="wifi-billing-pppoe" default-profile="'.$profileName.'" authentication=pap max-mtu=1480 max-mru=1480 disabled=no }';
+        $lines[] = ':if ([:len [/interface pppoe-server server find interface="'.$escapedServiceInterface.'"]] > 0) do={ /interface pppoe-server server set [find interface="'.$escapedServiceInterface.'"] service-name="wifi-billing-pppoe" default-profile="'.$profileName.'" authentication=pap max-mtu=1480 max-mru=1480 disabled=no }';
+        $lines[] = ':if ([:len [/interface pppoe-server server find interface="'.$escapedServiceInterface.'"]] > 0) do={ /interface pppoe-server server set [find interface="'.$escapedServiceInterface.'"] comment="Wi-Fi Billing PPPoE Server" }';
         $lines[] = '/ppp aaa set use-radius=yes accounting=yes interim-update=1m';
         if (! $router->enable_hotspot) {
-            $lines[] = ':if ([:len [/radius find comment="Wi-Fi Billing RADIUS"]] = 0) do={ /radius add address="'.$serverAddress.'" src-address="'.$sourceAddress.'" secret="'.$escapedSecret.'" service=ppp authentication-port=1812 accounting-port=1813 timeout=1s comment="Wi-Fi Billing RADIUS" } else={ /radius set [find comment="Wi-Fi Billing RADIUS"] address="'.$serverAddress.'" src-address="'.$sourceAddress.'" secret="'.$escapedSecret.'" service=ppp authentication-port=1812 accounting-port=1813 timeout=1s }';
+            $lines[] = ':if ([:len [/radius find address="'.$serverAddress.'" and src-address="'.$sourceAddress.'"]] > 0) do={ /radius set [find address="'.$serverAddress.'" and src-address="'.$sourceAddress.'"] comment="WiFiBillingRADIUS" }';
+            $lines[] = ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] = 0) do={ /radius add address="'.$serverAddress.'" src-address="'.$sourceAddress.'" secret="'.$escapedSecret.'" service=ppp authentication-port=1812 accounting-port=1813 timeout=1s }';
+            $lines[] = ':if ([:len [/radius find address="'.$serverAddress.'" and src-address="'.$sourceAddress.'"]] > 0) do={ /radius set [find address="'.$serverAddress.'" and src-address="'.$sourceAddress.'"] comment="WiFiBillingRADIUS" }';
+            $lines[] = ':if ([:len [/radius find comment="WiFiBillingRADIUS"]] > 0) do={';
+            $lines[] = '  /radius set [find comment="WiFiBillingRADIUS"] address="'.$serverAddress.'" src-address="'.$sourceAddress.'" secret="'.$escapedSecret.'" service=ppp authentication-port=1812 accounting-port=1813 timeout=1s';
+            $lines[] = '}';
         }
 
         return implode("\r\n", $lines)."\r\n";

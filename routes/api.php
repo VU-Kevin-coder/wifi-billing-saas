@@ -14,14 +14,15 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('throttle:public-api')->group(function () {
+// One-time provisioning tokens are high entropy and consumed synchronously.
+// Keep these endpoints out of cache-backed rate limiting so enrollment does
+// not depend on the shared cache/Redis service.
+Route::get('/provision/bootstrap', [RouterProvisioningController::class, 'bootstrap'])
+    ->name('api.provision.bootstrap');
+Route::post('/provision/enroll', [RouterProvisioningController::class, 'enroll'])
+    ->name('api.provision.enroll');
 
-    Route::get('/provision/bootstrap', [RouterProvisioningController::class, 'bootstrap'])
-        ->middleware('throttle:10,1')
-        ->name('api.provision.bootstrap');
-    Route::post('/provision/enroll', [RouterProvisioningController::class, 'enroll'])
-        ->middleware('throttle:10,1')
-        ->name('api.provision.enroll');
+Route::middleware('throttle:public-api')->group(function () {
     Route::post('/router/commands/poll', [RouterCommandController::class, 'poll'])
         ->middleware('throttle:60,1')
         ->name('api.router-commands.poll');

@@ -71,7 +71,11 @@ class RouterOnboardingService
 
         $url = $this->escapeRouterOs($url);
 
-        return '/ip cloud set update-time=yes; :delay 10s; /tool fetch url="'.$url.'" mode=https check-certificate=yes dst-path="wifi-billing-bootstrap.rsc"; /import file-name="wifi-billing-bootstrap.rsc"; /file remove "wifi-billing-bootstrap.rsc"';
+        return implode(PHP_EOL, [
+            '/tool fetch url="'.$url.'" mode=https check-certificate=yes dst-path="wifi-billing-bootstrap.rsc"',
+            '/import file-name="wifi-billing-bootstrap.rsc" verbose=yes',
+            '/file remove "wifi-billing-bootstrap.rsc"',
+        ]);
     }
 
     public function fetchBootstrapScript(string $token): ?string

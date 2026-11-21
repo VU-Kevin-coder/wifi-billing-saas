@@ -21,6 +21,7 @@ abstract class TestCase extends BaseTestCase
             'APP_ENV' => 'testing',
             'APP_KEY' => 'base64:'.base64_encode(str_repeat('x', 32)),
             'APP_CONFIG_CACHE' => $environmentPath.DIRECTORY_SEPARATOR.'config-cache.php',
+            'TRUSTED_PROXIES' => '127.0.0.1,::1,172.18.0.1',
             'DB_CONNECTION' => $driver,
             'DB_DATABASE' => $driver === 'sqlite' ? ':memory:' : 'wifi_billing_test',
             'DB_HOST' => '127.0.0.1',

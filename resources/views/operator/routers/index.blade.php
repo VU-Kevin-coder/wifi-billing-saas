@@ -705,8 +705,8 @@
                         </div>
 
                         <div>
-                            <h4 class="font-bold text-gray-900 mb-1">Step 2: Paste the generated command</h4>
-                            <p class="text-gray-500">Open the router's detail page and paste its one-line provisioning command into the RouterOS Terminal. The script configures the secure tunnel and RADIUS connection.</p>
+                            <h4 class="font-bold text-gray-900 mb-1">Step 2: Run the generated commands</h4>
+                            <p class="text-gray-500">Open the router's detail page and run the three provisioning commands in order in the RouterOS Terminal. They configure the secure tunnel and RADIUS connection.</p>
                         </div>
 
                         <div>

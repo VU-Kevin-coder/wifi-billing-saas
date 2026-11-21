@@ -56,9 +56,13 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('platform.dashboard', absolute: false));
         }
 
-        // 2. If user is an operator, route to their specific tenant subdomain
+        // 2. If user is an operator, route to their tenant workspace
         $tenant = $user->tenant;
         if ($tenant) {
+            if (config('tenancy.routing_mode') === 'path') {
+                return redirect()->intended(route('operator.dashboard', ['tenant' => $tenant->slug]));
+            }
+
             $currentHost = strtolower(explode(':', $request->getHost())[0]);
             $targetHost = strtolower(explode(':', $tenant->host())[0]);
 

@@ -4,6 +4,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tenant Routing Mode
+    |--------------------------------------------------------------------------
+    |
+    | Use "path" when the public host cannot route tenant subdomains, such as
+    | a single-host HTTPS tunnel. Tenant workspaces then use /{tenant}/...
+    | instead of {tenant}.<base-domain>.
+    |
+    */
+
+    'routing_mode' => env('TENANT_ROUTING_MODE', 'subdomain'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Tenant Base Domain
     |--------------------------------------------------------------------------
     |

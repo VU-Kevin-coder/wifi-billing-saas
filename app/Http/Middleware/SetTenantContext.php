@@ -14,6 +14,23 @@ class SetTenantContext
 
     public function handle(Request $request, Closure $next): Response
     {
+        $routeName = (string) $request->route()?->getName();
+        $usesTenantPath = config('tenancy.routing_mode') === 'path'
+            && (str_starts_with($routeName, 'operator.') || str_starts_with($routeName, 'portal.'));
+
+        if ($usesTenantPath) {
+            $tenantFromPath = $this->context->resolveFromPath($request->route('tenant'));
+            abort_unless($tenantFromPath, 404);
+
+            if ($request->user() && $request->user()->tenant_id !== $tenantFromPath->id && ! $request->user()->hasRole('platform_admin')) {
+                abort(403, 'You do not have access to this workspace.');
+            }
+
+            $this->context->setTenant($tenantFromPath);
+
+            return $next($request);
+        }
+
         // 1. Check if the domain itself is a tenant subdomain (e.g., acme.localhost)
         $host = $request->getHost();
         $tenantFromHost = $this->context->resolveFromHost($host);

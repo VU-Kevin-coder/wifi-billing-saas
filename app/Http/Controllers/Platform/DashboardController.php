@@ -140,7 +140,7 @@ class DashboardController extends Controller
         $user = $request->user();
         $token = SsoNonce::issue($user, $tenant, mfaVerified: session('mfa.verified') === true, impersonation: true);
 
-        // Generate a signed, single-use URL to switch into the tenant subdomain.
+        // Generate a signed, single-use URL to switch into the tenant workspace.
         $ssoUrl = URL::temporarySignedRoute(
             'operator.sso.verify',
             now()->addMinutes(2),

@@ -377,7 +377,7 @@ class RouterOnboardingController extends Controller
             || $routerModel->vpnPeer->last_handshake_at->lt(now()->subMinutes(2))) {
             return response()->json([
                 'status' => $onboarding->status,
-                'message' => 'Paste the provisioning command into the MikroTik terminal. Waiting for the router tunnel.',
+                'message' => 'Run the three RouterOS commands in order. Waiting for the router tunnel.',
             ]);
         }
 

@@ -41,6 +41,7 @@ class RouterApiCertificateTrustService
             return null;
         }
 
+        $router->loadMissing('vpnPeer');
         $directory = storage_path('framework/cache/router-ca');
         if (! is_dir($directory) && ! mkdir($directory, 0700, true) && ! is_dir($directory)) {
             throw new RuntimeException('The router API trust cache could not be created.');
@@ -48,6 +49,7 @@ class RouterApiCertificateTrustService
 
         $path = $directory.'/router-'.$routerId.'-'.hash('sha256', $certificate).'.pem';
         if (! is_file($path)) {
+            $certificate = app(self::class)->validatedCertificate($router, $certificate);
             $temporaryPath = tempnam($directory, 'router-ca-');
             if ($temporaryPath === false) {
                 throw new RuntimeException('A temporary router API trust file could not be created.');
@@ -81,7 +83,7 @@ class RouterApiCertificateTrustService
             throw new RuntimeException('The router API certificate is invalid.');
         }
 
-        $parsedCertificate = openssl_x509_read($certificate);
+        $parsedCertificate = @openssl_x509_read($certificate);
         if ($parsedCertificate === false) {
             throw new RuntimeException('The router API certificate is invalid.');
         }
