@@ -9,7 +9,13 @@
         <div class="mx-auto max-w-5xl">
             <a href="{{ route('operator.routers.index') }}" class="text-sm text-gray-500 hover:text-gray-800">Mikro Tiks</a>
             <h1 class="mt-3 text-2xl font-bold text-gray-900">Add MikroTik Device</h1>
-            <p class="mt-2 text-sm text-gray-600">The secure tunnel is connected. Assign each physical interface role and review the exact service changes before applying them.</p>
+            <p class="mt-2 text-sm text-gray-600">
+                @if ($canConfigure)
+                    The secure tunnel is connected. Assign each physical interface role and review the exact service changes before applying them.
+                @else
+                    Review the service setup step. Configuration remains locked until the secure tunnel, API-SSL, and RADIUS checks pass.
+                @endif
+            </p>
 
             <div class="mt-8 grid grid-cols-3 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-200 p-4">
@@ -26,11 +32,24 @@
                 </div>
             </div>
 
-            @if ($errors->any())
-                <div class="mt-5 rounded-lg border border-red-800 bg-red-950 p-4 text-sm text-red-200" role="alert">
-                    {{ $errors->first() }}
-                </div>
-            @endif
+            @if (! $canConfigure)
+                <section class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950" role="status">
+                    <h2 class="font-semibold">Service configuration is not ready yet</h2>
+                    <p class="mt-2 text-sm">
+                        Current onboarding status: {{ str_replace('_', ' ', $router->onboarding->status) }}.
+                        The Next button opens this step, but router changes stay disabled until WireGuard, API-SSL, and RADIUS readiness are verified.
+                    </p>
+                    <a href="{{ route('operator.routers.onboarding', ['tenant' => $tenant->slug, 'router' => $router->id]) }}"
+                       class="mt-4 inline-flex rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                        Back to connection checks
+                    </a>
+                </section>
+            @else
+                @if ($errors->any())
+                    <div class="mt-5 rounded-lg border border-red-800 bg-red-950 p-4 text-sm text-red-200" role="alert">
+                        {{ $errors->first() }}
+                    </div>
+                @endif
 
             <form method="POST" action="{{ route('operator.routers.onboarding.services.configure', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="mt-6 space-y-5">
                 @csrf
@@ -63,7 +82,7 @@
                 <section x-show="enableHotspot" x-cloak class="rounded-xl border border-gray-200 bg-white shadow-sm">
                     <div class="border-b border-gray-200 p-5">
                         <h2 class="font-semibold">Ethernet Ports</h2>
-                        <p class="mt-1 text-xs text-gray-600">Selected ports on the known RouterOS default LAN bridge are moved into the dedicated HotSpot bridge; unbridged client ports are added there. WAN and management ports are excluded by server-side checks.</p>
+                        <p class="mt-1 text-xs text-gray-600">Selected ports on the known RouterOS default LAN bridge are moved into the dedicated HotSpot bridge; unbridged client ports are added there. Opted-in built-in Wi-Fi is also configured and bridged to HotSpot. WAN and management ports are excluded by server-side checks.</p>
                     </div>
                     <div class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">
                         @forelse ($availablePorts as $port)
@@ -81,7 +100,11 @@
                             <p class="col-span-full text-sm text-amber-800">No supported Ethernet client ports were detected. HotSpot setup is unavailable until a router interface can be identified.</p>
                         @endforelse
                     </div>
-                    <p class="px-5 pb-2 text-xs text-gray-600">This reviewed setup supports Ethernet client ports. Active built-in Wi-Fi radios are intentionally not changed; use a separate access point connected to a selected client port.</p>
+                    @if($router->has_wireless && filled($router->wifi_ssid))
+                        <p class="px-5 pb-2 text-xs text-gray-600">Built-in Wi-Fi will broadcast <strong>{{ $router->wifi_ssid }}</strong> as an open network with no Wi-Fi password. Guests authenticate through the HotSpot voucher portal.</p>
+                    @else
+                        <p class="px-5 pb-2 text-xs text-gray-600">No built-in Wi-Fi SSID is configured. Connect an external access point to a selected HotSpot client port if needed.</p>
+                    @endif
                     <p class="px-5 pb-5 text-xs text-gray-500">
                         Detected interfaces: {{ collect($interfaces)->pluck('name')->filter()->implode(', ') ?: 'No interface names returned' }}
                     </p>
@@ -193,7 +216,7 @@
                         <li>Verify the enrolled router identity, RouterOS 7 version, live API-SSL connection, and selected interface links.</li>
                         <li>Refuse unknown bridge/resource ownership, conflicting address ranges, and existing PPP accounts/sessions.</li>
                         <li>Create a router-local backup and verify it exists before making changes.</li>
-                        <li>Configure only the selected HotSpot/PPPoE services and their Wi-Fi Billing-owned resources. Leave WAN, management, existing IP firewall rules, DNS, and API-SSL settings unchanged; RouterOS may add HotSpot dynamic rules and the script adds configured walled-garden entries.</li>
+                        <li>Configure the selected HotSpot/PPPoE services and opted-in built-in Wi-Fi as an open voucher-protected HotSpot network. Leave WAN, management, existing IP firewall rules, DNS, and API-SSL settings unchanged; RouterOS may add HotSpot dynamic rules and the script adds configured walled-garden entries.</li>
                     </ul>
                     <p class="mt-3 text-xs text-blue-800">If any live check is incomplete or conflicts with the plan, provisioning stops without applying changes. Keep the backup until you have tested customer authentication and accounting.</p>
                 </section>
@@ -217,6 +240,7 @@
                     </button>
                 </div>
             </form>
+            @endif
         </div>
     </div>
 </x-app-layout>

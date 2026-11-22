@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Package;
 use App\Models\Router;
 use App\Models\RouterCommand;
+use App\Models\RouterOnboarding;
 use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Voucher;
@@ -51,6 +52,7 @@ class RouterCommandPollingTest extends TestCase
         $this->assertSame(12, $router->fresh()->cpu_usage);
         $this->assertSame(34, $router->fresh()->memory_usage);
         $this->assertSame(2, $router->fresh()->active_users);
+        $this->assertSame('online', $router->fresh()->status);
         $this->assertNotNull($router->fresh()->polling_last_seen_at);
 
         $this->withToken($token)->postJson('/api/router/commands/ack', [
@@ -105,6 +107,26 @@ class RouterCommandPollingTest extends TestCase
             ->assertOk();
 
         $this->assertSame('delivered', $command->fresh()->state);
+    }
+
+    public function test_polling_does_not_mark_an_incomplete_onboarding_router_online(): void
+    {
+        [$router, $token] = $this->makeRouter();
+        RouterOnboarding::create([
+            'tenant_id' => $router->tenant_id,
+            'router_id' => $router->id,
+            'bootstrap_token_hash' => hash('sha256', random_bytes(32)),
+            'status' => 'enrolled',
+            'expires_at' => now()->addMinutes(30),
+        ]);
+
+        $this->withToken($token)->postJson('/api/router/commands/poll', [
+            'cpu_usage' => 12,
+            'memory_usage' => 34,
+            'active_users' => 2,
+        ])->assertOk();
+
+        $this->assertSame('provisioning', $router->fresh()->status);
     }
 
     private function poll(string $token): array

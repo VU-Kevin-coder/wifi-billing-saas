@@ -90,6 +90,7 @@ class RouterGuidedProvisioningTest extends TestCase
         $this->assertStringContainsString('address="10.8.0.1" src-address="10.8.1.20"', $script);
         $this->assertStringContainsString('secret="'.str_repeat('a', 64).'"', $script);
         $this->assertStringContainsString('name="radius-nas-test"', $script);
+        $this->assertStringContainsString('Connect an external AP to a HotSpot client port.', $script);
         $this->assertStringNotContainsString('address="192.0.2.1"', $script);
     }
 
@@ -309,7 +310,7 @@ class RouterGuidedProvisioningTest extends TestCase
         $this->assertNull($result['backup_name']);
     }
 
-    public function test_active_builtin_wifi_is_refused_without_any_router_changes(): void
+    public function test_active_builtin_wifi_is_refused_when_ssid_is_not_opted_in(): void
     {
         config(['radius.enabled' => true]);
         $this->mockOperationalRadius();
@@ -326,6 +327,70 @@ class RouterGuidedProvisioningTest extends TestCase
 
         $this->assertFalse($result['ok']);
         $this->assertStringContainsString('built-in Wi-Fi radios', $result['message']);
+    }
+
+    public function test_guided_provisioning_generates_open_wifi_for_both_routeros7_drivers(): void
+    {
+        config(['radius.enabled' => true]);
+        $this->mockOperationalRadius();
+        $router = $this->makeConnectedRouter();
+        $router->forceFill([
+            'has_wireless' => true,
+            'wifi_ssid' => 'Guest "$WiFi"',
+        ])->saveOrFail();
+        $state = $this->safeRouterState();
+        $state['all_interfaces'][] = ['name' => 'wifi1', 'type' => 'wifi', 'disabled' => 'false'];
+        $state['bridge_ports'][] = ['interface' => 'wifi1', 'bridge' => 'bridge', 'comment' => 'defconf'];
+        $script = null;
+        $connection = Mockery::mock(RouterConnectionService::class);
+        $connection->shouldReceive('inspectProvisioningTarget')->once()->andReturn($state);
+        $connection->shouldReceive('createProvisioningBackup')->once()->andReturn('wifi-billing-pre-test.backup');
+        $connection->shouldReceive('executeOnboardingScript')
+            ->once()
+            ->withArgs(function (Router $target, string $source) use (&$script): bool {
+                $script = $source;
+
+                return true;
+            });
+        $this->app->instance(RouterConnectionService::class, $connection);
+
+        $result = app(RouterProvisioningService::class)->deployGuided($router->fresh(), true);
+
+        $this->assertTrue($result['ok']);
+        $escapedSsid = (new RouterProvisioningService)->escapeRouterOs('Guest "$WiFi"');
+        $this->assertStringContainsString('[:len [/interface wifi find]]', $script);
+        $this->assertStringContainsString('[:len [/interface wireless find]]', $script);
+        $this->assertStringContainsString('configuration.mode=ap configuration.ssid="'.$escapedSsid.'" security.authentication-types=""', $script);
+        $this->assertStringContainsString('mode=ap-bridge ssid="'.$escapedSsid.'" security-profile="wifi-billing-open-'.$router->id.'"', $script);
+        $this->assertStringContainsString('mode=none comment="Wi-Fi Billing Open HotSpot Profile"', $script);
+        $this->assertStringContainsString('bridge=br-hotspot interface=$iface', $script);
+        $this->assertStringContainsString('No built-in Wi-Fi found. Ensure an external AP is plugged into a HotSpot bridge port.', $script);
+        $this->assertStringNotContainsString('hotspot-bridge', $script);
+    }
+
+    public function test_wireless_on_unmanaged_bridge_is_refused_before_backup(): void
+    {
+        config(['radius.enabled' => true]);
+        $this->mockOperationalRadius();
+        $router = $this->makeConnectedRouter();
+        $router->forceFill([
+            'has_wireless' => true,
+            'wifi_ssid' => 'Guest WiFi',
+        ])->saveOrFail();
+        $state = $this->safeRouterState();
+        $state['all_interfaces'][] = ['name' => 'wlan1', 'type' => 'wlan', 'disabled' => 'false'];
+        $state['bridges'][] = ['name' => 'customer-bridge', 'comment' => 'Customer network'];
+        $state['bridge_ports'][] = ['interface' => 'wlan1', 'bridge' => 'customer-bridge', 'comment' => ''];
+        $connection = Mockery::mock(RouterConnectionService::class);
+        $connection->shouldReceive('inspectProvisioningTarget')->once()->andReturn($state);
+        $connection->shouldReceive('createProvisioningBackup')->never();
+        $connection->shouldReceive('executeOnboardingScript')->never();
+        $this->app->instance(RouterConnectionService::class, $connection);
+
+        $result = app(RouterProvisioningService::class)->deployGuided($router->fresh(), true);
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('belongs to an unmanaged bridge', $result['message']);
     }
 
     public function test_missing_wan_nat_is_refused_before_backup(): void

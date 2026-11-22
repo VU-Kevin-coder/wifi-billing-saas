@@ -38,9 +38,16 @@ class RouterOnboardingController extends Controller
             404,
         );
 
-        VerifyRadiusReadinessJob::dispatch((int) $routerModel->id);
+        VerifyRadiusReadinessJob::dispatchSync((int) $routerModel->id);
+        $routerModel->refresh()->load('onboarding');
+        $ready = $routerModel->onboarding?->status === 'radius_ready';
 
-        return back()->with('status', 'RADIUS readiness check queued. The current access backend remains active.');
+        return back()->with(
+            $ready ? 'status' : 'error',
+            $ready
+                ? 'RADIUS readiness verified. Continue to service setup.'
+                : 'RADIUS readiness is still blocked. Check RADIUS services and retry the check.',
+        );
     }
 
     public function services(
@@ -55,17 +62,21 @@ class RouterOnboardingController extends Controller
             ->where('tenant_id', $context->getTenantId())
             ->with(['onboarding', 'vpnPeer'])
             ->findOrFail($router);
-        abort_unless($tenant
-            && in_array($routerModel->onboarding?->status, ['radius_ready', 'complete'], true), 404);
-        abort_unless($routerModel->enrolled, 404);
+        abort_unless($tenant && $routerModel->onboarding, 404);
 
-        try {
-            $interfaces = $connection->onboardingInterfaces($routerModel);
-        } catch (RouterTransportException $exception) {
-            return redirect()->route('operator.routers.onboarding', [
-                'tenant' => $tenant->slug,
-                'router' => $routerModel->id,
-            ])->with('error', $exception->getMessage());
+        $canConfigure = $routerModel->enrolled
+            && in_array($routerModel->onboarding->status, ['radius_ready', 'complete'], true);
+        $interfaces = [];
+
+        if ($canConfigure) {
+            try {
+                $interfaces = $connection->onboardingInterfaces($routerModel);
+            } catch (RouterTransportException $exception) {
+                return redirect()->route('operator.routers.onboarding', [
+                    'tenant' => $tenant->slug,
+                    'router' => $routerModel->id,
+                ])->with('error', $exception->getMessage());
+            }
         }
 
         $wanInterface = (string) PlatformSetting::get('hotspot.wan_interface', 'ether1');
@@ -82,6 +93,7 @@ class RouterOnboardingController extends Controller
             ->view('operator.routers.onboarding-services', [
                 'tenant' => $tenant,
                 'router' => $routerModel,
+                'canConfigure' => $canConfigure,
                 'interfaces' => $interfaces,
                 'availablePorts' => $availablePorts,
                 'wanInterface' => $wanInterface,
@@ -249,7 +261,7 @@ class RouterOnboardingController extends Controller
                 );
             } catch (RadiusUnavailableException $exception) {
                 return back()->withInput()->withErrors(['provisioning' => $exception->getMessage()]);
-            } catch (\LogicException $exception) {
+            } catch (LogicException $exception) {
                 return back()->withInput()->withErrors(['provisioning' => $exception->getMessage()]);
             }
         }
@@ -364,29 +376,35 @@ class RouterOnboardingController extends Controller
         abort_unless($onboarding, 404);
 
         if ($onboarding->status === 'complete') {
-            return response()->json(['status' => 'complete', 'message' => 'Router onboarding is complete.']);
+            return $this->statusResponse(['status' => 'complete', 'message' => 'Router onboarding is complete.']);
         }
         if ($onboarding->status === 'radius_ready') {
-            return response()->json([
-                'status' => 'radius_ready',
-                'message' => 'WireGuard, API-SSL, and RADIUS readiness are verified.',
-                'next_url' => route('operator.routers.onboarding.services', [
-                    'tenant' => $routerModel->tenant->slug,
-                    'router' => $routerModel->id,
-                ]),
-            ]);
+            return $this->radiusReadyResponse($routerModel);
         }
         if ($onboarding->status === 'api_verified') {
-            return response()->json([
-                'status' => 'api_verified',
-                'message' => 'Router API-SSL is verified. Waiting for RADIUS readiness checks.',
-            ]);
+            if ($routerModel->radius_readiness_status === 'ready') {
+                $onboardingService->markRadiusReady($onboarding);
+
+                return $this->radiusReadyResponse($routerModel);
+            }
+
+            if ($routerModel->radius_readiness_status !== 'blocked') {
+                VerifyRadiusReadinessJob::dispatchSync((int) $routerModel->id);
+                $routerModel->refresh()->load('onboarding');
+                $onboarding = $routerModel->onboarding;
+
+                if ($onboarding?->status === 'radius_ready') {
+                    return $this->radiusReadyResponse($routerModel);
+                }
+            }
+
+            return $this->apiVerifiedResponse($routerModel);
         }
         if ($onboarding->status === 'awaiting_bootstrap' && $onboarding->expires_at->isPast()) {
-            return response()->json(['status' => 'expired', 'message' => 'The setup command expired. Restart onboarding to issue a fresh command.']);
+            return $this->statusResponse(['status' => 'expired', 'message' => 'The setup command expired. Restart onboarding to issue a fresh command.']);
         }
         if (! $routerModel->enrolled) {
-            return response()->json([
+            return $this->statusResponse([
                 'status' => 'waiting',
                 'message' => 'Waiting for the router to complete its verified identity enrollment callback.',
             ]);
@@ -400,7 +418,7 @@ class RouterOnboardingController extends Controller
                 'exception' => $exception::class,
             ]);
 
-            return response()->json([
+            return $this->statusResponse([
                 'status' => 'waiting',
                 'message' => 'The WireGuard hub is unavailable. Check the hub interface and try again.',
             ]);
@@ -409,16 +427,16 @@ class RouterOnboardingController extends Controller
         $routerModel->load('vpnPeer');
         if (! $routerModel->vpnPeer?->last_handshake_at
             || $routerModel->vpnPeer->last_handshake_at->lt(now()->subMinutes(2))) {
-            return response()->json([
+            return $this->statusResponse([
                 'status' => $onboarding->status,
-                'message' => 'Run the three RouterOS commands in order. Waiting for the router tunnel.',
+                'message' => 'Enrollment succeeded, but no recent WireGuard handshake reached the server. Check the router-reachable UDP endpoint and server listener; API-SSL, RADIUS, and service setup require this tunnel.',
             ]);
         }
 
         $onboardingService->markTunnelVerified($onboarding);
         $result = $connection->testOnboardingWireGuard($routerModel);
         if (! $result['ok']) {
-            return response()->json([
+            return $this->statusResponse([
                 'status' => 'tunnel_verified',
                 'message' => $result['message'],
             ]);
@@ -431,25 +449,45 @@ class RouterOnboardingController extends Controller
         ])->saveOrFail();
 
         if ($apiVerified) {
-            VerifyRadiusReadinessJob::dispatch((int) $routerModel->id);
+            VerifyRadiusReadinessJob::dispatchSync((int) $routerModel->id);
         }
 
-        $onboarding->refresh();
-        if ($onboarding->status === 'radius_ready') {
-            return response()->json([
-                'status' => 'radius_ready',
-                'message' => 'WireGuard, API-SSL, and RADIUS readiness are verified.',
-                'next_url' => route('operator.routers.onboarding.services', [
-                    'tenant' => $routerModel->tenant->slug,
-                    'router' => $routerModel->id,
-                ]),
-            ]);
+        $routerModel->refresh()->load('onboarding');
+        if ($routerModel->onboarding?->status === 'radius_ready') {
+            return $this->radiusReadyResponse($routerModel);
         }
 
-        return response()->json([
-            'status' => 'api_verified',
-            'message' => 'Router API-SSL is verified. Waiting for RADIUS readiness checks.',
+        return $this->apiVerifiedResponse($routerModel);
+    }
+
+    private function radiusReadyResponse(Router $router): JsonResponse
+    {
+        return $this->statusResponse([
+            'status' => 'radius_ready',
+            'message' => 'WireGuard, API-SSL, and RADIUS readiness are verified.',
+            'next_url' => route('operator.routers.onboarding.services', [
+                'tenant' => $router->tenant->slug,
+                'router' => $router->id,
+            ]),
         ]);
+    }
+
+    private function apiVerifiedResponse(Router $router): JsonResponse
+    {
+        $message = $router->radius_readiness_status === 'blocked'
+            ? 'Router API-SSL is verified, but RADIUS readiness is blocked. Fix the RADIUS issue and retry the check.'
+            : 'Router API-SSL is verified. Checking RADIUS readiness.';
+
+        return $this->statusResponse([
+            'status' => 'api_verified',
+            'message' => $message,
+            'readiness_status' => $router->radius_readiness_status,
+        ]);
+    }
+
+    private function statusResponse(array $payload): JsonResponse
+    {
+        return response()->json($payload)->withHeaders($this->noStoreHeaders());
     }
 
     /**

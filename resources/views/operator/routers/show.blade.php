@@ -113,6 +113,11 @@
                     {{ session('status') }}
                 </div>
             @endif
+            @if(session('error'))
+                <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+                    {{ session('error') }}
+                </div>
+            @endif
 
             <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                 <div>
