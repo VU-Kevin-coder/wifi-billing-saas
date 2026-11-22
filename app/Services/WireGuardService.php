@@ -330,6 +330,7 @@ class WireGuardService
             '/system script add name="wifi-billing-enroll" policy=read,write,test source={',
             '  :local apiCertificate [/file get [find name="wifi-billing-api.crt"] contents]',
             '  :local routerSerial [/system routerboard get serial-number]',
+            '  :if ([:len $routerSerial] = 0) do={ :set routerSerial [/system license get system-id] }',
             '  :if ([:len $routerSerial] = 0) do={ :set routerSerial "UNKNOWN_SERIAL" }',
             '  :local routerModel [/system resource get board-name]',
             '  :if (!($apiCertificate~"END CERTIFICATE")) do={ :error "wifi-billing: API certificate export failed or is empty; enrollment aborted" }',

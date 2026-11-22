@@ -73,7 +73,6 @@ class WireGuardOnboardingScriptTest extends TestCase
         $this->assertStringContainsString('name="wifi-billing-api-template"', $script);
         $this->assertStringContainsString('name="wifi-billing-api-server"', $script);
         $this->assertStringNotContainsString('sign [find name="wifi-billing-api"] name="wifi-billing-api"', $script);
-        $this->assertStringNotContainsString('[/system license get system-id]', $script);
         $templateRemovalPosition = strpos($script, ':do { /certificate remove [find name="wifi-billing-api-template"] } on-error={}');
         $serverRemovalPosition = strpos($script, ':do { /certificate remove [find name="wifi-billing-api-server"] } on-error={}');
         $certificateAddPosition = strpos($script, '/certificate add name="wifi-billing-api-template"');
@@ -186,6 +185,10 @@ class WireGuardOnboardingScriptTest extends TestCase
         );
         $this->assertStringContainsString(
             ':local routerSerial [/system routerboard get serial-number]',
+            $enrollmentScript,
+        );
+        $this->assertStringContainsString(
+            ':if ([:len $routerSerial] = 0) do={ :set routerSerial [/system license get system-id] }',
             $enrollmentScript,
         );
         $this->assertStringContainsString(

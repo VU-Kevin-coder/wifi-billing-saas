@@ -18,6 +18,7 @@ use App\Services\RouterOnboardingService;
 use App\Services\RouterProvisioningService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -590,6 +591,25 @@ class RouterController extends Controller
             : (($result['failure_type'] ?? null) === 'missing_configuration' ? 422 : 503);
 
         return response()->json($result, $statusCode);
+    }
+
+    public function statusCheck(RouterConnectionService $connectionService, ...$args): JsonResponse
+    {
+        $router = $this->resolveTenantRouter($args, app(TenantContext::class));
+        $result = $connectionService->test($router);
+
+        if ($result['ok']) {
+            $router->forceFill([
+                'status' => 'online',
+                'last_seen_at' => now(),
+            ])->saveOrFail();
+        }
+
+        return response()->json([
+            'ok' => $result['ok'],
+            'status' => $result['ok'] ? 'online' : $router->status,
+            'message' => $result['message'],
+        ], $result['ok'] ? 200 : 503);
     }
 
     public function discoverIdentity(
