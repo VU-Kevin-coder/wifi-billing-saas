@@ -19,7 +19,9 @@ class RouterBootstrapEnrollmentService
     public function enroll(string $token, string $serial, string $model, string $certificate): void
     {
         if (! preg_match('/^[A-Za-z0-9]{64}$/', $token)
-            || ! preg_match('/^[A-Za-z0-9._-]{1,128}$/', $serial)
+            || trim($serial) === ''
+            || strlen($serial) > 128
+            || preg_match('/[\x00-\x1f\x7f]/', $serial)
             || trim($model) === ''
             || strlen($model) > 128
             || preg_match('/[\x00-\x1f\x7f]/', $model)) {
@@ -35,13 +37,20 @@ class RouterBootstrapEnrollmentService
             if (! $onboarding) {
                 throw new RuntimeException('Router enrollment token is invalid or expired. (token not found: already used, or the onboarding was regenerated)');
             }
-            if ($onboarding->status !== 'awaiting_bootstrap') {
-                throw new RuntimeException('Router enrollment token is invalid or expired. (onboarding status is '.$onboarding->status.')');
-            }
             if ($onboarding->expires_at->isPast()) {
                 throw new RuntimeException('Router enrollment token is invalid or expired. (token expired)');
             }
-            if ($onboarding->bootstrap_fetches < 1) {
+            if (! in_array($onboarding->status, [
+                'awaiting_bootstrap',
+                'enrolled',
+                'tunnel_verified',
+                'api_verified',
+                'radius_ready',
+                'complete',
+            ], true)) {
+                throw new RuntimeException('Router enrollment token is invalid or expired. (onboarding status is '.$onboarding->status.')');
+            }
+            if ($onboarding->status === 'awaiting_bootstrap' && $onboarding->bootstrap_fetches < 1) {
                 throw new RuntimeException('Router enrollment token is invalid or expired. (bootstrap script was never fetched from /api/provision/bootstrap; do not paste the .rsc contents directly)');
             }
 
@@ -51,11 +60,24 @@ class RouterBootstrapEnrollmentService
                 ->lockForUpdate()
                 ->findOrFail($onboarding->router_id);
 
+            if ($router->enrolled) {
+                if ($router->serial_number !== trim($serial)
+                    || $router->hardware_model !== trim($model)
+                    || $router->api_ca_certificate !== $certificate) {
+                    throw new RuntimeException('Router enrollment is not available for this device. (router is already enrolled with different identity data)');
+                }
+
+                if ($onboarding->status === 'awaiting_bootstrap') {
+                    $this->onboarding->markEnrolled($onboarding);
+                }
+
+                return;
+            }
+            if ($onboarding->status !== 'awaiting_bootstrap') {
+                throw new RuntimeException('Router enrollment is not available for this device. (onboarding is already enrolled but router identity is not enrolled)');
+            }
             if (! $router->vpnPeer?->enabled) {
                 throw new RuntimeException('Router enrollment is not available for this device. (WireGuard peer missing or disabled)');
-            }
-            if ($router->enrolled) {
-                throw new RuntimeException('Router enrollment is not available for this device. (router is already enrolled)');
             }
 
             $router->forceFill([

@@ -20,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use LogicException;
 use RuntimeException;
 
 class RouterOnboardingController extends Controller
@@ -311,6 +312,39 @@ class RouterOnboardingController extends Controller
                 ? $onboarding->bootstrap_command
                 : null,
         ])->withHeaders($this->noStoreHeaders());
+    }
+
+    public function reissue(
+        Request $request,
+        TenantContext $context,
+        string $tenant,
+        int $router,
+        RouterOnboardingService $onboardingService,
+    ) {
+        $request->validate([
+            'confirm_router_reset' => ['required', 'accepted'],
+        ]);
+
+        abort_unless($context->getTenant()?->slug === $tenant, 404);
+        $routerModel = Router::query()
+            ->where('tenant_id', $context->getTenantId())
+            ->with(['onboarding', 'vpnPeer'])
+            ->findOrFail($router);
+
+        try {
+            $onboardingService->reissue($routerModel);
+        } catch (LogicException|RuntimeException $exception) {
+            return back()->withErrors(['onboarding' => $exception->getMessage()]);
+        }
+
+        AuditLog::record('router.onboarding.reissued', $routerModel, [
+            'previous_status' => $routerModel->onboarding?->status,
+        ]);
+
+        return redirect()->route('operator.routers.onboarding', [
+            'tenant' => $tenant,
+            'router' => $routerModel->id,
+        ])->with('status', 'A fresh onboarding command is ready. Use only this new command on the reset router.');
     }
 
     public function status(

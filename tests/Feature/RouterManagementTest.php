@@ -530,6 +530,66 @@ class RouterManagementTest extends TestCase
             ]);
     }
 
+    public function test_router_status_check_marks_router_online_after_api_success(): void
+    {
+        $router = app(TenantContext::class)->runAs($this->acme, function () {
+            return Router::create([
+                'name' => 'STATUS-CHECK-ROUTER',
+                'status' => 'provisioning',
+                'api_password' => 'secret123',
+            ]);
+        });
+
+        $this->mock(RouterConnectionService::class, function ($mock) use ($router): void {
+            $mock->shouldReceive('test')
+                ->once()
+                ->withArgs(fn (Router $testedRouter): bool => $testedRouter->is($router))
+                ->andReturn(['ok' => true, 'message' => 'Router API responded successfully.']);
+        });
+
+        $this->actingAs($this->acmeUser)
+            ->postJson("http://acme.localhost/operator/routers/{$router->id}/status-check")
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'status' => 'online',
+                'message' => 'Router API responded successfully.',
+            ]);
+
+        $router->refresh();
+        $this->assertSame('online', $router->status);
+        $this->assertNotNull($router->last_seen_at);
+    }
+
+    public function test_router_status_check_keeps_offline_state_when_api_fails(): void
+    {
+        $router = app(TenantContext::class)->runAs($this->acme, function () {
+            return Router::create([
+                'name' => 'STATUS-CHECK-OFFLINE',
+                'status' => 'offline',
+                'api_password' => 'secret123',
+            ]);
+        });
+
+        $this->mock(RouterConnectionService::class, function ($mock) use ($router): void {
+            $mock->shouldReceive('test')
+                ->once()
+                ->withArgs(fn (Router $testedRouter): bool => $testedRouter->is($router))
+                ->andReturn(['ok' => false, 'message' => 'Router API test failed.']);
+        });
+
+        $this->actingAs($this->acmeUser)
+            ->postJson("http://acme.localhost/operator/routers/{$router->id}/status-check")
+            ->assertStatus(503)
+            ->assertJson([
+                'ok' => false,
+                'status' => 'offline',
+                'message' => 'Router API test failed.',
+            ]);
+
+        $this->assertSame('offline', $router->fresh()->status);
+    }
+
     public function test_operator_receives_failure_when_router_api_test_fails(): void
     {
         $router = app(TenantContext::class)->runAs($this->acme, function () {

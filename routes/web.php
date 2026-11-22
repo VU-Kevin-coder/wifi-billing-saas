@@ -234,6 +234,10 @@ $tenantRouteGroup->group(function () {
                 Route::get('routers/{router}/provision-script', [RouterController::class, 'provisionScript'])->name('routers.provision-script');
                 Route::post('routers/{router}/provision', [RouterController::class, 'provision'])->name('routers.provision');
                 Route::post('routers/{router}/test', [RouterController::class, 'testConnection'])->name('routers.test');
+                Route::post('routers/{router}/status-check', [RouterController::class, 'statusCheck'])
+                    ->whereNumber('router')
+                    ->middleware('throttle:30,1')
+                    ->name('routers.status-check');
                 Route::post('routers/{router}/identity/discover', [RouterController::class, 'discoverIdentity'])->name('routers.identity.discover');
                 Route::post('routers/{router}/identity/enroll', [RouterController::class, 'enrollIdentity'])->name('routers.identity.enroll');
                 Route::post('routers/{router}/vpn-peer', [VpnPeerController::class, 'storeForRouter'])->whereNumber('router')->name('routers.vpn-peer.store');
@@ -246,6 +250,10 @@ $tenantRouteGroup->group(function () {
                 Route::get('routers/{router}/onboarding', [RouterOnboardingController::class, 'show'])
                     ->whereNumber('router')
                     ->name('routers.onboarding');
+                Route::post('routers/{router}/onboarding/reissue', [RouterOnboardingController::class, 'reissue'])
+                    ->whereNumber('router')
+                    ->middleware('throttle:3,1')
+                    ->name('routers.onboarding.reissue');
                 Route::get('routers/{router}/onboarding/status', [RouterOnboardingController::class, 'status'])
                     ->whereNumber('router')
                     ->middleware('throttle:60,1')

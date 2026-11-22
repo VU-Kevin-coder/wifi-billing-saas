@@ -26,6 +26,16 @@
                     <h2 class="font-semibold">RouterOS Commands</h2>
                     <button type="button" @click="copyCommand()" class="text-sm font-semibold text-orange-700 hover:text-orange-800">Copy commands</button>
                 </div>
+                @if (session('status'))
+                    <p class="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
+                        {{ session('status') }}
+                    </p>
+                @endif
+                @if ($errors->any())
+                    <p class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+                        {{ $errors->first() }}
+                    </p>
+                @endif
                 @if ($bootstrapCommand)
                     <pre id="bootstrap-command" class="mt-5 overflow-x-auto rounded-lg bg-gray-100 p-4 text-sm text-blue-900">{{ $bootstrapCommand }}</pre>
                 @elseif ($onboarding->status !== 'awaiting_bootstrap')
@@ -41,6 +51,18 @@
                 <p class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
                     Run these three commands one at a time, in order, in the MikroTik terminal. They download and import the one-time configuration, then remove the downloaded file. The configuration establishes the router's WireGuard tunnel and a management API restricted to that tunnel. Use a fresh or dedicated router and keep an out-of-band recovery path.
                 </p>
+                @if ($onboarding->status === 'awaiting_bootstrap' && ! $router->enrolled)
+                    <form method="POST" action="{{ route('operator.routers.onboarding.reissue', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                        @csrf
+                        <label class="flex items-start gap-3 text-sm text-amber-900">
+                            <input type="checkbox" name="confirm_router_reset" value="1" required class="mt-1 rounded border-amber-400">
+                            <span>I have reset the MikroTik in Winbox and am ready to replace its old WireGuard peer and bootstrap token.</span>
+                        </label>
+                        <button type="submit" class="mt-4 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
+                            Issue a fresh onboarding command
+                        </button>
+                    </form>
+                @endif
                 <p class="mt-3 text-xs text-gray-600">
                     If RouterOS reports “device mode not allowed”, review MikroTik's device-mode requirements on the router before retrying.
                 </p>

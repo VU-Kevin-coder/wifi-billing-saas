@@ -74,6 +74,18 @@ class WireGuardService
         return $peer;
     }
 
+    public function revokePeer(VpnPeer $peer): void
+    {
+        $this->assertEnabled();
+        $interface = $this->interfaceName();
+        $peer = VpnPeer::query()->findOrFail($peer->getKey());
+
+        $this->commands->run([
+            'wg', 'set', $interface, 'peer', $peer->public_key, 'remove',
+        ]);
+        $peer->delete();
+    }
+
     public function routerConfiguration(VpnPeer $peer): string
     {
         $this->assertEnabled();
@@ -310,26 +322,24 @@ class WireGuardService
             '/ip hotspot profile add name="prof-billing"',
             '/ip hotspot profile set [find name="prof-billing"] use-radius=yes radius-accounting=yes',
             '/ip hotspot profile set [find name="prof-billing"] radius-interim-update=00:01:00',
+            '# Read the exported certificate inside a RouterOS script context before enrolling.',
             ':do { /file remove [find name="wifi-billing-api.crt"] } on-error={}',
-            ':local apiCertificate ""',
-            ':for certAttempt from=1 to=15 do={',
-            '  :if (!($apiCertificate~"END CERTIFICATE")) do={',
-            '    :if ([:len [/file find name="wifi-billing-api.crt"]] = 0) do={',
-            '      :do { /certificate export-certificate "wifi-billing-api-server" type=pem file-name="wifi-billing-api" } on-error={}',
-            '    }',
-            '    :delay 1s',
-            '    :do { :set apiCertificate [/file get [find name="wifi-billing-api.crt"] contents] } on-error={}',
-            '  }',
+            '/certificate export-certificate "wifi-billing-api-server" type=pem file-name="wifi-billing-api"',
+            ':delay 2s',
+            ':do { /system script remove [find name="wifi-billing-enroll"] } on-error={}',
+            '/system script add name="wifi-billing-enroll" policy=read,write,test source={',
+            '  :local apiCertificate [/file get [find name="wifi-billing-api.crt"] contents]',
+            '  :local routerSerial [/system routerboard get serial-number]',
+            '  :if ([:len $routerSerial] = 0) do={ :set routerSerial [/system license get system-id] }',
+            '  :if ([:len $routerSerial] = 0) do={ :set routerSerial "UNKNOWN_SERIAL" }',
+            '  :local routerModel [/system resource get board-name]',
+            '  :if (!($apiCertificate~"END CERTIFICATE")) do={ :error "wifi-billing: API certificate export failed or is empty; enrollment aborted" }',
+            '  :local enrollmentData {"token"="'.$token.'";"serial"=$routerSerial;"model"=$routerModel;"api_ca_certificate"=$apiCertificate}',
+            '  :local enrollmentBody [:serialize value=$enrollmentData to=json]',
+            '  /tool fetch url="'.$enrollmentUrl.'" http-method=post http-data=$enrollmentBody http-header-field="Content-Type: application/json,Accept: application/json" check-certificate=yes output=user',
             '}',
-            ':local routerSerial ""',
-            ':do { :set routerSerial [/system routerboard get serial-number] } on-error={}',
-            ':local routerModel [/system resource get board-name]',
-            ':put ("wifi-billing preflight: serial=" . $routerSerial . " model=" . $routerModel . " cert-bytes=" . [:len $apiCertificate] . " clock=" . [/system clock get date])',
-            ':if (!($apiCertificate~"END CERTIFICATE")) do={ :error "wifi-billing: API certificate export failed or is empty; enrollment aborted" }',
-            ':if ([:len $routerSerial] = 0) do={ :error "wifi-billing: router serial number is empty; enrollment aborted" }',
-            ':local enrollmentData {"token"="'.$token.'";"serial"=$routerSerial;"model"=$routerModel;"api_ca_certificate"=$apiCertificate}',
-            ':local enrollmentBody [:serialize value=$enrollmentData to=json]',
-            '/tool fetch url="'.$enrollmentUrl.'" http-method=post http-data=$enrollmentBody http-header-field="Content-Type: application/json,Accept: application/json" check-certificate=yes output=user',
+            '/system script run wifi-billing-enroll',
+            '/system script remove [find name="wifi-billing-enroll"]',
             '/file remove [find name="wifi-billing-api.crt"]',
             ':if ([:len [/system script find name="wifi-billing-poll"]] = 0) do={ /system script add name="wifi-billing-poll" policy=read,write,test }',
             '/system script set [find name="wifi-billing-poll"] policy=read,write,test source={',

@@ -15,6 +15,47 @@
                  discoveringIdentity: false,
                  enrollingIdentity: false,
                  identityResult: null,
+                 statusPollTimer: null,
+                 statusPollAttempts: 0,
+                 statusPollLimit: 60,
+                 statusPollActive: @js($router->enrolled && $hasApiCredentials && ! $liveData['ok']),
+                 statusPollMessage: @js($router->enrolled && $hasApiCredentials && ! $liveData['ok']
+                     ? 'Checking RouterOS API-SSL over WireGuard every 5 seconds.'
+                     : ''),
+                 init() {
+                     if (this.statusPollActive) this.scheduleStatusPoll();
+                 },
+                 scheduleStatusPoll() {
+                     this.statusPollTimer = window.setTimeout(() => this.pollRouterStatus(), 5000);
+                 },
+                 async pollRouterStatus() {
+                     if (!this.statusPollActive) return;
+                     this.statusPollAttempts++;
+                     try {
+                         const data = await window.apiFetch('{{ route('operator.routers.status-check', ['tenant' => $tenant->slug, 'router' => $router->id]) }}', {
+                             method: 'POST',
+                             feedback: false,
+                         });
+                         if (data.ok) {
+                             this.statusPollActive = false;
+                             this.statusPollMessage = 'Router API verified. Refreshing details...';
+                             window.location.reload();
+                             return;
+                         }
+                         this.statusPollMessage = data.message || 'Waiting for the RouterOS API to respond.';
+                     } catch (error) {
+                         this.statusPollMessage = error.message || 'Router API is not reachable yet. Retrying.';
+                     }
+                     if (this.statusPollAttempts >= this.statusPollLimit) {
+                         this.statusPollActive = false;
+                         this.statusPollMessage = 'Automatic checks stopped after 5 minutes. Check the tunnel and API, then refresh.';
+                         return;
+                     }
+                     this.scheduleStatusPoll();
+                 },
+                 destroy() {
+                     if (this.statusPollTimer) window.clearTimeout(this.statusPollTimer);
+                 },
                  async discoverIdentity() {
                      this.discoveringIdentity = true;
                      this.identityResult = null;
@@ -141,6 +182,11 @@
             @if(!$liveData['ok'])
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" role="status">
                     {{ $liveData['message'] }}
+                </div>
+            @endif
+            @if($router->enrolled && $hasApiCredentials && !$liveData['ok'])
+                <div x-show="statusPollMessage" class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800" role="status" aria-live="polite">
+                    <span x-text="statusPollMessage"></span>
                 </div>
             @endif
 
@@ -336,6 +382,7 @@
                                 .then(data => {
                                     testResult = data;
                                     window.toast[data.ok ? 'success' : 'error'](data.message);
+                                    if (data.ok) window.location.reload();
                                 })
                                 .catch(error => {
                                     testResult = { ok: false, message: error.message || 'The connection test could not be completed.' };

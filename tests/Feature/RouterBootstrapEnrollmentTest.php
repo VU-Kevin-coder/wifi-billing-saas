@@ -53,8 +53,7 @@ class RouterBootstrapEnrollmentTest extends TestCase
             ->once()
             ->withArgs(function (string $message, array $context): bool {
                 return $message === 'ENROLL VALIDATION FAILED: '
-                    && isset($context['errors']['token'], $context['errors']['model'])
-                    && $context['payload_keys'] === ['serial'];
+                    && isset($context['token'], $context['model']);
             });
 
         $this->postJson(route('api.provision.enroll'), ['serial' => 'safe-test-value'])
@@ -100,7 +99,7 @@ class RouterBootstrapEnrollmentTest extends TestCase
             ->assertJson(['host' => 'tunnel.example.test', 'secure' => true]);
     }
 
-    public function test_bootstrap_returns_plain_text_and_successful_enrollment_burns_token_without_switching_backend(): void
+    public function test_bootstrap_returns_plain_text_and_successful_enrollment_accepts_retries_without_switching_backend(): void
     {
         $token = Str::random(64);
         [$router, $onboarding] = $this->makeOnboarding($token);
@@ -115,10 +114,13 @@ class RouterBootstrapEnrollmentTest extends TestCase
 
         $payload = [
             'token' => $token,
-            'serial' => 'CHR-SYSTEM-1',
+            'serial' => 'CHR SYSTEM/1',
             'model' => 'MikroTik CHR',
             'api_ca_certificate' => $certificate,
         ];
+        $this->postJson(route('api.provision.enroll'), $payload)
+            ->assertOk()
+            ->assertExactJson(['status' => 'success']);
         $this->postJson(route('api.provision.enroll'), $payload)
             ->assertOk()
             ->assertExactJson(['status' => 'success']);
@@ -126,14 +128,14 @@ class RouterBootstrapEnrollmentTest extends TestCase
         $router->refresh();
         $onboarding->refresh();
         $this->assertTrue($router->enrolled);
-        $this->assertSame('CHR-SYSTEM-1', $router->serial_number);
+        $this->assertSame('CHR SYSTEM/1', $router->serial_number);
         $this->assertSame('MikroTik CHR', $router->hardware_model);
         $this->assertSame($certificate, $router->api_ca_certificate);
         $this->assertSame('site_agent', $router->access_backend);
         $this->assertTrue($router->pending_radius_activation);
         $this->assertSame('enrolled', $onboarding->status);
         $this->assertNotNull($onboarding->enrolled_at);
-        $this->assertNull($onboarding->bootstrap_token_hash);
+        $this->assertNotNull($onboarding->bootstrap_token_hash);
         $this->assertNull($onboarding->bootstrap_script);
         $this->assertArrayNotHasKey('api_ca_certificate', $router->toArray());
 
@@ -144,8 +146,27 @@ class RouterBootstrapEnrollmentTest extends TestCase
             $this->assertSame('The router API certificate is invalid.', $exception->getMessage());
         }
 
-        $this->postJson(route('api.provision.enroll'), $payload)->assertUnprocessable();
         $this->get(route('api.provision.bootstrap', ['token' => $token]))->assertNotFound();
+    }
+
+    public function test_enrollment_accepts_the_fallback_serial_for_routeros_without_a_hardware_serial(): void
+    {
+        $token = Str::random(64);
+        [$router] = $this->makeOnboarding($token);
+        $certificate = "-----BEGIN CERTIFICATE-----\n".base64_encode('test-router-ca')."\n-----END CERTIFICATE-----";
+
+        $this->get(route('api.provision.bootstrap', ['token' => $token]))
+            ->assertOk();
+        $this->postJson(route('api.provision.enroll'), [
+            'token' => $token,
+            'serial' => 'UNKNOWN_SERIAL',
+            'model' => 'MikroTik CHR',
+            'api_ca_certificate' => $certificate,
+        ])->assertOk()
+            ->assertExactJson(['status' => 'success']);
+
+        $this->assertSame('UNKNOWN_SERIAL', $router->fresh()->serial_number);
+        $this->assertTrue($router->fresh()->enrolled);
     }
 
     public function test_bootstrap_rejects_expired_tokens(): void

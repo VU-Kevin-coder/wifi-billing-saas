@@ -39,21 +39,13 @@ class RouterProvisioningController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'token' => ['required', 'string', 'size:64', 'regex:/^[A-Za-z0-9]+$/'],
-            'serial' => ['required', 'string', 'max:128', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'serial' => ['required', 'string', 'max:128'],
             'model' => ['required', 'string', 'max:128', 'not_regex:/[\x00-\x1f\x7f]/'],
-            'api_ca_certificate' => ['required', 'string', 'max:16384'],
+            'api_ca_certificate' => ['required', 'string'],
         ]);
 
         if ($validator->fails()) {
-            Log::error('ENROLL VALIDATION FAILED: ', [
-                'errors' => $validator->errors()->toArray(),
-                'payload_keys' => array_keys($request->all()),
-                // Lengths only (never values) so an empty certificate/serial is obvious.
-                'payload_lengths' => collect($request->all())
-                    ->map(fn ($value): int => is_string($value) ? strlen($value) : -1)
-                    ->all(),
-                'content_type' => $request->header('Content-Type'),
-            ]);
+            \Log::error('ENROLL VALIDATION FAILED: ', $validator->errors()->toArray());
 
             return response()->json(['errors' => $validator->errors()], 422);
         }
