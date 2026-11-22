@@ -90,7 +90,7 @@ class RouterProvisioningTest extends TestCase
         $this->assertArrayNotHasKey('limit-bytes-total', $profile);
     }
 
-    public function test_wireless_provisioning_is_blocked_and_ssid_escaping_remains_safe(): void
+    public function test_legacy_script_generation_remains_blocked_and_ssid_escaping_remains_safe(): void
     {
         $router = Router::create([
             'tenant_id' => $this->tenant->id,

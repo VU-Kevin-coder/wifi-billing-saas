@@ -80,7 +80,7 @@
                             <input id="wifi_ssid" name="wifi_ssid" maxlength="32" value="{{ old('wifi_ssid', $router->wifi_ssid) }}"
                                    placeholder="{{ $tenant->name }}"
                                    class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <p class="mt-1 text-xs text-gray-500">Leave blank to use the selected site or your business name. The SSID is configured without changing existing Wi-Fi security settings.</p>
+                            <p class="mt-1 text-xs text-gray-500">Leave blank to use the selected site or your business name. Built-in Wi-Fi is configured as an open network with no Wi-Fi password; guests authenticate through the HotSpot voucher portal. For routers without built-in Wi-Fi, connect an external access point to a selected HotSpot port.</p>
                             @error('wifi_ssid') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
                     </div>

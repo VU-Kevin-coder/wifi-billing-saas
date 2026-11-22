@@ -4,12 +4,23 @@
              enableHotspot: @js((bool) old('enable_hotspot', $router->enable_hotspot)),
              enablePppoe: @js((bool) old('enable_pppoe', $router->enable_pppoe)),
              wanInterface: @js(old('wan_interface', $wanInterface)),
-             managementInterface: @js(old('management_interface', $managementInterface))
+             managementInterface: @js(old('management_interface', $managementInterface)),
+             gatewayIp: @js(old('gateway_ip', $router->hotspot_config['gateway'] ?? config('services.mikrotik.gateway'))),
+             async copyWirelessTestScript() {
+                 await navigator.clipboard.writeText(document.getElementById('wireless-test-script').innerText);
+                 window.toast?.success('Temporary Wi-Fi test script copied.');
+             }
          }">
         <div class="mx-auto max-w-5xl">
             <a href="{{ route('operator.routers.index') }}" class="text-sm text-gray-500 hover:text-gray-800">Mikro Tiks</a>
             <h1 class="mt-3 text-2xl font-bold text-gray-900">Add MikroTik Device</h1>
-            <p class="mt-2 text-sm text-gray-600">The secure tunnel is connected. Assign each physical interface role and review the exact service changes before applying them.</p>
+            <p class="mt-2 text-sm text-gray-600">
+                @if ($canConfigure)
+                    The secure tunnel is connected. Assign each physical interface role and review the exact service changes before applying them.
+                @else
+                    Review the service setup step. Configuration remains locked until the secure tunnel, API-SSL, and RADIUS checks pass.
+                @endif
+            </p>
 
             <div class="mt-8 grid grid-cols-3 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-200 p-4">
@@ -26,11 +37,82 @@
                 </div>
             </div>
 
-            @if ($errors->any())
-                <div class="mt-5 rounded-lg border border-red-800 bg-red-950 p-4 text-sm text-red-200" role="alert">
-                    {{ $errors->first() }}
-                </div>
-            @endif
+            @if (! $canConfigure)
+                <section class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950" role="status">
+                    <h2 class="font-semibold">Service configuration is not ready yet</h2>
+                    <p class="mt-2 text-sm">
+                        Current onboarding status: {{ str_replace('_', ' ', $router->onboarding->status) }}.
+                        The Next button opens this step, but router changes stay disabled until WireGuard, API-SSL, and RADIUS readiness are verified.
+                    </p>
+                    <a href="{{ route('operator.routers.onboarding', ['tenant' => $tenant->slug, 'router' => $router->id]) }}"
+                       class="mt-4 inline-flex rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                        Back to connection checks
+                    </a>
+                </section>
+                @if (session('status'))
+                    <p class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">
+                        {{ session('status') }}
+                    </p>
+                @endif
+                @if ($errors->any())
+                    <p class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+                        {{ $errors->first() }}
+                    </p>
+                @endif
+                @if ($wirelessTestEnabled)
+                    <section class="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                        <h2 class="font-semibold">Temporary open Wi-Fi broadcast test</h2>
+                        <p class="mt-2 text-sm text-gray-600">
+                            This local-lab-only option creates a Winbox script that broadcasts the SSID immediately.
+                            It does not configure HotSpot, voucher authentication, DHCP, or the login portal. Use it only
+                            on the isolated router you confirmed for testing; its existing radio bridge membership is preserved.
+                        </p>
+                        <form method="POST" action="{{ route('operator.routers.onboarding.wireless-test', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="mt-4 space-y-4">
+                            @csrf
+                            <div>
+                                <label for="test_wifi_ssid" class="mb-1 block text-sm font-medium">Test Wi-Fi name (SSID)</label>
+                                <input id="test_wifi_ssid" name="wifi_ssid" maxlength="32" required
+                                       value="{{ old('wifi_ssid', $router->wifi_ssid) }}"
+                                       class="w-full rounded-lg border-gray-300 bg-white text-gray-900 shadow-sm">
+                            </div>
+                            <label class="flex items-start gap-3 text-sm text-gray-700">
+                                <input type="checkbox" name="confirm_builtin_wireless" value="1" required class="mt-1 rounded border-gray-300">
+                                <span>I confirm this MikroTik has built-in wireless interfaces.</span>
+                            </label>
+                            <label class="flex items-start gap-3 text-sm text-red-800">
+                                <input type="checkbox" name="confirm_isolated_router" value="1" required class="mt-1 rounded border-red-300">
+                                <span>I confirm this dedicated test router is isolated from public WAN and production clients. I understand this SSID is open and has no voucher login until HotSpot setup is completed.</span>
+                            </label>
+                            <button type="submit" class="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
+                                Save SSID and generate Winbox test script
+                            </button>
+                        </form>
+
+                        @if ($wirelessTestScript)
+                            <div class="mt-5">
+                                <div class="flex items-center justify-between gap-3">
+                                    <h3 class="text-sm font-semibold">Temporary script - run locally in Winbox</h3>
+                                    <button type="button" @click="copyWirelessTestScript()" class="text-sm font-semibold text-orange-700 hover:text-orange-800">
+                                        Copy script
+                                    </button>
+                                </div>
+                                <pre id="wireless-test-script" class="mt-3 overflow-x-auto rounded-lg bg-gray-100 p-4 text-xs text-blue-900">{{ $wirelessTestScript }}</pre>
+                            </div>
+                        @endif
+                    </section>
+                @endif
+                <section class="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-950">
+                    <h2 class="font-semibold">Customer login addresses</h2>
+                    <p class="mt-2">Voucher portal: <a class="break-all font-mono underline" href="{{ $voucherPortalUrl }}" target="_blank" rel="noopener">{{ $voucherPortalUrl }}</a></p>
+                    <p class="mt-2">Router HotSpot login after service setup: <span class="font-mono">{{ $routerLoginUrl ?? 'Available after a valid HotSpot gateway is set' }}</span></p>
+                    <p class="mt-2 text-xs text-blue-800">The open Wi-Fi test script only broadcasts the network. The router login URL will not work until the HotSpot service is configured.</p>
+                </section>
+            @else
+                @if ($errors->any())
+                    <div class="mt-5 rounded-lg border border-red-800 bg-red-950 p-4 text-sm text-red-200" role="alert">
+                        {{ $errors->first() }}
+                    </div>
+                @endif
 
             <form method="POST" action="{{ route('operator.routers.onboarding.services.configure', ['tenant' => $tenant->slug, 'router' => $router->id]) }}" class="mt-6 space-y-5">
                 @csrf
@@ -63,7 +145,7 @@
                 <section x-show="enableHotspot" x-cloak class="rounded-xl border border-gray-200 bg-white shadow-sm">
                     <div class="border-b border-gray-200 p-5">
                         <h2 class="font-semibold">Ethernet Ports</h2>
-                        <p class="mt-1 text-xs text-gray-600">Selected ports on the known RouterOS default LAN bridge are moved into the dedicated HotSpot bridge; unbridged client ports are added there. WAN and management ports are excluded by server-side checks.</p>
+                        <p class="mt-1 text-xs text-gray-600">Selected ports on the known RouterOS default LAN bridge are moved into the dedicated HotSpot bridge; unbridged client ports are added there. Opted-in built-in Wi-Fi is also configured and bridged to HotSpot. WAN and management ports are excluded by server-side checks.</p>
                     </div>
                     <div class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">
                         @forelse ($availablePorts as $port)
@@ -81,7 +163,17 @@
                             <p class="col-span-full text-sm text-amber-800">No supported Ethernet client ports were detected. HotSpot setup is unavailable until a router interface can be identified.</p>
                         @endforelse
                     </div>
-                    <p class="px-5 pb-2 text-xs text-gray-600">This reviewed setup supports Ethernet client ports. Active built-in Wi-Fi radios are intentionally not changed; use a separate access point connected to a selected client port.</p>
+                    @if($router->has_wireless)
+                        <div class="px-5 pb-3">
+                            <label for="wifi_ssid" class="mb-1 block text-xs font-medium text-gray-700">Built-in Wi-Fi SSID</label>
+                            <input id="wifi_ssid" name="wifi_ssid" maxlength="32" required x-bind:disabled="!enableHotspot"
+                                   value="{{ old('wifi_ssid', $router->wifi_ssid) }}"
+                                   class="w-full rounded-lg border-gray-300 bg-white text-sm text-gray-900 shadow-sm">
+                            <p class="mt-1 text-xs text-gray-600">Broadcasts as an open network after service configuration; voucher authentication is handled by the HotSpot portal.</p>
+                        </div>
+                    @else
+                        <p class="px-5 pb-2 text-xs text-gray-600">No built-in Wi-Fi SSID is configured. Connect an external access point to a selected HotSpot client port if needed.</p>
+                    @endif
                     <p class="px-5 pb-5 text-xs text-gray-500">
                         Detected interfaces: {{ collect($interfaces)->pluck('name')->filter()->implode(', ') ?: 'No interface names returned' }}
                     </p>
@@ -163,7 +255,7 @@
                             </div>
                             <div>
                                 <label for="gateway_ip" class="mb-1 block text-sm font-medium">Gateway IP</label>
-                                <input id="gateway_ip" name="gateway_ip" required x-bind:disabled="!enableHotspot"
+                                <input id="gateway_ip" name="gateway_ip" required x-model="gatewayIp" x-bind:disabled="!enableHotspot"
                                        value="{{ old('gateway_ip', $router->hotspot_config['gateway'] ?? config('services.mikrotik.gateway')) }}"
                                        class="w-full rounded-lg border-gray-300 bg-white font-mono text-gray-900 shadow-sm">
                             </div>
@@ -174,15 +266,23 @@
                                        class="w-full rounded-lg border-gray-300 bg-white font-mono text-gray-900 shadow-sm">
                             </div>
                             <div>
-                                <label for="hotspot_domain" class="mb-1 block text-sm font-medium">HotSpot Login URL / Domain</label>
+                                <label for="hotspot_domain" class="mb-1 block text-sm font-medium">Router HotSpot DNS name</label>
                                 <div class="flex items-center">
-                                    <span class="rounded-l-lg border border-r-0 border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600">http://</span>
                                     <input id="hotspot_domain" name="hotspot_domain" required x-bind:disabled="!enableHotspot"
                                            value="{{ old('hotspot_domain', $router->hotspot_config['domain'] ?? config('services.mikrotik.hotspot_domain')) }}"
-                                           class="min-w-0 flex-1 rounded-r-lg border-gray-300 bg-white font-mono text-gray-900 shadow-sm">
+                                           class="min-w-0 flex-1 rounded-lg border-gray-300 bg-white font-mono text-gray-900 shadow-sm">
                                 </div>
-                                <p class="mt-1 text-xs text-gray-500">Use the HotSpot DNS name configured on the router.</p>
+                                <p class="mt-1 text-xs text-gray-500">This is the RouterOS HotSpot profile DNS name, not the customer voucher portal URL.</p>
                             </div>
+                        </div>
+                        <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                            <p><span class="font-semibold">Customer voucher portal:</span>
+                                <a class="break-all font-mono underline" href="{{ $voucherPortalUrl }}" target="_blank" rel="noopener">{{ $voucherPortalUrl }}</a>
+                            </p>
+                            <p class="mt-2"><span class="font-semibold">Router HotSpot login after setup:</span>
+                                <span class="font-mono" x-text="gatewayIp ? `http://${gatewayIp}/login` : 'Set a gateway IP to preview'">{{ $routerLoginUrl ?? 'Set a gateway IP to preview' }}</span>
+                            </p>
+                            <p class="mt-2 text-xs text-blue-800">The app sends customers to the router login endpoint after voucher activation; the portal URL is where they browse packages or redeem a voucher.</p>
                         </div>
                     </div>
                 </section>
@@ -193,7 +293,7 @@
                         <li>Verify the enrolled router identity, RouterOS 7 version, live API-SSL connection, and selected interface links.</li>
                         <li>Refuse unknown bridge/resource ownership, conflicting address ranges, and existing PPP accounts/sessions.</li>
                         <li>Create a router-local backup and verify it exists before making changes.</li>
-                        <li>Configure only the selected HotSpot/PPPoE services and their Wi-Fi Billing-owned resources. Leave WAN, management, existing IP firewall rules, DNS, and API-SSL settings unchanged; RouterOS may add HotSpot dynamic rules and the script adds configured walled-garden entries.</li>
+                        <li>Configure the selected HotSpot/PPPoE services and opted-in built-in Wi-Fi as an open voucher-protected HotSpot network. Leave WAN, management, existing IP firewall rules, DNS, and API-SSL settings unchanged; RouterOS may add HotSpot dynamic rules and the script adds configured walled-garden entries.</li>
                     </ul>
                     <p class="mt-3 text-xs text-blue-800">If any live check is incomplete or conflicts with the plan, provisioning stops without applying changes. Keep the backup until you have tested customer authentication and accounting.</p>
                 </section>
@@ -217,6 +317,7 @@
                     </button>
                 </div>
             </form>
+            @endif
         </div>
     </div>
 </x-app-layout>

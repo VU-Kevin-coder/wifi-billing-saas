@@ -26,6 +26,66 @@ class RouterProvisioningService
         return str_replace(['\\', '"', '$'], ['\\\\', '\\"', '\\$'], $value);
     }
 
+    public function buildTemporaryWirelessTestScript(Router $router): string
+    {
+        if (! config('router.lab_provisioning_enabled') || ! app()->environment('local', 'testing')) {
+            throw new \LogicException('Temporary wireless scripts are restricted to enabled local lab environments.');
+        }
+
+        if (! $router->has_wireless || blank($router->wifi_ssid)) {
+            throw new \LogicException('Enable built-in wireless and save an SSID before generating a test script.');
+        }
+
+        $replacements = [
+            '@SSID@' => $this->escapeRouterOs((string) $router->wifi_ssid),
+            '@PROFILE@' => 'wifi-billing-test-open-'.$router->id,
+        ];
+        $script = <<<'ROUTEROS'
+            # TEMPORARY OPEN WI-FI TEST ONLY: no HotSpot or voucher authentication is configured.
+            # Run only on an isolated test router. Existing wireless bridge membership is preserved.
+            :do { /system script remove [find name="wifi-billing-wireless-test"] } on-error={}
+            /system script add name="wifi-billing-wireless-test" policy=read,write,test source={
+              :local wifiDriver ""
+              :do {
+                :if ([:len [/interface wifi find]] > 0) do={ :set wifiDriver "wifi" }
+              } on-error={}
+              :if ($wifiDriver = "") do={
+                :do {
+                  :if ([:len [/interface wireless find]] > 0) do={ :set wifiDriver "wireless" }
+                } on-error={}
+              }
+              :if ($wifiDriver = "wifi") do={
+                :foreach iface in=[/interface wifi find] do={
+                  /interface wifi set $iface configuration.mode=ap configuration.ssid="@SSID@" security.authentication-types="" disabled=no
+                }
+                :put "Temporary open Wi-Fi test SSID enabled."
+              }
+              :if ($wifiDriver = "wireless") do={
+                :local openProfile [/interface wireless security-profiles find name="@PROFILE@"]
+                :if ([:len $openProfile] = 0) do={
+                  /interface wireless security-profiles add name="@PROFILE@" mode=none comment="Wi-Fi Billing Temporary Test Profile"
+                }
+                :set openProfile [/interface wireless security-profiles find name="@PROFILE@"]
+                :if ([/interface wireless security-profiles get $openProfile comment] != "Wi-Fi Billing Temporary Test Profile") do={
+                  :error "Temporary Wi-Fi profile name is already in use"
+                }
+                /interface wireless security-profiles set $openProfile mode=none
+                :foreach iface in=[/interface wireless find] do={
+                  /interface wireless set $iface mode=ap-bridge ssid="@SSID@" security-profile="@PROFILE@" disabled=no
+                }
+                :put "Temporary open legacy Wi-Fi test SSID enabled."
+              }
+              :if ($wifiDriver = "") do={ :error "No supported built-in Wi-Fi interface was found." }
+            }
+            /system script run wifi-billing-wireless-test
+            /system script remove [find name="wifi-billing-wireless-test"]
+            ROUTEROS;
+
+        $script = trim(strtr($script, $replacements));
+
+        return str_replace("\n", "\r\n", $script)."\r\n";
+    }
+
     /**
      * Alias for generateScript.
      */
@@ -215,13 +275,49 @@ class RouterProvisioningService
             return ['ok' => false, 'message' => 'Guided provisioning supports verified RouterOS 7.x devices only. No changes were made.'];
         }
 
+        $configureWireless = $router->enable_hotspot && $router->has_wireless;
+        if ($configureWireless && (blank($router->wifi_ssid) || strlen((string) $router->wifi_ssid) > 32)) {
+            return ['ok' => false, 'message' => 'Set a Wi-Fi SSID of 1-32 bytes before provisioning.'];
+        }
+
         foreach ($state['all_interfaces'] ?? [] as $interface) {
             $type = strtolower((string) ($interface['type'] ?? ''));
             $name = strtolower((string) ($interface['name'] ?? ''));
             $isWireless = in_array($type, ['wlan', 'wifi'], true)
                 || preg_match('/^(wlan|wifi)\d+$/', $name) === 1;
             $isDisabled = in_array(strtolower((string) ($interface['disabled'] ?? 'false')), ['yes', 'true'], true);
-            if ($isWireless && ! $isDisabled) {
+            if (! $isWireless) {
+                continue;
+            }
+
+            if ($configureWireless) {
+                $bridgePort = collect($state['bridge_ports'] ?? [])->first(
+                    fn (array $port): bool => ($port['interface'] ?? null) === ($interface['name'] ?? null),
+                );
+                if ($bridgePort) {
+                    $bridge = collect($state['bridges'] ?? [])->first(
+                        fn (array $candidate): bool => ($candidate['name'] ?? null) === ($bridgePort['bridge'] ?? null),
+                    );
+                    $defaultMembership = ($bridge['comment'] ?? null) === 'defconf'
+                        && ($bridgePort['comment'] ?? null) === 'defconf';
+                    $managedMembership = ($bridge['name'] ?? null) === 'br-hotspot'
+                        && ($bridge['comment'] ?? null) === 'Wi-Fi Billing Client Bridge'
+                        && in_array($bridgePort['comment'] ?? null, [
+                            'Wi-Fi Billing Client Radio',
+                            'Client access port',
+                        ], true);
+                    if (! $defaultMembership && ! $managedMembership) {
+                        return [
+                            'ok' => false,
+                            'message' => 'Built-in Wi-Fi interface '.($interface['name'] ?? '').' belongs to an unmanaged bridge. Review it before provisioning.',
+                        ];
+                    }
+                }
+
+                continue;
+            }
+
+            if (! $isDisabled) {
                 return [
                     'ok' => false,
                     'message' => 'Active built-in Wi-Fi radios are not supported by this reviewed setup. Disable them and use a separate access point on a selected HotSpot client port.',
@@ -629,6 +725,9 @@ class RouterProvisioningService
             $lines[] = ":if ([:len [/interface bridge port find interface=\"{$port}\"]] > 0) do={ /interface bridge port set [find interface=\"{$port}\"] bridge=br-hotspot }";
             $lines[] = ":if ([:len [/interface bridge port find interface=\"{$port}\"]] > 0) do={ /interface bridge port set [find interface=\"{$port}\"] comment=\"Client access port\" }";
         }
+        foreach ($this->buildWirelessConfiguration($router) as $line) {
+            $lines[] = $line;
+        }
         $lines[] = '';
 
         // 3. IP Pool and Addressing (Idempotent + configured network prefix)
@@ -719,6 +818,63 @@ class RouterProvisioningService
         $lines[] = '# End of provisioning script';
 
         return implode("\r\n", $lines)."\r\n";
+    }
+
+    /**
+     * Configure opted-in RouterOS 7 radios as an open HotSpot access point.
+     *
+     * @return list<string>
+     */
+    private function buildWirelessConfiguration(Router $router): array
+    {
+        if (! $router->has_wireless) {
+            return [
+                '# --- SECTION: External Access Point Fallback ---',
+                ':put "Built-in Wi-Fi is not selected. Connect an external AP to a HotSpot client port."',
+                ':log info "Built-in Wi-Fi not selected; use an external AP for HotSpot."',
+            ];
+        }
+
+        if (blank($router->wifi_ssid)) {
+            return [];
+        }
+
+        $ssid = $this->escapeRouterOs((string) $router->wifi_ssid);
+        $profileName = 'wifi-billing-open-'.$router->id;
+
+        return [
+            '# --- SECTION: Universal Open Wi-Fi Configuration ---',
+            ':put "Configuring open Wi-Fi for HotSpot..."',
+            ':local wifiDriver ""',
+            ':do { :if ([:len [/interface wifi find]] > 0) do={ :set wifiDriver "wifi" } } on-error={}',
+            ':if ($wifiDriver = "") do={ :do { :if ([:len [/interface wireless find]] > 0) do={ :set wifiDriver "wireless" } } on-error={} }',
+            ':if ($wifiDriver = "wifi") do={',
+            '  :foreach iface in=[/interface wifi find] do={',
+            '    /interface wifi set $iface configuration.mode=ap configuration.ssid="'.$ssid.'" security.authentication-types="" disabled=no',
+            '    :if ([:len [/interface bridge port find interface=$iface]] = 0) do={ /interface bridge port add bridge=br-hotspot interface=$iface comment="Wi-Fi Billing Client Radio" }',
+            '    :if ([:len [/interface bridge port find interface=$iface]] > 0) do={ /interface bridge port set [find interface=$iface] bridge=br-hotspot comment="Wi-Fi Billing Client Radio" }',
+            '  }',
+            '  :put "Configured open Wi-Fi interface(s)."',
+            '}',
+            ':if ($wifiDriver = "wireless") do={',
+            '  :local openProfile [/interface wireless security-profiles find name="'.$profileName.'"]',
+            '  :if ([:len $openProfile] = 0) do={ /interface wireless security-profiles add name="'.$profileName.'" mode=none comment="Wi-Fi Billing Open HotSpot Profile" }',
+            '  :if ([:len $openProfile] > 0) do={',
+            '    :if ([/interface wireless security-profiles get $openProfile comment] != "Wi-Fi Billing Open HotSpot Profile") do={ :error "Wi-Fi Billing open profile name is already in use" }',
+            '    /interface wireless security-profiles set $openProfile mode=none',
+            '  }',
+            '  :foreach iface in=[/interface wireless find] do={',
+            '    /interface wireless set $iface mode=ap-bridge ssid="'.$ssid.'" security-profile="'.$profileName.'" disabled=no',
+            '    :if ([:len [/interface bridge port find interface=$iface]] = 0) do={ /interface bridge port add bridge=br-hotspot interface=$iface comment="Wi-Fi Billing Client Radio" }',
+            '    :if ([:len [/interface bridge port find interface=$iface]] > 0) do={ /interface bridge port set [find interface=$iface] bridge=br-hotspot comment="Wi-Fi Billing Client Radio" }',
+            '  }',
+            '  :put "Configured open legacy wireless interface(s)."',
+            '}',
+            ':if ($wifiDriver = "") do={',
+            '  :put "No built-in Wi-Fi found. Ensure an external AP is plugged into a HotSpot bridge port."',
+            '  :log info "No built-in Wi-Fi found for HotSpot."',
+            '}',
+        ];
     }
 
     private function buildPppoeScript(Router $router, ?string $radiusSecret): string

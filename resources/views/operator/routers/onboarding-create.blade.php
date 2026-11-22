@@ -26,7 +26,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ route('operator.routers.store') }}" class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <form x-data="{ hasWireless: @js((bool) old('has_wireless')) }" method="POST" action="{{ route('operator.routers.store') }}" class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                 @csrf
                 <input type="hidden" name="guided_onboarding" value="1">
 
@@ -58,15 +58,15 @@
                     <p class="text-sm text-gray-600 sm:col-span-2">Customer authentication uses cloud RADIUS. Router management is restricted to the WireGuard tunnel and API-SSL.</p>
 
                     <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 sm:col-span-2">
-                        <input type="checkbox" name="has_wireless" value="1" @checked(old('has_wireless'))>
+                        <input type="checkbox" name="has_wireless" value="1" x-model="hasWireless" @checked(old('has_wireless'))>
                         <span><span class="block text-sm font-medium text-gray-900">Router has wireless</span><span class="mt-1 block text-xs text-gray-500">Set this if the router has built-in Wi-Fi.</span></span>
                     </label>
-                    <div class="sm:col-span-2">
+                    <div x-show="hasWireless" x-cloak class="sm:col-span-2">
                         <label for="wifi_ssid" class="mb-1 block text-sm font-medium text-gray-700">Wi-Fi name (SSID)</label>
                         <input id="wifi_ssid" name="wifi_ssid" maxlength="32" value="{{ old('wifi_ssid') }}"
                                placeholder="{{ $tenant->name }}"
                                class="w-full rounded-lg border-gray-300 bg-white text-gray-900 shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                        <p class="mt-1 text-xs text-gray-500">Wireless settings are applied only if you enable the wireless option.</p>
+                        <p class="mt-1 text-xs text-gray-500">When enabled, built-in Wi-Fi is open (no Wi-Fi password); guests authenticate through the HotSpot voucher portal. For routers without built-in Wi-Fi, connect an external access point to a HotSpot client port.</p>
                     </div>
                 </div>
 

@@ -3,13 +3,16 @@
 namespace Tests\Feature;
 
 use App\Models\Router;
+use App\Models\RouterOnboarding;
 use App\Models\Session;
 use App\Models\Site;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\VpnPeer;
+use App\Services\RadiusRuntimeHealthCheck;
 use App\Services\RouterConnectionService;
 use App\Services\RouterProvisioningService;
+use App\Services\SystemHealthService;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -561,6 +564,141 @@ class RouterManagementTest extends TestCase
         $this->assertNotNull($router->last_seen_at);
     }
 
+    public function test_onboarding_status_poll_advances_to_service_setup_without_a_queue_worker(): void
+    {
+        config(['radius.enabled' => true]);
+        $router = $this->makeApiVerifiedRouter();
+
+        $this->mock(SystemHealthService::class, function ($mock): void {
+            $mock->shouldReceive('queueWorkerReady')->once()->andReturn(true);
+        });
+        $this->mock(RadiusRuntimeHealthCheck::class, function ($mock): void {
+            $mock->shouldReceive('available')->once()->andReturn(true);
+        });
+        $this->mock(RouterConnectionService::class, function ($mock): void {
+            $mock->shouldReceive('testOnboardingWireGuard')->once()->andReturn(['ok' => true]);
+            $mock->shouldReceive('hasOnboardingRadiusConfiguration')->once()->andReturn(true);
+        });
+
+        $response = $this->actingAs($this->acmeUser)->getJson(route(
+            'operator.routers.onboarding.status',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ));
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'radius_ready')
+            ->assertJsonPath('next_url', route('operator.routers.onboarding.services', [
+                'tenant' => $this->acme->slug,
+                'router' => $router->id,
+            ]));
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $this->assertSame('radius_ready', $router->onboarding->fresh()->status);
+    }
+
+    public function test_onboarding_page_offers_radius_retry_when_readiness_is_blocked(): void
+    {
+        $router = $this->makeApiVerifiedRouter('blocked');
+
+        $response = $this->actingAs($this->acmeUser)->get(route(
+            'operator.routers.onboarding',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ));
+
+        $response->assertOk()
+            ->assertSee('Retry RADIUS readiness')
+            ->assertSee('The saved open Wi-Fi SSID is applied in Step 3', false);
+    }
+
+    public function test_next_button_and_service_step_are_available_before_readiness_without_enabling_configuration(): void
+    {
+        $router = $this->makeApiVerifiedRouter();
+        $router->onboarding()->update(['status' => 'enrolled']);
+
+        $this->actingAs($this->acmeUser)->get(route(
+            'operator.routers.onboarding',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ))
+            ->assertOk()
+            ->assertSee('Next</a>', false);
+
+        $this->mock(RouterConnectionService::class, function ($mock): void {
+            $mock->shouldNotReceive('onboardingInterfaces');
+        });
+
+        $this->actingAs($this->acmeUser)->get(route(
+            'operator.routers.onboarding.services',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ))
+            ->assertOk()
+            ->assertSee('Service configuration is not ready yet')
+            ->assertSee('Back to connection checks')
+            ->assertDontSee('Create and configure router');
+
+        $this->actingAs($this->acmeUser)->post(route(
+            'operator.routers.onboarding.services.configure',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ), ['_idempotency_key' => str_repeat('a', 40)])->assertNotFound();
+    }
+
+    public function test_isolated_lab_wireless_test_saves_ssid_and_generates_open_winbox_script(): void
+    {
+        config(['router.lab_provisioning_enabled' => true]);
+        $router = $this->makeApiVerifiedRouter();
+        $router->forceFill([
+            'has_wireless' => true,
+            'wifi_ssid' => null,
+            'hotspot_config' => ['gateway' => '10.10.0.1'],
+        ])->saveOrFail();
+        $router->onboarding()->update(['status' => 'enrolled']);
+        $params = ['tenant' => $this->acme->slug, 'router' => $router->id];
+
+        $this->actingAs($this->acmeUser)->post(route(
+            'operator.routers.onboarding.wireless-test',
+            $params,
+        ), [
+            'wifi_ssid' => 'Test Guest Network',
+            'confirm_builtin_wireless' => '1',
+            'confirm_isolated_router' => '1',
+        ])->assertRedirect(route('operator.routers.onboarding.services', $params));
+
+        $this->assertSame('Test Guest Network', $router->fresh()->wifi_ssid);
+        $this->actingAs($this->acmeUser)->get(route(
+            'operator.routers.onboarding.services',
+            $params,
+        ))
+            ->assertOk()
+            ->assertSee('Temporary open Wi-Fi broadcast test')
+            ->assertSee('/interface wifi set $iface configuration.mode=ap configuration.ssid="Test Guest Network"')
+            ->assertSee('/interface wireless set $iface mode=ap-bridge ssid="Test Guest Network"')
+            ->assertSee('/portal')
+            ->assertSee('http://10.10.0.1/login');
+    }
+
+    public function test_wireless_test_script_is_hidden_when_lab_feature_is_disabled(): void
+    {
+        config(['router.lab_provisioning_enabled' => false]);
+        $router = $this->makeApiVerifiedRouter();
+        $router->forceFill(['has_wireless' => true, 'wifi_ssid' => 'Test Guest'])->saveOrFail();
+        $router->onboarding()->update(['status' => 'enrolled']);
+
+        $this->actingAs($this->acmeUser)->get(route(
+            'operator.routers.onboarding.services',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ))
+            ->assertOk()
+            ->assertDontSee('Temporary open Wi-Fi broadcast test')
+            ->assertDontSee('wifi-billing-wireless-test');
+
+        $this->actingAs($this->acmeUser)->post(route(
+            'operator.routers.onboarding.wireless-test',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ), [
+            'wifi_ssid' => 'Test Guest',
+            'confirm_builtin_wireless' => '1',
+            'confirm_isolated_router' => '1',
+        ])->assertNotFound();
+    }
+
     public function test_router_status_check_keeps_offline_state_when_api_fails(): void
     {
         $router = app(TenantContext::class)->runAs($this->acme, function () {
@@ -588,6 +726,48 @@ class RouterManagementTest extends TestCase
             ]);
 
         $this->assertSame('offline', $router->fresh()->status);
+    }
+
+    private function makeApiVerifiedRouter(string $readinessStatus = 'not_checked'): Router
+    {
+        return app(TenantContext::class)->runAs($this->acme, function () use ($readinessStatus): Router {
+            $router = Router::create([
+                'tenant_id' => $this->acme->id,
+                'name' => 'ONBOARDING-STATUS-ROUTER',
+                'status' => 'online',
+                'api_username' => 'billing_api',
+                'api_password' => 'private-test-password',
+                'api_port' => 8729,
+                'enrolled' => true,
+            ]);
+            $router->forceFill([
+                'access_backend' => 'site_agent',
+                'pending_radius_activation' => true,
+                'radius_nas_identifier' => 'router-'.$router->id,
+                'radius_shared_secret' => str_repeat('a', 64),
+                'radius_readiness_status' => $readinessStatus,
+            ])->saveOrFail();
+            VpnPeer::create([
+                'tenant_id' => $this->acme->id,
+                'router_id' => $router->id,
+                'name' => 'Onboarding status peer',
+                'public_key' => base64_encode(random_bytes(32)),
+                'tunnel_ip' => '10.8.1.20',
+                'enabled' => true,
+            ]);
+            RouterOnboarding::create([
+                'tenant_id' => $this->acme->id,
+                'router_id' => $router->id,
+                'bootstrap_token_hash' => hash('sha256', random_bytes(32)),
+                'bootstrap_script' => '/system identity print',
+                'bootstrap_command' => 'command',
+                'status' => 'api_verified',
+                'api_verified_at' => now(),
+                'expires_at' => now()->addMinutes(30),
+            ]);
+
+            return $router->fresh(['onboarding', 'vpnPeer']);
+        });
     }
 
     public function test_operator_receives_failure_when_router_api_test_fails(): void

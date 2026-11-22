@@ -329,11 +329,16 @@ class RouterCommandService
 
     public function poll(Router $router, array $telemetry): ?array
     {
+        $router->loadMissing('onboarding');
+        $onboardingStatus = $router->onboarding?->status;
+
         $router->forceFill([
             'cpu_usage' => $telemetry['cpu_usage'],
             'memory_usage' => $telemetry['memory_usage'],
             'active_users' => $telemetry['active_users'],
-            'status' => 'online',
+            'status' => $onboardingStatus !== null && $onboardingStatus !== 'complete'
+                ? 'provisioning'
+                : 'online',
             'last_seen_at' => now(),
             'telemetry_at' => now(),
             'polling_last_seen_at' => now(),
