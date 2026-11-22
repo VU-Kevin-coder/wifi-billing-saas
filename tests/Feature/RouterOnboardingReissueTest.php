@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Router;
 use App\Models\RouterOnboarding;
+use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\VpnPeer;
@@ -96,6 +97,15 @@ class RouterOnboardingReissueTest extends TestCase
             $newToken = $matches[1];
         }
         $this->assertNotNull($newToken);
+        $this->actingAs($user)
+            ->get(route('operator.routers.onboarding', [
+                'tenant' => $tenant->slug,
+                'router' => $router->id,
+            ]))
+            ->assertOk()
+            ->assertSee($newToken)
+            ->assertSee('Issue a fresh onboarding command');
+
         $onboardingService = app(\App\Services\RouterOnboardingService::class);
         $this->assertNull($onboardingService->fetchBootstrapScript($oldToken));
         $newScript = $onboardingService->fetchBootstrapScript($newToken);
@@ -122,6 +132,25 @@ class RouterOnboardingReissueTest extends TestCase
     {
         [$tenant, $router, $user, , $onboarding] = $this->makePendingRouter();
         $router->forceFill(['enrolled' => true])->saveOrFail();
+
+        $response = $this->actingAs($user)->from('/')->post(route('operator.routers.onboarding.reissue', [
+            'tenant' => $tenant->slug,
+            'router' => $router->id,
+        ]), ['confirm_router_reset' => '1']);
+
+        $response->assertRedirect('/');
+        $response->assertSessionHasErrors('onboarding');
+        $this->assertSame('awaiting_bootstrap', $onboarding->fresh()->status);
+    }
+
+    public function test_router_with_active_sessions_cannot_be_reissued(): void
+    {
+        [$tenant, $router, $user, , $onboarding] = $this->makePendingRouter();
+        Session::create([
+            'tenant_id' => $tenant->id,
+            'router_id' => $router->id,
+            'status' => 'active',
+        ]);
 
         $response = $this->actingAs($user)->from('/')->post(route('operator.routers.onboarding.reissue', [
             'tenant' => $tenant->slug,
