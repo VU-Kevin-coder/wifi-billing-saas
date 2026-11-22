@@ -48,6 +48,11 @@ class RouterProvisioningController extends Controller
             Log::error('ENROLL VALIDATION FAILED: ', [
                 'errors' => $validator->errors()->toArray(),
                 'payload_keys' => array_keys($request->all()),
+                // Lengths only (never values) so an empty certificate/serial is obvious.
+                'payload_lengths' => collect($request->all())
+                    ->map(fn ($value): int => is_string($value) ? strlen($value) : -1)
+                    ->all(),
+                'content_type' => $request->header('Content-Type'),
             ]);
 
             return response()->json(['errors' => $validator->errors()], 422);
@@ -60,7 +65,7 @@ class RouterProvisioningController extends Controller
                 $validated['token'],
                 $validated['serial'],
                 $validated['model'],
-                $validated['api_ca_certificate'],
+                str_replace("\r\n", "\n", trim($validated['api_ca_certificate'])),
             );
         } catch (RuntimeException $exception) {
             Log::warning('ROUTER ENROLLMENT REJECTED', [

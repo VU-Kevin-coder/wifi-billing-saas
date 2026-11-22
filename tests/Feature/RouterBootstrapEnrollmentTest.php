@@ -64,6 +64,24 @@ class RouterBootstrapEnrollmentTest extends TestCase
             ]);
     }
 
+    public function test_enrollment_rejection_reason_is_logged_when_bootstrap_script_was_never_fetched(): void
+    {
+        $token = Str::random(64);
+        $this->makeOnboarding($token);
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(fn (string $message, array $context): bool => $message === 'ROUTER ENROLLMENT REJECTED'
+                && str_contains($context['reason'], 'never fetched'));
+
+        $this->postJson(route('api.provision.enroll'), [
+            'token' => $token,
+            'serial' => 'HF309ABC123',
+            'model' => 'hAP ac^2',
+            'api_ca_certificate' => "-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----",
+        ])->assertUnprocessable();
+    }
+
     public function test_cloudflare_forwarded_https_is_trusted_from_the_configured_local_proxy(): void
     {
         Route::get('/_testing/proxy-scheme', static function (Request $request) {

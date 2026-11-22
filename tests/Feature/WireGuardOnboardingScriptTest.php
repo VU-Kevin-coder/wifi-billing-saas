@@ -163,6 +163,17 @@ class WireGuardOnboardingScriptTest extends TestCase
         $this->assertStringNotContainsString(':parse', strtolower($script));
         $this->assertDoesNotMatchRegularExpression('/(?:^|[\s:])eval(?:\s|\[|\{)/im', $script);
         $this->assertStringContainsString('/file get [find name="wifi-billing-api.crt"] contents', $script);
+        // The certificate file is written asynchronously on RouterOS: the script must retry the read
+        // and refuse to POST an empty certificate or serial (which the API rejects with HTTP 422).
+        $this->assertStringContainsString(':for certAttempt from=1 to=15 do={', $script);
+        $this->assertStringContainsString('~"END CERTIFICATE"', $script);
+        $this->assertStringContainsString(':error "wifi-billing: API certificate export failed or is empty; enrollment aborted"', $script);
+        $this->assertStringContainsString(':error "wifi-billing: router serial number is empty; enrollment aborted"', $script);
+        $this->assertStringContainsString(':do { /file remove [find name="wifi-billing-api.crt"] } on-error={}', $script);
+        $this->assertLessThan(
+            strpos($script, '/tool fetch url="https://billing.example.test/api/provision/enroll"'),
+            strpos($script, ':error "wifi-billing: API certificate export failed'),
+        );
         $this->assertStringNotContainsString('cert_export_wifi-billing-api.crt', $script);
         $this->assertStringNotContainsString('check-certificate=no', $script);
         $this->assertNull($peer->fresh()->private_key);
