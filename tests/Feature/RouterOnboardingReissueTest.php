@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\VpnPeer;
 use App\Services\RadiusRouterCredentialService;
+use App\Services\RouterOnboardingService;
 use App\Services\WireGuardCommandRunner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -106,7 +107,7 @@ class RouterOnboardingReissueTest extends TestCase
             ->assertSee($newToken)
             ->assertSee('Issue a fresh onboarding command');
 
-        $onboardingService = app(\App\Services\RouterOnboardingService::class);
+        $onboardingService = app(RouterOnboardingService::class);
         $this->assertNull($onboardingService->fetchBootstrapScript($oldToken));
         $newScript = $onboardingService->fetchBootstrapScript($newToken);
         $this->assertIsString($newScript);
