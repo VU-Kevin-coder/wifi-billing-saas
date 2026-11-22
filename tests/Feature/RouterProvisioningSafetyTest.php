@@ -75,6 +75,29 @@ class RouterProvisioningSafetyTest extends TestCase
         }
     }
 
+    public function test_temporary_wireless_script_requires_local_lab_opt_in_and_saved_wireless_settings(): void
+    {
+        $service = new RouterProvisioningService;
+        $router = new Router;
+        config(['router.lab_provisioning_enabled' => false]);
+
+        try {
+            $service->buildTemporaryWirelessTestScript($router);
+            $this->fail('Temporary wireless scripts must be disabled without lab opt-in.');
+        } catch (\LogicException $exception) {
+            $this->assertStringContainsString('enabled local lab environments', $exception->getMessage());
+        }
+
+        config(['router.lab_provisioning_enabled' => true]);
+        $router->forceFill(['has_wireless' => true, 'wifi_ssid' => null]);
+        try {
+            $service->buildTemporaryWirelessTestScript($router);
+            $this->fail('A test script must require a saved SSID.');
+        } catch (\LogicException $exception) {
+            $this->assertStringContainsString('save an SSID', $exception->getMessage());
+        }
+    }
+
     public function test_radius_script_is_limited_to_an_enabled_local_chr_and_does_not_deploy(): void
     {
         config([

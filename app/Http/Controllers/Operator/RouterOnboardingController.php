@@ -16,6 +16,7 @@ use App\Services\RouterProvisioningService;
 use App\Services\RouterTransportException;
 use App\Services\Tenancy\TenantContext;
 use App\Services\WireGuardService;
+use App\Support\HotspotLogin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -55,6 +56,7 @@ class RouterOnboardingController extends Controller
         string $tenant,
         int $router,
         RouterConnectionService $connection,
+        RouterProvisioningService $provisioning,
     ) {
         abort_unless($context->getTenant()?->slug === $tenant, 404);
         $tenant = $context->getTenant();
@@ -67,6 +69,8 @@ class RouterOnboardingController extends Controller
         $canConfigure = $routerModel->enrolled
             && in_array($routerModel->onboarding->status, ['radius_ready', 'complete'], true);
         $interfaces = [];
+        $wirelessTestEnabled = config('router.lab_provisioning_enabled')
+            && app()->environment('local', 'testing');
 
         if ($canConfigure) {
             try {
@@ -88,12 +92,22 @@ class RouterOnboardingController extends Controller
             ->values()
             ->all();
         $pppoeDefaults = $this->pppoeDefaults();
+        $routerLoginGateway = HotspotLogin::validGateway($routerModel->hotspot_config['gateway'] ?? null)
+            ?? HotspotLogin::validGateway(config('services.mikrotik.gateway'))
+            ?? HotspotLogin::validGateway(config('hotspot.default_gateway'));
 
         return response()
             ->view('operator.routers.onboarding-services', [
                 'tenant' => $tenant,
                 'router' => $routerModel,
                 'canConfigure' => $canConfigure,
+                'wirelessTestEnabled' => $wirelessTestEnabled,
+                'wirelessTestScript' => $wirelessTestEnabled
+                    && ! $canConfigure
+                    && $routerModel->has_wireless
+                    && filled($routerModel->wifi_ssid)
+                    ? $provisioning->buildTemporaryWirelessTestScript($routerModel)
+                    : null,
                 'interfaces' => $interfaces,
                 'availablePorts' => $availablePorts,
                 'wanInterface' => $wanInterface,
@@ -101,8 +115,58 @@ class RouterOnboardingController extends Controller
                 'pppoeNetwork' => $pppoeDefaults['network'],
                 'pppoeGateway' => $pppoeDefaults['gateway'],
                 'pppoeDnsServers' => $pppoeDefaults['dns'],
+                'voucherPortalUrl' => route('portal.index', ['tenant' => $tenant->slug]),
+                'routerLoginUrl' => $routerLoginGateway ? 'http://'.$routerLoginGateway.'/login' : null,
             ])
             ->withHeaders($this->noStoreHeaders());
+    }
+
+    public function saveWirelessTestSettings(
+        Request $request,
+        TenantContext $context,
+        string $tenant,
+        int $router,
+    ) {
+        abort_unless(
+            config('router.lab_provisioning_enabled') && app()->environment('local', 'testing'),
+            404,
+        );
+        abort_unless($context->getTenant()?->slug === $tenant, 404);
+        $routerModel = Router::query()
+            ->where('tenant_id', $context->getTenantId())
+            ->with('onboarding')
+            ->findOrFail($router);
+        abort_unless($routerModel->onboarding, 404);
+        abort_if(
+            $routerModel->enrolled && in_array($routerModel->onboarding->status, ['radius_ready', 'complete'], true),
+            404,
+        );
+
+        $validated = $request->validate([
+            'wifi_ssid' => ['required', 'string', 'min:1', 'max:32', 'not_regex:/[\x00-\x1f\x7f]/'],
+            'confirm_isolated_router' => ['required', 'accepted'],
+            'confirm_builtin_wireless' => ['required', 'accepted'],
+        ]);
+        $ssid = trim($validated['wifi_ssid']);
+        if ($ssid === '') {
+            return back()->withInput()->withErrors([
+                'wifi_ssid' => 'Enter a Wi-Fi name containing at least one non-space character.',
+            ]);
+        }
+
+        $routerModel->forceFill([
+            'has_wireless' => true,
+            'wifi_ssid' => $ssid,
+        ])->saveOrFail();
+        AuditLog::record('router.wireless_test_ssid_saved', $routerModel, [
+            'ssid' => $ssid,
+            'isolated_test_router_confirmed' => true,
+        ]);
+
+        return redirect()->route('operator.routers.onboarding.services', [
+            'tenant' => $tenant,
+            'router' => $routerModel->id,
+        ])->with('status', 'Test SSID saved. Copy and run the temporary open Wi-Fi script in Winbox to broadcast it.');
     }
 
     public function configure(
@@ -143,6 +207,7 @@ class RouterOnboardingController extends Controller
             'gateway_ip' => ['required_if:enable_hotspot,1', 'nullable', 'ipv4'],
             'dns_servers' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:100'],
             'hotspot_domain' => ['required_if:enable_hotspot,1', 'nullable', 'string', 'max:253', 'regex:/^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$/'],
+            'wifi_ssid' => ['nullable', 'string', 'max:32', 'not_regex:/[\x00-\x1f\x7f]/'],
             'ethernet_ports' => ['required_if:enable_hotspot,1', 'array', 'min:1'],
             'ethernet_ports.*' => ['string', Rule::in($availablePorts)],
             'pppoe_interface' => ['required_if:enable_pppoe,1', 'nullable', 'string', Rule::in($availablePorts)],
@@ -165,6 +230,13 @@ class RouterOnboardingController extends Controller
         if (! $validated['enable_hotspot'] && ! $validated['enable_pppoe']) {
             return back()->withInput()->withErrors([
                 'enable_hotspot' => 'Enable HotSpot, PPPoE, or both to complete service setup.',
+            ]);
+        }
+
+        $wifiSsid = trim((string) ($validated['wifi_ssid'] ?? ''));
+        if ($routerModel->has_wireless && $validated['enable_hotspot'] && $wifiSsid === '') {
+            return back()->withInput()->withErrors([
+                'wifi_ssid' => 'Enter a Wi-Fi name of 1-32 characters before enabling the built-in radio.',
             ]);
         }
 
@@ -269,6 +341,7 @@ class RouterOnboardingController extends Controller
         $routerModel->forceFill([
             'enable_hotspot' => (bool) $validated['enable_hotspot'],
             'enable_pppoe' => (bool) $validated['enable_pppoe'],
+            'wifi_ssid' => $routerModel->has_wireless && $validated['enable_hotspot'] ? $wifiSsid : $routerModel->wifi_ssid,
             'hotspot_config' => $hotspotConfig,
             'pppoe_config' => $pppoeConfig,
             'ethernet_ports' => array_values($validated['ethernet_ports'] ?? []),

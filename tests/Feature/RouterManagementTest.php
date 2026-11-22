@@ -640,6 +640,65 @@ class RouterManagementTest extends TestCase
         ), ['_idempotency_key' => str_repeat('a', 40)])->assertNotFound();
     }
 
+    public function test_isolated_lab_wireless_test_saves_ssid_and_generates_open_winbox_script(): void
+    {
+        config(['router.lab_provisioning_enabled' => true]);
+        $router = $this->makeApiVerifiedRouter();
+        $router->forceFill([
+            'has_wireless' => true,
+            'wifi_ssid' => null,
+            'hotspot_config' => ['gateway' => '10.10.0.1'],
+        ])->saveOrFail();
+        $router->onboarding()->update(['status' => 'enrolled']);
+        $params = ['tenant' => $this->acme->slug, 'router' => $router->id];
+
+        $this->actingAs($this->acmeUser)->post(route(
+            'operator.routers.onboarding.wireless-test',
+            $params,
+        ), [
+            'wifi_ssid' => 'Test Guest Network',
+            'confirm_builtin_wireless' => '1',
+            'confirm_isolated_router' => '1',
+        ])->assertRedirect(route('operator.routers.onboarding.services', $params));
+
+        $this->assertSame('Test Guest Network', $router->fresh()->wifi_ssid);
+        $this->actingAs($this->acmeUser)->get(route(
+            'operator.routers.onboarding.services',
+            $params,
+        ))
+            ->assertOk()
+            ->assertSee('Temporary open Wi-Fi broadcast test')
+            ->assertSee('/interface wifi set $iface configuration.mode=ap configuration.ssid="Test Guest Network"')
+            ->assertSee('/interface wireless set $iface mode=ap-bridge ssid="Test Guest Network"')
+            ->assertSee('/portal')
+            ->assertSee('http://10.10.0.1/login');
+    }
+
+    public function test_wireless_test_script_is_hidden_when_lab_feature_is_disabled(): void
+    {
+        config(['router.lab_provisioning_enabled' => false]);
+        $router = $this->makeApiVerifiedRouter();
+        $router->forceFill(['has_wireless' => true, 'wifi_ssid' => 'Test Guest'])->saveOrFail();
+        $router->onboarding()->update(['status' => 'enrolled']);
+
+        $this->actingAs($this->acmeUser)->get(route(
+            'operator.routers.onboarding.services',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ))
+            ->assertOk()
+            ->assertDontSee('Temporary open Wi-Fi broadcast test')
+            ->assertDontSee('wifi-billing-wireless-test');
+
+        $this->actingAs($this->acmeUser)->post(route(
+            'operator.routers.onboarding.wireless-test',
+            ['tenant' => $this->acme->slug, 'router' => $router->id],
+        ), [
+            'wifi_ssid' => 'Test Guest',
+            'confirm_builtin_wireless' => '1',
+            'confirm_isolated_router' => '1',
+        ])->assertNotFound();
+    }
+
     public function test_router_status_check_keeps_offline_state_when_api_fails(): void
     {
         $router = app(TenantContext::class)->runAs($this->acme, function () {

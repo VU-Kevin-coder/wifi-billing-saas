@@ -460,7 +460,10 @@ class RouterGuidedProvisioningTest extends TestCase
             'router' => $router->id,
         ]));
 
-        $response->assertOk();
+        $response->assertOk()
+            ->assertSee('Customer voucher portal')
+            ->assertSee('http://10.10.0.1/login')
+            ->assertSee('Router HotSpot DNS name');
         $html = $response->getContent();
         $this->assertSame(1, preg_match(
             '/<form\b[^>]*action="[^"]*onboarding\/services"[^>]*>(.*?)<\/form>/s',

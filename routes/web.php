@@ -261,6 +261,10 @@ $tenantRouteGroup->group(function () {
                 Route::get('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'services'])
                     ->whereNumber('router')
                     ->name('routers.onboarding.services');
+                Route::post('routers/{router}/onboarding/wireless-test', [RouterOnboardingController::class, 'saveWirelessTestSettings'])
+                    ->whereNumber('router')
+                    ->middleware('throttle:5,1')
+                    ->name('routers.onboarding.wireless-test');
                 Route::post('routers/{router}/onboarding/services', [RouterOnboardingController::class, 'configure'])
                     ->whereNumber('router')
                     ->middleware('idempotency')
