@@ -32,11 +32,17 @@ class RouterBootstrapEnrollmentService
                 ->lockForUpdate()
                 ->first();
 
-            if (! $onboarding
-                || $onboarding->status !== 'awaiting_bootstrap'
-                || $onboarding->expires_at->isPast()
-                || $onboarding->bootstrap_fetches < 1) {
-                throw new RuntimeException('Router enrollment token is invalid or expired.');
+            if (! $onboarding) {
+                throw new RuntimeException('Router enrollment token is invalid or expired. (token not found: already used, or the onboarding was regenerated)');
+            }
+            if ($onboarding->status !== 'awaiting_bootstrap') {
+                throw new RuntimeException('Router enrollment token is invalid or expired. (onboarding status is '.$onboarding->status.')');
+            }
+            if ($onboarding->expires_at->isPast()) {
+                throw new RuntimeException('Router enrollment token is invalid or expired. (token expired)');
+            }
+            if ($onboarding->bootstrap_fetches < 1) {
+                throw new RuntimeException('Router enrollment token is invalid or expired. (bootstrap script was never fetched from /api/provision/bootstrap; do not paste the .rsc contents directly)');
             }
 
             $router = Router::withoutTenancy()
@@ -45,8 +51,11 @@ class RouterBootstrapEnrollmentService
                 ->lockForUpdate()
                 ->findOrFail($onboarding->router_id);
 
-            if (! $router->vpnPeer?->enabled || $router->enrolled) {
-                throw new RuntimeException('Router enrollment is not available for this device.');
+            if (! $router->vpnPeer?->enabled) {
+                throw new RuntimeException('Router enrollment is not available for this device. (WireGuard peer missing or disabled)');
+            }
+            if ($router->enrolled) {
+                throw new RuntimeException('Router enrollment is not available for this device. (router is already enrolled)');
             }
 
             $router->forceFill([
