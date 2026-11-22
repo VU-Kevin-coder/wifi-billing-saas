@@ -36,40 +36,54 @@ class RouterProvisioningService
             throw new \LogicException('Enable built-in wireless and save an SSID before generating a test script.');
         }
 
-        $ssid = $this->escapeRouterOs((string) $router->wifi_ssid);
-        $profileName = 'wifi-billing-test-open-'.$router->id;
+        $replacements = [
+            '@SSID@' => $this->escapeRouterOs((string) $router->wifi_ssid),
+            '@PROFILE@' => 'wifi-billing-test-open-'.$router->id,
+        ];
+        $script = <<<'ROUTEROS'
+            # TEMPORARY OPEN WI-FI TEST ONLY: no HotSpot or voucher authentication is configured.
+            # Run only on an isolated test router. Existing wireless bridge membership is preserved.
+            :do { /system script remove [find name="wifi-billing-wireless-test"] } on-error={}
+            /system script add name="wifi-billing-wireless-test" policy=read,write,test source={
+              :local wifiDriver ""
+              :do {
+                :if ([:len [/interface wifi find]] > 0) do={ :set wifiDriver "wifi" }
+              } on-error={}
+              :if ($wifiDriver = "") do={
+                :do {
+                  :if ([:len [/interface wireless find]] > 0) do={ :set wifiDriver "wireless" }
+                } on-error={}
+              }
+              :if ($wifiDriver = "wifi") do={
+                :foreach iface in=[/interface wifi find] do={
+                  /interface wifi set $iface configuration.mode=ap configuration.ssid="@SSID@" security.authentication-types="" disabled=no
+                }
+                :put "Temporary open Wi-Fi test SSID enabled."
+              }
+              :if ($wifiDriver = "wireless") do={
+                :local openProfile [/interface wireless security-profiles find name="@PROFILE@"]
+                :if ([:len $openProfile] = 0) do={
+                  /interface wireless security-profiles add name="@PROFILE@" mode=none comment="Wi-Fi Billing Temporary Test Profile"
+                }
+                :set openProfile [/interface wireless security-profiles find name="@PROFILE@"]
+                :if ([/interface wireless security-profiles get $openProfile comment] != "Wi-Fi Billing Temporary Test Profile") do={
+                  :error "Temporary Wi-Fi profile name is already in use"
+                }
+                /interface wireless security-profiles set $openProfile mode=none
+                :foreach iface in=[/interface wireless find] do={
+                  /interface wireless set $iface mode=ap-bridge ssid="@SSID@" security-profile="@PROFILE@" disabled=no
+                }
+                :put "Temporary open legacy Wi-Fi test SSID enabled."
+              }
+              :if ($wifiDriver = "") do={ :error "No supported built-in Wi-Fi interface was found." }
+            }
+            /system script run wifi-billing-wireless-test
+            /system script remove [find name="wifi-billing-wireless-test"]
+            ROUTEROS;
 
-        return implode("\r\n", [
-            '# TEMPORARY OPEN WI-FI TEST ONLY: no HotSpot or voucher authentication is configured.',
-            '# Run only on an isolated test router. Wireless interfaces keep their existing bridge membership.',
-            ':do { /system script remove [find name="wifi-billing-wireless-test"] } on-error={}',
-            '/system script add name="wifi-billing-wireless-test" policy=read,write,test source={',
-            '  :local wifiDriver ""',
-            '  :do { :if ([:len [/interface wifi find]] > 0) do={ :set wifiDriver "wifi" } } on-error={}',
-            '  :if ($wifiDriver = "") do={ :do { :if ([:len [/interface wireless find]] > 0) do={ :set wifiDriver "wireless" } } on-error={} }',
-            '  :if ($wifiDriver = "wifi") do={',
-            '    :foreach iface in=[/interface wifi find] do={',
-            '      /interface wifi set $iface configuration.mode=ap configuration.ssid="'.$ssid.'" security.authentication-types="" disabled=no',
-            '    }',
-            '    :put "Temporary open Wi-Fi test SSID enabled."',
-            '  }',
-            '  :if ($wifiDriver = "wireless") do={',
-            '    :local openProfile [/interface wireless security-profiles find name="'.$profileName.'"]',
-            '    :if ([:len $openProfile] = 0) do={ /interface wireless security-profiles add name="'.$profileName.'" mode=none comment="Wi-Fi Billing Temporary Test Profile" }',
-            '    :set openProfile [/interface wireless security-profiles find name="'.$profileName.'"]',
-            '    :if ([/interface wireless security-profiles get $openProfile comment] != "Wi-Fi Billing Temporary Test Profile") do={ :error "Temporary Wi-Fi profile name is already in use" }',
-            '    /interface wireless security-profiles set $openProfile mode=none',
-            '    :foreach iface in=[/interface wireless find] do={',
-            '      /interface wireless set $iface mode=ap-bridge ssid="'.$ssid.'" security-profile="'.$profileName.'" disabled=no',
-            '    }',
-            '    :put "Temporary open legacy Wi-Fi test SSID enabled."',
-            '  }',
-            '  :if ($wifiDriver = "") do={ :error "No supported built-in Wi-Fi interface was found." }',
-            '}',
-            '/system script run wifi-billing-wireless-test',
-            '/system script remove [find name="wifi-billing-wireless-test"]',
-            '',
-        ]);
+        $script = trim(strtr($script, $replacements));
+
+        return str_replace("\n", "\r\n", $script)."\r\n";
     }
 
     /**
