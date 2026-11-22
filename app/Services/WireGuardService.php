@@ -74,6 +74,18 @@ class WireGuardService
         return $peer;
     }
 
+    public function revokePeer(VpnPeer $peer): void
+    {
+        $this->assertEnabled();
+        $interface = $this->interfaceName();
+        $peer = VpnPeer::query()->findOrFail($peer->getKey());
+
+        $this->commands->run([
+            'wg', 'set', $interface, 'peer', $peer->public_key, 'remove',
+        ]);
+        $peer->delete();
+    }
+
     public function routerConfiguration(VpnPeer $peer): string
     {
         $this->assertEnabled();
@@ -311,16 +323,9 @@ class WireGuardService
             '/ip hotspot profile set [find name="prof-billing"] use-radius=yes radius-accounting=yes',
             '/ip hotspot profile set [find name="prof-billing"] radius-interim-update=00:01:00',
             ':do { /file remove [find name="wifi-billing-api.crt"] } on-error={}',
-            ':local apiCertificate ""',
-            ':for certAttempt from=1 to=15 do={',
-            '  :if (!($apiCertificate~"END CERTIFICATE")) do={',
-            '    :if ([:len [/file find name="wifi-billing-api.crt"]] = 0) do={',
-            '      :do { /certificate export-certificate "wifi-billing-api-server" type=pem file-name="wifi-billing-api" } on-error={}',
-            '    }',
-            '    :delay 1s',
-            '    :do { :set apiCertificate [/file get [find name="wifi-billing-api.crt"] contents] } on-error={}',
-            '  }',
-            '}',
+            ':do { /certificate export-certificate "wifi-billing-api-server" type=pem file-name="wifi-billing-api" } on-error={}',
+            ':delay 1s',
+            ':local apiCertificate [/file get [find name="wifi-billing-api.crt"] contents]',
             ':local routerSerial ""',
             ':do { :set routerSerial [/system routerboard get serial-number] } on-error={}',
             ':local routerModel [/system resource get board-name]',

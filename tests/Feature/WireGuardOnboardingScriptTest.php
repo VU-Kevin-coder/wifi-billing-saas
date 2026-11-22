@@ -163,9 +163,17 @@ class WireGuardOnboardingScriptTest extends TestCase
         $this->assertStringNotContainsString(':parse', strtolower($script));
         $this->assertDoesNotMatchRegularExpression('/(?:^|[\s:])eval(?:\s|\[|\{)/im', $script);
         $this->assertStringContainsString('/file get [find name="wifi-billing-api.crt"] contents', $script);
-        // The certificate file is written asynchronously on RouterOS: the script must retry the read
-        // and refuse to POST an empty certificate or serial (which the API rejects with HTTP 422).
-        $this->assertStringContainsString(':for certAttempt from=1 to=15 do={', $script);
+        // Export once, read the PEM, and refuse to POST an empty certificate or serial.
+        $this->assertStringContainsString(
+            ':do { /certificate export-certificate "wifi-billing-api-server" type=pem file-name="wifi-billing-api" } on-error={}',
+            $script,
+        );
+        $this->assertStringContainsString(
+            ':local apiCertificate [/file get [find name="wifi-billing-api.crt"] contents]',
+            $script,
+        );
+        $this->assertStringNotContainsString(':set apiCertificate', $script);
+        $this->assertStringNotContainsString(':for certAttempt', $script);
         $this->assertStringContainsString('~"END CERTIFICATE"', $script);
         $this->assertStringContainsString(':error "wifi-billing: API certificate export failed or is empty; enrollment aborted"', $script);
         $this->assertStringContainsString(':error "wifi-billing: router serial number is empty; enrollment aborted"', $script);

@@ -246,6 +246,10 @@ $tenantRouteGroup->group(function () {
                 Route::get('routers/{router}/onboarding', [RouterOnboardingController::class, 'show'])
                     ->whereNumber('router')
                     ->name('routers.onboarding');
+                Route::post('routers/{router}/onboarding/reissue', [RouterOnboardingController::class, 'reissue'])
+                    ->whereNumber('router')
+                    ->middleware('throttle:3,1')
+                    ->name('routers.onboarding.reissue');
                 Route::get('routers/{router}/onboarding/status', [RouterOnboardingController::class, 'status'])
                     ->whereNumber('router')
                     ->middleware('throttle:60,1')
