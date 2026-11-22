@@ -149,6 +149,26 @@ class RouterBootstrapEnrollmentTest extends TestCase
         $this->get(route('api.provision.bootstrap', ['token' => $token]))->assertNotFound();
     }
 
+    public function test_enrollment_accepts_the_fallback_serial_for_routeros_without_a_hardware_serial(): void
+    {
+        $token = Str::random(64);
+        [$router] = $this->makeOnboarding($token);
+        $certificate = "-----BEGIN CERTIFICATE-----\n".base64_encode('test-router-ca')."\n-----END CERTIFICATE-----";
+
+        $this->get(route('api.provision.bootstrap', ['token' => $token]))
+            ->assertOk();
+        $this->postJson(route('api.provision.enroll'), [
+            'token' => $token,
+            'serial' => 'UNKNOWN_SERIAL',
+            'model' => 'MikroTik CHR',
+            'api_ca_certificate' => $certificate,
+        ])->assertOk()
+            ->assertExactJson(['status' => 'success']);
+
+        $this->assertSame('UNKNOWN_SERIAL', $router->fresh()->serial_number);
+        $this->assertTrue($router->fresh()->enrolled);
+    }
+
     public function test_bootstrap_rejects_expired_tokens(): void
     {
         $token = Str::random(64);
