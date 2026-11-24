@@ -184,14 +184,14 @@ final class CollectionPurposeRouterTest extends TestCase
                         throw new RuntimeException('unavailable');
                     }
 
-return [$this->mapping()];
+                    return [$this->mapping()];
                 },
                 function () use ($failure) {
                     if ($failure === 'verify') {
                         throw new RuntimeException('unavailable');
                     }
 
-return $this->payment();
+                    return $this->payment();
                 },
                 ['voucher' => function () use (&$calls) {
                     $calls++;
