@@ -15,6 +15,8 @@ use App\Observers\ActivityNotificationObserver;
 use App\Services\PlatformMailService;
 use App\Services\Policy\Policy;
 use App\Services\RouterMikrotikManager;
+use App\Services\Subscriptions\SubscriptionGateway;
+use App\Services\Subscriptions\UnavailableGateway;
 use App\Services\SystemHealthService;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Auth\Events\Failed;
@@ -42,6 +44,8 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // No production subscription gateway is implemented; fail closed even if enabled.
+        $this->app->bind(SubscriptionGateway::class, UnavailableGateway::class);
         $this->app->singleton(TenantContext::class, function ($app) {
             return new TenantContext;
         });

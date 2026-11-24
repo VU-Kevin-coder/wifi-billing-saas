@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\PlatformPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,6 +69,38 @@ class TeamAndBillingTest extends TestCase
         $response->assertOk()
             ->assertSee('Subscription checkout is not connected yet.')
             ->assertSee('Self-serve plan changes coming soon');
+    }
+
+    public function test_billing_shows_recorded_status_and_dates_without_claiming_payment_or_renewal(): void
+    {
+        $plan = PlatformPlan::create(['name' => 'Example', 'price' => 999000, 'trial_days' => 7, 'max_customers' => 10, 'max_routers' => 2]);
+        $this->acme->update(['platform_plan_id' => $plan->id, 'plan_fee' => 123000, 'subscription_status' => 'active', 'subscription_ends_at' => '2027-03-02', 'trial_ends_at' => '2027-02-01']);
+
+        $this->actingAs($this->finance)->get(route('operator.billing.index'))->assertOk()
+            ->assertSee('Subscription status is not proof of payment.')
+            ->assertSee('Subscription ends 02 Mar 2027')
+            ->assertSee('Trial ends 01 Feb 2027')
+            ->assertSee('Listed plan price:')
+            ->assertSee('UGX 999,000')
+            ->assertSee('Billing history unavailable')
+            ->assertDontSee('Active (Paid)')
+            ->assertDontSee('Renews 02 Mar 2027')
+            ->assertDontSee('No billing history yet');
+    }
+
+    public function test_billing_does_not_invent_trial_length_or_unknown_status(): void
+    {
+        $this->acme->update(['subscription_status' => 'trial', 'trial_ends_at' => null, 'subscription_ends_at' => null]);
+        $this->actingAs($this->finance)->get(route('operator.billing.index'))->assertOk()
+            ->assertSee('Trial')
+            ->assertSee('No subscription dates recorded')
+            ->assertDontSee('14-Day Trial')
+            ->assertDontSee('No renewal date set');
+
+        $this->acme->update(['subscription_status' => 'unexpected']);
+        $this->actingAs($this->finance)->get(route('operator.billing.index'))->assertOk()
+            ->assertSee('unexpected')
+            ->assertDontSee('Suspended');
     }
 
     public function test_support_user_cannot_view_billing_page(): void
