@@ -283,6 +283,12 @@ $tenantRouteGroup->group(function () {
             Route::get('/billing', [App\Http\Controllers\Operator\BillingController::class, 'index'])
                 ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing'])
                 ->name('billing.index');
+            Route::post('/billing/renew', [App\Http\Controllers\Operator\BillingController::class, 'start'])
+                ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing', 'mfa.recent', 'throttle:5,1'])
+                ->name('billing.renew');
+            Route::post('/billing/attempts/{attempt}/check', [App\Http\Controllers\Operator\BillingController::class, 'reconcile'])
+                ->whereNumber('attempt')->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing', 'throttle:10,1'])
+                ->name('billing.check');
 
             // Operator Wallet & Withdrawals
             Route::get('/wallet', [WalletController::class, 'index'])
