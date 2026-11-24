@@ -54,7 +54,7 @@ final class FakeSubscriptionGateway implements SubscriptionGateway
             throw new \RuntimeException('SECRET_READY');
         }
 
-return $this->isReady;
+        return $this->isReady;
     }
 
     public function start(string $reference, int $amount, string $currency, string $phone): void
