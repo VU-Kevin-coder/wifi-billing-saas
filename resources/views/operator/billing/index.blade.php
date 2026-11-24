@@ -6,12 +6,12 @@
     @php
         $currentPlan = $tenant->plan;
         $statusMap = [
-            'active'   => ['label' => 'Active (Paid)',   'dot' => 'bg-green-500',  'badge' => 'bg-green-50 text-green-700'],
-            'trial'    => ['label' => '14-Day Trial',    'dot' => 'bg-blue-500',   'badge' => 'bg-blue-50 text-blue-700'],
-            'past_due' => ['label' => 'Overdue',         'dot' => 'bg-red-500',    'badge' => 'bg-red-50 text-red-700'],
+            'active'   => ['label' => 'Active',     'dot' => 'bg-green-500',  'badge' => 'bg-green-50 text-green-700'],
+            'trial'    => ['label' => 'Trial',      'dot' => 'bg-blue-500',   'badge' => 'bg-blue-50 text-blue-700'],
+            'past_due' => ['label' => 'Past due',   'dot' => 'bg-red-500',    'badge' => 'bg-red-50 text-red-700'],
             'suspended'=> ['label' => 'Suspended',       'dot' => 'bg-gray-400',   'badge' => 'bg-gray-100 text-gray-600'],
         ];
-        $status = $statusMap[$tenant->subscription_status] ?? $statusMap['suspended'];
+        $status = $statusMap[$tenant->subscription_status] ?? ['label' => $tenant->subscription_status ?: 'Not recorded', 'dot' => 'bg-gray-400', 'badge' => 'bg-gray-100 text-gray-600'];
     @endphp
 
     <div class="py-8"
@@ -27,7 +27,7 @@
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">Billing &amp; subscription</h1>
-                    <p class="mt-1 text-sm text-gray-500">Manage the plan and billing details for {{ $tenant->name }}.</p>
+                    <p class="mt-1 text-sm text-gray-500">Review the plan and billing details for {{ $tenant->name }}.</p>
                 </div>
                 <button type="button" @click="upgradeOpen = true"
                         class="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
@@ -38,16 +38,39 @@
                 </button>
             </div>
 
+            @if(session('status'))<p role="status" class="rounded-lg bg-green-50 p-4 text-sm text-green-900">{{ session('status') }}</p>@endif
+            @if($errors->any())<div role="alert" class="rounded-lg bg-red-50 p-4 text-sm text-red-900">@foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach</div>@endif
             {{-- Billing not connected notice --}}
+            @if(! $checkoutAvailable)
             <div role="status" class="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                 <svg class="mt-0.5 h-5 w-5 shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
                 <div>
                     <p class="font-semibold">Subscription checkout is not connected yet.</p>
-                    <p class="mt-1 text-amber-800">You can review your current plan details, but self-serve plan changes are not enabled. Contact your platform administrator to update your plan.</p>
+                    <p class="mt-1 text-amber-800">Subscription status is not proof of payment. You can review your current plan details, but self-serve plan changes are not enabled. Contact your platform administrator to update your plan.</p>
                 </div>
             </div>
+            @else
+            <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                Monthly renewals are manual, not recurring. Payment remains unconfirmed until verified. Suspended accounts require administrator review.
+            </div>
+            @if($hasUnresolvedInvoice)
+                <p class="text-sm text-amber-800">An invoice needs reconciliation. Do not submit another payment; contact support if its status remains uncertain.</p>
+            @elseif($quote && $tenant->status !== 'suspended' && $tenant->subscription_status !== 'suspended')
+                <form method="POST" action="{{ route('operator.billing.renew') }}" class="rounded-xl border border-gray-200 bg-white p-5">
+                    @csrf
+                    <input type="hidden" name="idempotency_key" value="{{ $requestKey }}">
+                    <input type="hidden" name="quote" value="{{ $quote['token'] }}">
+                    <h2 class="font-bold">Renew current plan for one month</h2>
+                    <p class="my-2 text-sm">Confirm one month of {{ $quote['plan_name'] }} for {{ $quote['currency'] }} {{ number_format($quote['amount']) }}. This quote expires in 15 minutes. This is not an automatic renewal.</p>
+                    <label for="subscription-phone" class="text-sm font-semibold">Mobile money phone (+256 followed by 9 digits)</label>
+                    <input id="subscription-phone" name="phone" type="tel" required pattern="\+256[0-9]{9}" value="{{ old('phone') }}" class="block rounded-lg border-gray-300 mt-2" autocomplete="tel">
+                    <label class="mt-3 block text-sm"><input type="checkbox" name="confirm_quote" value="1" required> I confirm one month of {{ $quote['plan_name'] }} for {{ $quote['currency'] }} {{ number_format($quote['amount']) }}.</label>
+                    <button class="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" type="submit">Request renewal</button>
+                </form>
+            @endif
+            @endif
 
             {{-- KPI Cards --}}
             <section class="grid grid-cols-1 gap-4 sm:grid-cols-3" aria-label="Billing overview">
@@ -59,12 +82,14 @@
                         <span class="h-2.5 w-2.5 rounded-full {{ $status['dot'] }}"></span>
                         <span class="text-lg font-bold text-gray-900">{{ $status['label'] }}</span>
                     </div>
-                    @if($tenant->trial_ends_at && $tenant->subscription_status === 'trial')
-                        <p class="mt-2 text-xs text-blue-600 font-medium">Trial ends {{ $tenant->trial_ends_at->diffForHumans() }}</p>
-                    @elseif($tenant->subscription_ends_at)
-                        <p class="mt-2 text-xs text-gray-500">Renews {{ $tenant->subscription_ends_at->format('d M Y') }}</p>
-                    @else
-                        <p class="mt-2 text-xs text-gray-500">No renewal date set</p>
+                    @if($tenant->trial_ends_at)
+                        <p class="mt-2 text-xs text-gray-500">Trial ends {{ $tenant->trial_ends_at->format('d M Y') }}</p>
+                    @endif
+                    @if($tenant->subscription_ends_at)
+                        <p class="mt-2 text-xs text-gray-500">Subscription ends {{ $tenant->subscription_ends_at->format('d M Y') }}</p>
+                    @endif
+                    @if(! $tenant->trial_ends_at && ! $tenant->subscription_ends_at)
+                        <p class="mt-2 text-xs text-gray-500">No subscription dates recorded</p>
                     @endif
                 </article>
 
@@ -73,7 +98,7 @@
                     <p class="text-sm font-medium text-gray-500">Current plan</p>
                     @if($currentPlan)
                         <p class="mt-3 text-lg font-bold text-gray-900">{{ $currentPlan->name }}</p>
-                        <p class="mt-2 text-xs text-gray-500">{{ $currency }} {{ number_format((float) $currentPlan->price) }} / month</p>
+                        <p class="mt-2 text-xs text-gray-500">Listed plan price: {{ $currency }} {{ number_format((float) $currentPlan->price) }} / month</p>
                     @else
                         <p class="mt-3 text-lg font-bold text-gray-400">No plan assigned</p>
                         <p class="mt-2 text-xs text-gray-500">Contact the platform admin to assign a plan.</p>
@@ -94,14 +119,14 @@
                 <div class="flex flex-col gap-3 border-b border-gray-100 p-6 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h2 class="text-base font-bold text-gray-900">Current subscription</h2>
-                        <p class="mt-1 text-sm text-gray-500">Your workspace plan, limits, and renewal information.</p>
+                        <p class="mt-1 text-sm text-gray-500">Your workspace plan, limits, and recorded status.</p>
                     </div>
                     @if($currentPlan)
                         <span class="inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold {{ $status['badge'] }}">
                             {{ $status['label'] }}
                         </span>
                     @else
-                        <span class="inline-flex w-fit items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">No active plan</span>
+                        <span class="inline-flex w-fit items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">No plan assigned</span>
                     @endif
                 </div>
 
@@ -110,7 +135,7 @@
                     <div class="md:col-span-2 space-y-4">
                         <div>
                             <p class="text-sm font-bold text-gray-900">{{ $currentPlan->name }} Plan</p>
-                            <p class="mt-1 text-sm text-gray-500">{{ $currency }} {{ number_format((float) $currentPlan->price) }}/month</p>
+                            <p class="mt-1 text-sm text-gray-500">Listed plan price: {{ $currency }} {{ number_format((float) $currentPlan->price) }}/month</p>
                         </div>
                         <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
                             <div>
@@ -169,17 +194,30 @@
             <section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-100 p-6">
                     <h2 class="text-base font-bold text-gray-900">Billing history</h2>
-                    <p class="mt-1 text-sm text-gray-500">Invoices and payments for this workspace.</p>
+                    <p class="mt-1 text-sm text-gray-500">Only invoices created here are shown. Earlier or manually administered payments are not recorded here.</p>
                 </div>
-                <div class="px-6 py-12 text-center">
-                    <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14h6m-6-4h6m2 10H7a2 2 0 01-2-2V6a2 2 0 012-2h6l6 6v8a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <p class="mt-3 text-sm font-semibold text-gray-900">No billing history yet</p>
-                    <p class="mt-1 text-sm text-gray-500">Invoices will appear here after a payment integration is set up.</p>
-                </div>
+                @if($invoices->isEmpty())
+                    <div class="px-6 py-8 text-center"><p class="text-sm font-semibold text-gray-900">Billing history unavailable</p><p class="mt-1 text-sm text-gray-500">No portal-issued invoices are recorded for this page.</p></div>
+                @else
+                    @php $verificationAvailable = app(\App\Services\Subscriptions\SubscriptionBilling::class)->gatewayReady(); @endphp
+                    <div class="overflow-x-auto p-6"><table class="w-full text-left text-sm"><thead><tr><th>Invoice</th><th>Plan</th><th>Amount</th><th>Invoice status</th><th>Payment status</th><th>Reference</th><th></th></tr></thead><tbody>
+                    @foreach($invoices as $invoice)
+                        <tr class="border-t"><td class="py-3">#{{ $invoice->id }}<br>{{ $invoice->created_at }}</td><td>{{ $invoice->plan_name }}</td><td>{{ $invoice->currency }} {{ number_format($invoice->amount) }}</td><td>{{ $invoice->status === 'review' ? 'Paid - administrator review required' : ucfirst($invoice->status) }}</td><td>{{ ucfirst($invoice->attempt_status ?? 'unknown') }}</td><td>{{ $invoice->reference }}</td><td>
+                        @if($verificationAvailable && $invoice->status === 'open' && in_array($invoice->attempt_status, ['unknown', 'pending', 'failed'], true))
+                            <form method="POST" action="{{ route('operator.billing.check', ['attempt' => $invoice->attempt_id]) }}">@csrf<button type="submit" class="text-blue-700 underline">Check status</button></form>
+                        @endif
+                        </td></tr>
+                    @endforeach
+                    </tbody></table>{{ $invoices->withQueryString()->links() }}</div>
+                @endif
+                @if($history->isNotEmpty())
+                    <div class="border-t p-6"><h3 class="font-semibold">Recorded events</h3>
+                    @foreach($history as $entry)
+                        @php $snapshot = json_decode($entry->snapshot, true) ?: []; @endphp
+                        <p class="mt-2 text-sm">{{ $entry->created_at }} — Invoice #{{ $entry->subscription_invoice_id }} — {{ str_replace('_', ' ', $entry->event) }} — {{ $snapshot['plan_name'] ?? '' }} — {{ $snapshot['currency'] ?? '' }} {{ number_format($snapshot['amount'] ?? 0) }}</p>
+                    @endforeach
+                    {{ $history->withQueryString()->links() }}</div>
+                @endif
             </section>
 
         </div>
