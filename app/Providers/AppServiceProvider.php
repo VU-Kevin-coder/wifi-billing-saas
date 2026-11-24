@@ -42,6 +42,8 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // No production subscription gateway is implemented; fail closed even if enabled.
+        $this->app->bind(\App\Services\Subscriptions\SubscriptionGateway::class, \App\Services\Subscriptions\UnavailableGateway::class);
         $this->app->singleton(TenantContext::class, function ($app) {
             return new TenantContext;
         });
