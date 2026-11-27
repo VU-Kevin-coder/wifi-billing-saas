@@ -47,14 +47,20 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('two-factor-challenge', [TwoFactorChallengeController::class, 'create'])
         ->name('two-factor.challenge');
+    Route::post('two-factor-challenge/send', [TwoFactorChallengeController::class, 'sendChallenge'])
+        ->middleware('throttle:auth-mfa-code-send')
+        ->name('two-factor.challenge.send');
     Route::post('two-factor-challenge', [TwoFactorChallengeController::class, 'store'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:auth-mfa-code-verify')
         ->name('two-factor.verify');
 
     Route::get('mfa/step-up', [MfaStepUpController::class, 'create'])
         ->name('mfa.step-up');
+    Route::post('mfa/step-up/send', [MfaStepUpController::class, 'sendChallenge'])
+        ->middleware('throttle:auth-mfa-code-send')
+        ->name('mfa.step-up.send');
     Route::post('mfa/step-up', [MfaStepUpController::class, 'store'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:auth-mfa-code-verify')
         ->name('mfa.step-up.verify');
 
     Route::get('verify-email', EmailVerificationPromptController::class)

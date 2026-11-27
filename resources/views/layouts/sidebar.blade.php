@@ -92,6 +92,14 @@
                         <span x-show="!sidebarCollapsed">Operator tenants</span>
                     </a>
 
+                    <a aria-label="MFA Recovery" title="MFA Recovery" href="{{ route('platform.mfa-recovery.index') }}"
+                       class="{{ request()->routeIs('platform.mfa-recovery.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
+                        <svg class="w-4 h-4 shrink-0 {{ request()->routeIs('platform.mfa-recovery.*') ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3l8 3v5c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-3zm-3 9 2 2 4-4"/>
+                        </svg>
+                        <span x-show="!sidebarCollapsed">MFA Recovery</span>
+                    </a>
+
                     <a aria-label="WireGuard peers" title="WireGuard peers" href="{{ route('platform.vpn-peers.index') }}"
                        class="{{ request()->routeIs('platform.vpn-peers.*') ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium' }} flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors group">
                         <span class="w-4 shrink-0 text-center text-sm">VPN</span>

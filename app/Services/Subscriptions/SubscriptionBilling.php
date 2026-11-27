@@ -2,6 +2,7 @@
 
 namespace App\Services\Subscriptions;
 
+use App\Models\PlatformPlan;
 use App\Models\PlatformSetting;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Crypt;
@@ -30,15 +31,37 @@ final class SubscriptionBilling
         }
     }
 
+    public function canVerifyAttempt(object $attempt): bool
+    {
+        $context = SubscriptionGatewayContext::fromAttempt($attempt);
+        if (! $context) {
+            return false;
+        }
+
+        try {
+            return $this->gateway->canVerify($context);
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
     private function requireAvailable(): void
     {
         abort_unless($this->available(), 503, 'Subscription checkout is not available.');
     }
 
     /** Snapshot exactly what is shown for explicit consent; authenticated and short-lived. */
-    public function quote(Tenant $tenant, string $key): ?array
+    public function quote(Tenant $tenant, string $key, ?int $planId = null): ?array
     {
-        $plan = $tenant->plan()->first();
+        $assignedPlan = $tenant->plan()->first();
+        if ($tenant->platform_plan_id !== null) {
+            if (! $assignedPlan || ($planId !== null && $planId !== (int) $assignedPlan->id)) {
+                return null;
+            }
+            $plan = $assignedPlan;
+        } else {
+            $plan = $planId === null ? null : PlatformPlan::query()->find($planId);
+        }
         $currency = strtoupper((string) PlatformSetting::get('currency', 'UGX'));
         if (! $plan || $currency !== 'UGX' || ! preg_match('/^([0-9]{1,10})\.00$/', (string) $plan->price, $m) || (int) $m[1] < 1) {
             return null;
@@ -67,7 +90,7 @@ final class SubscriptionBilling
         return $quote;
     }
 
-    /** Only the currently assigned plan can be renewed; plan switches need administration. */
+    /** New tenants may select an initial plan; assigned tenants can only renew it. */
     public function start(Tenant $tenant, string $key, string $phone, string $token): object
     {
         // An inner commit is only a savepoint: never send a charge before the outer commit.
@@ -75,9 +98,11 @@ final class SubscriptionBilling
             throw new \LogicException('Subscription checkout cannot start inside a database transaction.');
         }
         $this->requireAvailable();
+        $gatewayContext = $this->gateway->context();
+        abort_unless($gatewayContext, 503, 'Subscription payment gateway is not available.');
         $quote = $this->decodeQuote($token, $tenant, $key);
         $hash = hash_hmac('sha256', $phone, (string) config('app.key'));
-        [$attempt, $created] = DB::transaction(function () use ($tenant, $key, $hash, $quote) {
+        [$attempt, $created] = DB::transaction(function () use ($tenant, $key, $hash, $quote, $gatewayContext) {
             $locked = Tenant::whereKey($tenant->id)->lockForUpdate()->firstOrFail();
             $existing = DB::table('subscription_attempts')->where('tenant_id', $locked->id)->where('idempotency_key', $key)->first();
             if ($existing) {
@@ -97,7 +122,14 @@ final class SubscriptionBilling
             if (DB::table('subscription_invoices')->where('tenant_id', $locked->id)->whereIn('status', ['open', 'review'])->exists()) {
                 throw ValidationException::withMessages(['billing' => 'An invoice already requires reconciliation. Contact support before trying again.']);
             }
-            $plan = $locked->plan()->lockForUpdate()->first();
+            if ($locked->platform_plan_id !== null) {
+                $plan = $locked->plan()->lockForUpdate()->first();
+                if (! $plan || (int) $plan->id !== $quote['plan_id']) {
+                    throw ValidationException::withMessages(['quote' => 'Plan changed. Refresh the page and confirm again.']);
+                }
+            } else {
+                $plan = PlatformPlan::query()->whereKey($quote['plan_id'])->lockForUpdate()->first();
+            }
             $currency = strtoupper((string) PlatformSetting::get('currency', 'UGX'));
             // Current gateways elsewhere use whole UGX. Do not round, coerce or use floats.
             if (! $plan || $currency !== 'UGX' || ! preg_match('/^([0-9]{1,10})\.00$/', (string) $plan->price, $m) || (int) $m[1] < 1) {
@@ -114,7 +146,7 @@ final class SubscriptionBilling
             $attemptId = DB::table('subscription_attempts')->insertGetId([
                 'tenant_id' => $locked->id, 'subscription_invoice_id' => $invoiceId, 'idempotency_key' => $key,
                 'phone_hash' => $hash, 'reference' => (string) Str::uuid(), 'status' => 'unknown', 'created_at' => $time, 'updated_at' => $time,
-            ]);
+            ] + $gatewayContext->databaseAttributes());
             $invoice = DB::table('subscription_invoices')->where('id', $invoiceId)->first();
             $attempt = DB::table('subscription_attempts')->where('id', $attemptId)->first();
             $this->event($invoice, $attempt, 'created', ['status' => 'unknown']);
@@ -125,36 +157,96 @@ final class SubscriptionBilling
             return $attempt;
         } // never send twice after an ambiguous response
         $invoice = DB::table('subscription_invoices')->where('id', $attempt->subscription_invoice_id)->first();
+        $checkoutUrl = null;
+        $returnUrl = route('operator.billing.invoices.show', [
+            'tenant' => $tenant->slug,
+            'invoice' => $attempt->subscription_invoice_id,
+        ]);
         try {
-            $this->gateway->start($attempt->reference, (int) $invoice->amount, $invoice->currency, $phone);
-            // A void return does not prove acceptance. Keep unknown until an authenticated lookup.
+            $checkoutUrl = $this->gateway->start(
+                $attempt->reference,
+                (int) $invoice->amount,
+                $invoice->currency,
+                $phone,
+                $gatewayContext,
+                $returnUrl,
+            );
+            // A successful submission or hosted redirect does not prove payment.
             // A concurrent reconciliation may already have changed the state; never overwrite it.
         } catch (Throwable $e) {
             // A timeout, or failure to record submission, is ambiguous. Do not log adapter data.
         }
 
+        if (is_string($checkoutUrl)) {
+            $encryptedUrl = Crypt::encryptString($checkoutUrl);
+            DB::transaction(function () use ($tenant, $attempt, $encryptedUrl): void {
+                Tenant::whereKey($tenant->id)->lockForUpdate()->firstOrFail();
+                DB::table('subscription_attempts')
+                    ->where('tenant_id', $tenant->id)
+                    ->where('id', $attempt->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                DB::table('subscription_attempts')->where('id', $attempt->id)->update([
+                    'checkout_url' => $encryptedUrl,
+                    'updated_at' => now(),
+                ]);
+            }, 3);
+        }
+
         return DB::table('subscription_attempts')->where('id', $attempt->id)->first();
+    }
+
+    public function checkoutUrl(object $attempt): ?string
+    {
+        if (! in_array($attempt->status ?? null, ['unknown', 'pending'], true)
+            || ! is_string($attempt->checkout_url ?? null)
+            || $attempt->checkout_url === '') {
+            return null;
+        }
+        $invoice = DB::table('subscription_invoices')
+            ->where('tenant_id', $attempt->tenant_id)
+            ->where('id', $attempt->subscription_invoice_id)
+            ->first();
+        if (! $invoice || $invoice->status !== 'open') {
+            return null;
+        }
+
+        $url = Crypt::decryptString($attempt->checkout_url);
+        $parts = parse_url($url);
+        if (! is_array($parts)
+            || strtolower((string) ($parts['scheme'] ?? '')) !== 'https'
+            || strtolower((string) ($parts['host'] ?? '')) !== 'checkout.obpay.online'
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || (isset($parts['port']) && $parts['port'] !== 443)) {
+            throw new \RuntimeException('Stored hosted checkout URL is not trusted.');
+        }
+
+        return $url;
     }
 
     /** Authenticated provider lookup, then strict comparison inside a locked transaction. */
     public function reconcile(Tenant $tenant, int $attemptId): void
     {
         // The checkout kill switch blocks new collections, not verification of existing ones.
-        abort_unless($this->gatewayReady(), 503, 'Subscription verification is not available.');
         $attempt = DB::table('subscription_attempts')->where('tenant_id', $tenant->id)->where('id', $attemptId)->first();
         abort_unless($attempt, 404);
+        abort_unless($this->canVerifyAttempt($attempt), 503, 'Subscription verification is not available.');
         if (! in_array($attempt->status, ['unknown', 'pending', 'failed'], true)) {
             return;
         }
         // A newer reconciliation must win even when it leaves the same status (e.g. unknown).
         $historyId = DB::table('subscription_history')->where('subscription_attempt_id', $attempt->id)->max('id');
         try {
-            $result = $this->gateway->verify($attempt->reference);
+            $result = $this->gateway->verify(
+                $attempt->reference,
+                SubscriptionGatewayContext::fromAttempt($attempt),
+            );
         } catch (Throwable $e) {
             $result = null;
         }
         DB::transaction(function () use ($tenant, $attempt, $result, $historyId) {
-            // Always lock in tenant -> attempt -> invoice order; manual admin currently does not.
+            // Always lock in tenant -> attempt -> invoice order.
             $lockedTenant = Tenant::whereKey($tenant->id)->lockForUpdate()->firstOrFail();
             $current = DB::table('subscription_attempts')->where('id', $attempt->id)->where('tenant_id', $lockedTenant->id)->lockForUpdate()->first();
             if (! $current || $current->status !== $attempt->status) {
@@ -205,7 +297,9 @@ final class SubscriptionBilling
 
                 return;
             }
-            $review = $current->status === 'failed' || $lockedTenant->status === 'suspended' || $lockedTenant->subscription_status === 'suspended' || (int) $lockedTenant->platform_plan_id !== (int) $invoice->plan_id;
+            $planWasRemoved = ! PlatformPlan::query()->whereKey($invoice->plan_id)->exists();
+            $planWasChanged = $lockedTenant->platform_plan_id !== null && (int) $lockedTenant->platform_plan_id !== (int) $invoice->plan_id;
+            $review = $current->status === 'failed' || $lockedTenant->status === 'suspended' || $lockedTenant->subscription_status === 'suspended' || $planWasChanged || $planWasRemoved;
             $now = now();
             $end = null;
             if (! $review) {
@@ -214,11 +308,73 @@ final class SubscriptionBilling
                     $base = $lockedTenant->trial_ends_at->copy();
                 }
                 $end = $base->addMonthNoOverflow();
-                $lockedTenant->update(['subscription_status' => 'active', 'subscription_ends_at' => $end, 'plan_fee' => $invoice->amount, 'auto_renew' => false]);
+                $lockedTenant->update([
+                    'platform_plan_id' => $invoice->plan_id,
+                    'plan' => $invoice->plan_name,
+                    'subscription_status' => 'active',
+                    'subscription_ends_at' => $end,
+                    'plan_fee' => $invoice->amount,
+                    'auto_renew' => false,
+                ]);
             }
             DB::table('subscription_attempts')->where('id', $current->id)->update(['status' => 'paid', 'updated_at' => $now]);
             DB::table('subscription_invoices')->where('id', $invoice->id)->update(['status' => $review ? 'review' : 'paid', 'paid_at' => $now, 'entitlement_applied_at' => $review ? null : $now, 'updated_at' => $now]);
             $this->event($invoice, $current, $review ? 'paid_requires_review' : 'paid_entitlement_applied', ['status' => 'paid', 'subscription_ends_at' => $end?->toIso8601String()]);
+        }, 3);
+    }
+
+    public function applyAdministratorPlanChange(Tenant $tenant, array $attributes, int $actorId): Tenant
+    {
+        return DB::transaction(function () use ($tenant, $attributes, $actorId) {
+            $lockedTenant = Tenant::whereKey($tenant->id)->lockForUpdate()->firstOrFail();
+            $oldPlanId = $lockedTenant->platform_plan_id;
+            $oldStatus = $lockedTenant->subscription_status;
+            $openInvoiceIds = DB::table('subscription_invoices')
+                ->where('tenant_id', $lockedTenant->id)
+                ->whereIn('status', ['open', 'review'])
+                ->orderBy('id')
+                ->pluck('id');
+
+            foreach ($openInvoiceIds as $invoiceId) {
+                $attempt = DB::table('subscription_attempts')
+                    ->where('subscription_invoice_id', $invoiceId)
+                    ->where('tenant_id', $lockedTenant->id)
+                    ->lockForUpdate()
+                    ->first();
+                $invoice = DB::table('subscription_invoices')
+                    ->where('id', $invoiceId)
+                    ->where('tenant_id', $lockedTenant->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $invoice) {
+                    continue;
+                }
+
+                if ($invoice->status === 'open') {
+                    DB::table('subscription_invoices')->where('id', $invoice->id)->update([
+                        'status' => 'review',
+                        'updated_at' => now(),
+                    ]);
+                }
+                if ($attempt && ! in_array($attempt->status, ['paid', 'manual_review'], true)) {
+                    DB::table('subscription_attempts')->where('id', $attempt->id)->update([
+                        'status' => 'manual_review',
+                        'updated_at' => now(),
+                    ]);
+                }
+                $this->event($invoice, $attempt, 'administrator_plan_changed', [
+                    'status' => 'manual_review',
+                    'actor_id' => $actorId,
+                    'previous_plan_id' => $oldPlanId,
+                    'previous_subscription_status' => $oldStatus,
+                    'new_plan_id' => $attributes['platform_plan_id'],
+                    'new_subscription_status' => $attributes['subscription_status'],
+                ]);
+            }
+
+            $lockedTenant->update($attributes);
+
+            return $lockedTenant->fresh();
         }, 3);
     }
 

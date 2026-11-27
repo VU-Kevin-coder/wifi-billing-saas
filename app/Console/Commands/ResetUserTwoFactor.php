@@ -4,13 +4,13 @@ namespace App\Console\Commands;
 
 use App\Models\AuditLog;
 use App\Models\User;
-use CodingLibs\MFA\Facades\MFA;
+use App\Services\MfaFactorManager;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Break-glass recovery for a user who lost both their authenticator and
- * recovery codes. Deliberately CLI-only: there is no web path to reset or
- * disable two-factor authentication.
+ * Break-glass recovery for a platform administrator who lost their factors.
+ * Standard user recovery is handled through the restricted platform admin UI.
  */
 class ResetUserTwoFactor extends Command
 {
@@ -18,7 +18,7 @@ class ResetUserTwoFactor extends Command
 
     protected $description = 'Disable two-factor authentication for a user so they can enrol again (break-glass)';
 
-    public function handle(): int
+    public function handle(MfaFactorManager $mfaFactors): int
     {
         $user = User::withoutTenancy()->where('email', $this->argument('email'))->first();
 
@@ -41,9 +41,11 @@ class ResetUserTwoFactor extends Command
             return self::FAILURE;
         }
 
-        MFA::disableMethod($user, 'totp');
-
-        AuditLog::record('mfa.reset', $user, ['via' => 'cli']);
+        $methods = $mfaFactors->enabledMethods($user);
+        DB::transaction(function () use ($mfaFactors, $user, $methods): void {
+            $mfaFactors->reset($user, requireEnrollment: true);
+            AuditLog::record('mfa.reset', $user, ['methods' => $methods, 'via' => 'cli']);
+        });
 
         $this->info("Two-factor authentication disabled for {$user->email}. They must enrol again at next login.");
 

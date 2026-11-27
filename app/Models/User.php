@@ -30,7 +30,9 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'deactivated_at' => 'datetime',
+            'mfa_enrollment_required_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -45,6 +47,14 @@ class User extends Authenticatable
 
     public function hasEnabledTwoFactorAuthentication(): bool
     {
-        return MFA::isEnabled($this, 'totp');
+        return $this->enabledTwoFactorMethods() !== [];
+    }
+
+    public function enabledTwoFactorMethods(): array
+    {
+        return array_values(array_filter(
+            ['totp', 'email', 'sms'],
+            fn (string $method): bool => MFA::isEnabled($this, $method)
+        ));
     }
 }

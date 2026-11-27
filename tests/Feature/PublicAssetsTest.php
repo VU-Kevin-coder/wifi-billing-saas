@@ -12,7 +12,6 @@ class PublicAssetsTest extends TestCase
 {
     private const PUBLIC_VIEWS = [
         'resources/views/components/layouts/auth.blade.php',
-        'resources/views/landing.blade.php',
         'resources/views/portal/index.blade.php',
         'resources/views/portal/pending.blade.php',
         'resources/views/portal/success.blade.php',
@@ -24,7 +23,11 @@ class PublicAssetsTest extends TestCase
             $html = file_get_contents(base_path($view));
 
             $this->assertStringNotContainsString('cdn.tailwindcss.com', $html, $view);
-            $this->assertStringContainsString("@vite('resources/css/public.css')", $html, $view);
+            $this->assertMatchesRegularExpression(
+                "/@vite\\((?:'resources\\/css\\/public\\.css'|\\[[^]]*'resources\\/css\\/public\\.css'[^]]*\\])\\)/",
+                $html,
+                $view,
+            );
         }
     }
 

@@ -3,9 +3,10 @@
 namespace Tests\Feature;
 
 use App\Services\Payments\ObPayGateway;
+use App\Services\Subscriptions\ActiveVoucherSubscriptionGateway;
 use App\Services\Subscriptions\ObPaySubscriptionGatewayCandidate;
 use App\Services\Subscriptions\SubscriptionGateway;
-use App\Services\Subscriptions\UnavailableGateway;
+use App\Services\Subscriptions\SubscriptionGatewayContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
@@ -31,11 +32,11 @@ final class ObPaySubscriptionGatewayCandidateTest extends TestCase
     {
         Http::fake();
         $adapter = new ObPaySubscriptionGatewayCandidate;
-        $this->assertInstanceOf(UnavailableGateway::class, app(SubscriptionGateway::class));
+        $this->assertInstanceOf(ActiveVoucherSubscriptionGateway::class, app(SubscriptionGateway::class));
         $this->assertFalse($adapter->ready());
-        $this->assertNull($adapter->verify('ref-1'));
+        $this->assertNull($adapter->verify('ref-1', null));
         try {
-            $adapter->start('ref-1', 1000, 'UGX', '256700000000');
+            $adapter->start('ref-1', 1000, 'UGX', '256700000000', new SubscriptionGatewayContext('obpay', str_repeat('a', 64), 'live'));
             $this->fail('A disabled adapter must not start a charge.');
         } catch (RuntimeException $e) {
             $this->assertSame('OBPay subscription gateway is not ready.', $e->getMessage());

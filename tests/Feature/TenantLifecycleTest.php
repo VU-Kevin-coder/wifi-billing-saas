@@ -8,7 +8,9 @@ use App\Models\User;
 use App\Services\Policy\Policy;
 use Database\Seeders\PolicySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -185,6 +187,26 @@ class TenantLifecycleTest extends TestCase
             'max_customers' => 2000,
             'max_routers' => 10,
         ]);
+        $invoiceId = DB::table('subscription_invoices')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'plan_id' => 1,
+            'plan_name' => 'Previous plan',
+            'amount' => 120000,
+            'currency' => 'UGX',
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $attemptId = DB::table('subscription_attempts')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'subscription_invoice_id' => $invoiceId,
+            'idempotency_key' => (string) Str::uuid(),
+            'phone_hash' => str_repeat('a', 64),
+            'reference' => (string) Str::uuid(),
+            'status' => 'unknown',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         $this->actingAs($admin)
             ->put(route('platform.tenants.change-plan', $this->tenant), [
@@ -199,6 +221,12 @@ class TenantLifecycleTest extends TestCase
         $this->assertDatabaseHas('audit_logs', [
             'tenant_id' => $this->tenant->id,
             'action' => 'tenant.plan_changed',
+        ]);
+        $this->assertDatabaseHas('subscription_invoices', ['id' => $invoiceId, 'status' => 'review']);
+        $this->assertDatabaseHas('subscription_attempts', ['id' => $attemptId, 'status' => 'manual_review']);
+        $this->assertDatabaseHas('subscription_history', [
+            'subscription_invoice_id' => $invoiceId,
+            'event' => 'administrator_plan_changed',
         ]);
     }
 

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Services\MfaFactorManager;
+use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,15 +26,45 @@ class ProfileController extends Controller
     /**
      * Update the user's profile information.
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(ProfileUpdateRequest $request, MfaFactorManager $mfaFactors): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $hadMfaEnabled = $user->hasEnabledTwoFactorAuthentication();
+        $user->fill($request->validated());
+        $emailChanged = $user->isDirty('email');
+        $phoneChanged = $user->isDirty('phone');
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        if ($emailChanged) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        if ($phoneChanged) {
+            $user->phone_verified_at = null;
+        }
+
+        $user->save();
+
+        if ($emailChanged) {
+            $mfaFactors->deleteChallenges($user, 'email');
+            if (MFA::isEnabled($user, 'email')) {
+                $mfaFactors->removeMethod($user, 'email');
+            }
+        }
+
+        if ($phoneChanged) {
+            $mfaFactors->deleteChallenges($user, 'sms');
+            if (MFA::isEnabled($user, 'sms')) {
+                $mfaFactors->removeMethod($user, 'sms');
+            }
+        }
+
+        if ($emailChanged || $phoneChanged) {
+            $request->session()->forget('mfa.enrollment.method');
+        }
+
+        if ($hadMfaEnabled && ! $user->hasEnabledTwoFactorAuthentication()) {
+            $user->forceFill(['mfa_enrollment_required_at' => now()])->save();
+        }
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }

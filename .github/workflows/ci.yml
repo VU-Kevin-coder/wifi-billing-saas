@@ -182,8 +182,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: composer audit --locked
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Composer dependency audit
+        run: composer audit --locked
+      # Always run the npm audit as well so a Composer finding cannot hide it.
+      - name: npm dependency audit
+        if: always()
+        run: npm audit --omit=dev --audit-level=high
 
   style:
     name: Code style (Pint)

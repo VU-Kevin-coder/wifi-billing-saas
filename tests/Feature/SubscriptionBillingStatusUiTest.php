@@ -6,6 +6,7 @@ use App\Models\PlatformPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Subscriptions\SubscriptionGateway;
+use App\Services\Subscriptions\SubscriptionGatewayContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
@@ -32,12 +33,34 @@ final class StatusUiGateway implements SubscriptionGateway
         return $this->isReady;
     }
 
-    public function start(string $reference, int $amount, string $currency, string $phone): void
+    public function context(): ?SubscriptionGatewayContext
     {
-        $this->starts++;
+        return new SubscriptionGatewayContext('testing', str_repeat('b', 64), 'sandbox');
     }
 
-    public function verify(string $reference): ?array
+    public function canVerify(SubscriptionGatewayContext $context): bool
+    {
+        if ($this->throwOnReady) {
+            throw new \RuntimeException('secret provider response');
+        }
+
+        return $this->isReady;
+    }
+
+    public function start(
+        string $reference,
+        int $amount,
+        string $currency,
+        string $phone,
+        SubscriptionGatewayContext $context,
+        ?string $returnUrl = null,
+    ): ?string {
+        $this->starts++;
+
+        return null;
+    }
+
+    public function verify(string $reference, ?SubscriptionGatewayContext $context): ?array
     {
         $this->verifies++;
 
@@ -71,7 +94,19 @@ class SubscriptionBillingStatusUiTest extends TestCase
         $this->finance->assignRole('operator_finance');
         URL::defaults(['tenant' => $this->tenant->slug]);
         $this->invoiceId = DB::table('subscription_invoices')->insertGetId(['tenant_id' => $this->tenant->id, 'plan_id' => $plan->id, 'plan_name' => $plan->name, 'amount' => 120000, 'currency' => 'UGX', 'status' => 'open', 'created_at' => now(), 'updated_at' => now()]);
-        $this->attemptId = DB::table('subscription_attempts')->insertGetId(['tenant_id' => $this->tenant->id, 'subscription_invoice_id' => $this->invoiceId, 'idempotency_key' => (string) Str::uuid(), 'phone_hash' => str_repeat('a', 64), 'reference' => (string) Str::uuid(), 'status' => 'unknown', 'created_at' => now(), 'updated_at' => now()]);
+        $this->attemptId = DB::table('subscription_attempts')->insertGetId([
+            'tenant_id' => $this->tenant->id,
+            'subscription_invoice_id' => $this->invoiceId,
+            'idempotency_key' => (string) Str::uuid(),
+            'phone_hash' => str_repeat('a', 64),
+            'reference' => (string) Str::uuid(),
+            'gateway_provider' => 'testing',
+            'gateway_account_fingerprint' => str_repeat('b', 64),
+            'gateway_environment' => 'sandbox',
+            'status' => 'unknown',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
         $this->gateway = new StatusUiGateway;
         $this->app->instance(SubscriptionGateway::class, $this->gateway);
         config(['subscriptions.checkout_enabled' => false]);
@@ -142,5 +177,26 @@ class SubscriptionBillingStatusUiTest extends TestCase
         $this->post(route('operator.billing.check', ['attempt' => $this->attemptId]))->assertForbidden();
         $this->assertSame(0, $this->gateway->starts);
         $this->assertSame(0, $this->gateway->verifies);
+    }
+
+    public function test_invoice_detail_is_tenant_scoped_and_offers_printable_invoice_and_status_check(): void
+    {
+        $this->actingAs($this->finance)
+            ->get(route('operator.billing.invoices.show', ['invoice' => $this->invoiceId]))
+            ->assertOk()
+            ->assertSee('Subscription invoice')
+            ->assertSee('Print / Save PDF')
+            ->assertSee('Monthly renewal of Status plan')
+            ->assertSee('Check payment status')
+            ->assertSee((string) DB::table('subscription_attempts')->where('id', $this->attemptId)->value('reference'));
+
+        $other = Tenant::create(['name' => 'Workspace C', 'slug' => 'workspace-c', 'status' => 'active']);
+        $otherFinance = User::factory()->create(['tenant_id' => $other->id]);
+        $otherFinance->assignRole('operator_finance');
+        URL::defaults(['tenant' => $other->slug]);
+
+        $this->actingAs($otherFinance)
+            ->get(route('operator.billing.invoices.show', ['invoice' => $this->invoiceId]))
+            ->assertNotFound();
     }
 }

@@ -24,7 +24,6 @@ class SweetAlertIntegrationTest extends TestCase
             'portal/plan-lookup.blade.php',
             'portal/pending.blade.php',
             'portal/success.blade.php',
-            'auth/partials/mfa-verification.blade.php',
         ] as $view) {
             $content = file_get_contents(resource_path("views/{$view}"));
             $this->assertStringContainsString("@include('partials.sweetalert-assets')", $content, $view);

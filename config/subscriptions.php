@@ -1,7 +1,6 @@
 <?php
 
 return [
-    // Do not enable until an independently reviewed subscription gateway, operations,
-    // reconciliation, financial/security controls and the manual-admin gap are addressed.
+    // Explicit kill switch: voucher gateway credentials alone never enable charges.
     'checkout_enabled' => env('SUBSCRIPTION_CHECKOUT_ENABLED', false),
 ];

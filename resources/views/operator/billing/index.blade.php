@@ -17,7 +17,8 @@
     <div class="py-8"
          x-data="{
              upgradeOpen: false,
-             selectedPlan: {{ $currentPlan ? $currentPlan->id : ($plans->first()?->id ?? 'null') }}
+             selectedPlan: @js($selectedPlanId),
+             planQuotes: @js($planCheckouts)
          }"
          @keydown.escape.window="upgradeOpen = false">
 
@@ -27,7 +28,13 @@
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">Billing &amp; subscription</h1>
-                    <p class="mt-1 text-sm text-gray-500">Review the plan and billing details for {{ $tenant->name }}.</p>
+                    <p class="mt-1 text-sm text-gray-500">
+                        @if($tenant->platform_plan_id)
+                            Review the plan and billing details for {{ $tenant->name }}.
+                        @else
+                            Choose a plan and complete checkout for {{ $tenant->name }}.
+                        @endif
+                    </p>
                 </div>
                 <button type="button" @click="upgradeOpen = true"
                         class="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
@@ -199,11 +206,10 @@
                 @if($invoices->isEmpty())
                     <div class="px-6 py-8 text-center"><p class="text-sm font-semibold text-gray-900">Billing history unavailable</p><p class="mt-1 text-sm text-gray-500">No portal-issued invoices are recorded for this page.</p></div>
                 @else
-                    @php $verificationAvailable = app(\App\Services\Subscriptions\SubscriptionBilling::class)->gatewayReady(); @endphp
                     <div class="overflow-x-auto p-6"><table class="w-full text-left text-sm"><thead><tr><th>Invoice</th><th>Plan</th><th>Amount</th><th>Invoice status</th><th>Payment status</th><th>Reference</th><th></th></tr></thead><tbody>
                     @foreach($invoices as $invoice)
-                        <tr class="border-t"><td class="py-3">#{{ $invoice->id }}<br>{{ $invoice->created_at }}</td><td>{{ $invoice->plan_name }}</td><td>{{ $invoice->currency }} {{ number_format($invoice->amount) }}</td><td>{{ $invoice->status === 'review' ? 'Paid - administrator review required' : ucfirst($invoice->status) }}</td><td>{{ ucfirst($invoice->attempt_status ?? 'unknown') }}</td><td>{{ $invoice->reference }}</td><td>
-                        @if($verificationAvailable && $invoice->status === 'open' && in_array($invoice->attempt_status, ['unknown', 'pending', 'failed'], true))
+                        <tr class="border-t"><td class="py-3"><a class="font-semibold text-blue-700 underline" href="{{ route('operator.billing.invoices.show', ['invoice' => $invoice->id]) }}">#{{ $invoice->id }}</a><br>{{ $invoice->created_at }}</td><td>{{ $invoice->plan_name }}</td><td>{{ $invoice->currency }} {{ number_format($invoice->amount) }}</td><td>{{ $invoice->status === 'review' ? 'Paid - administrator review required' : ucfirst($invoice->status) }}</td><td>{{ ucfirst($invoice->attempt_status ?? 'unknown') }}</td><td>{{ $invoice->reference }}</td><td>
+                        @if($invoice->verification_available && $invoice->status === 'open' && in_array($invoice->attempt_status, ['unknown', 'pending', 'failed'], true))
                             <form method="POST" action="{{ route('operator.billing.check', ['attempt' => $invoice->attempt_id]) }}">@csrf<button type="submit" class="text-blue-700 underline">Check status</button></form>
                         @endif
                         </td></tr>
@@ -238,8 +244,16 @@
 
                     <header class="flex items-start justify-between border-b border-gray-200 px-6 py-5">
                         <div>
-                            <h2 id="upgrade-title" class="text-lg font-bold text-gray-900">Available Plans</h2>
-                            <p class="mt-1 text-sm text-gray-500">Review available tiers. To switch plans, contact your platform administrator.</p>
+                            <h2 id="upgrade-title" class="text-lg font-bold text-gray-900">
+                                {{ $currentPlan ? 'Available Plans' : 'Choose your plan' }}
+                            </h2>
+                            <p class="mt-1 text-sm text-gray-500">
+                                @if($currentPlan)
+                                    Review available tiers. To switch plans, contact your platform administrator.
+                                @else
+                                    Select a plan below. Your subscription starts after the payment is verified.
+                                @endif
+                            </p>
                         </div>
                         <button type="button" @click="upgradeOpen = false"
                                 class="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close plan selector">
@@ -257,11 +271,20 @@
                             </div>
                         @else
                             @foreach($plans as $plan)
-                                @php $isCurrentPlan = $currentPlan && $currentPlan->id === $plan->id; @endphp
-                                <div class="relative rounded-xl border p-4 text-left transition
-                                            {{ $isCurrentPlan ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 bg-white' }}">
+                                @php
+                                    $isCurrentPlan = $currentPlan && $currentPlan->id === $plan->id;
+                                    $isSelectable = ! $currentPlan && isset($planCheckouts[$plan->id]);
+                                @endphp
+                                @if($isSelectable)
+                                    <button type="button" @click="selectedPlan = {{ $plan->id }}"
+                                            :class="selectedPlan === {{ $plan->id }} ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 bg-white'"
+                                            :aria-pressed="selectedPlan === {{ $plan->id }}"
+                                            class="relative block w-full rounded-xl border p-4 text-left transition">
+                                @else
+                                    <div class="relative rounded-xl border p-4 text-left transition
+                                                {{ $isCurrentPlan ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-200 bg-white' }}">
+                                @endif
 
-                                    {{-- "Current" badge --}}
                                     @if($isCurrentPlan)
                                         <span class="absolute top-3 right-3 text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">Current Plan</span>
                                     @endif
@@ -282,9 +305,9 @@
                                             <dt class="font-medium text-gray-400 uppercase tracking-wide">Routers</dt>
                                             <dd class="font-bold text-gray-900">{{ $plan->max_routers }}</dd>
                                         </div>
-                                        @if($plan->trial_days)
+                                        @if($plan->trial_days && $currentPlan)
                                         <div>
-                                            <dt class="font-medium text-gray-400 uppercase tracking-wide">Free Trial</dt>
+                                            <dt class="font-medium text-gray-400 uppercase tracking-wide">Trial period</dt>
                                             <dd class="font-bold text-gray-900">{{ $plan->trial_days }} days</dd>
                                         </div>
                                         @endif
@@ -302,8 +325,29 @@
                                             @endforeach
                                         </div>
                                     @endif
-                                </div>
+                                @if($isSelectable)
+                                    </button>
+                                @else
+                                    </div>
+                                @endif
+                                @if(! $currentPlan && ! isset($planCheckouts[$plan->id]))
+                                    <p class="mt-1 text-xs text-amber-700">Checkout is unavailable for this plan. Contact the platform administrator.</p>
+                                @endif
                             @endforeach
+                        @endif
+
+                        @if(! $currentPlan && $checkoutAvailable && count($planCheckouts) > 0 && ! $hasUnresolvedInvoice)
+                            <form id="initial-plan-checkout" method="POST" action="{{ route('operator.billing.renew') }}" class="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" :value="planQuotes[selectedPlan] ? planQuotes[selectedPlan].key : ''">
+                                <input type="hidden" name="quote" :value="planQuotes[selectedPlan] ? planQuotes[selectedPlan].quote : ''">
+                                <label for="initial-subscription-phone" class="text-sm font-semibold text-gray-900">Mobile money phone (+256 followed by 9 digits)</label>
+                                <input id="initial-subscription-phone" name="phone" type="tel" required pattern="\+256[0-9]{9}" value="{{ old('phone') }}" class="mt-2 block w-full rounded-lg border-gray-300" autocomplete="tel">
+                                <label class="mt-3 flex items-start gap-2 text-sm text-gray-700">
+                                    <input type="checkbox" name="confirm_quote" value="1" required class="mt-1">
+                                    <span>I confirm one month of <strong x-text="planQuotes[selectedPlan] ? planQuotes[selectedPlan].name : ''"></strong> for <strong x-text="planQuotes[selectedPlan] ? planQuotes[selectedPlan].amount : ''"></strong>.</span>
+                                </label>
+                            </form>
                         @endif
 
                         <div class="rounded-xl border border-gray-200 p-4">
@@ -314,12 +358,26 @@
                     </div>
 
                     <footer class="border-t border-gray-200 bg-white p-6">
-                        <button type="button" disabled
-                                class="w-full cursor-not-allowed rounded-lg bg-gray-300 px-4 py-3 text-sm font-semibold text-gray-600"
-                                title="Contact your platform admin to switch plans">
-                            Self-serve plan changes coming soon
-                        </button>
-                        <p class="mt-3 text-center text-xs text-gray-500">To change your plan, contact the platform administrator.</p>
+                        @if($currentPlan)
+                            <button type="button" disabled
+                                    class="w-full cursor-not-allowed rounded-lg bg-gray-300 px-4 py-3 text-sm font-semibold text-gray-600"
+                                    title="Contact your platform admin to switch plans">
+                                Self-serve plan changes coming soon
+                            </button>
+                            <p class="mt-3 text-center text-xs text-gray-500">To change your plan, contact the platform administrator.</p>
+                        @elseif($checkoutAvailable && count($planCheckouts) > 0 && ! $hasUnresolvedInvoice)
+                            <button type="submit" form="initial-plan-checkout"
+                                    class="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">
+                                Continue to secure checkout
+                            </button>
+                            <p class="mt-3 text-center text-xs text-gray-500">You will be redirected to the active payment gateway. Your plan activates after payment verification.</p>
+                        @elseif($hasUnresolvedInvoice)
+                            <p class="text-center text-sm text-amber-800">An invoice is awaiting reconciliation. Do not submit another payment.</p>
+                        @elseif(! $checkoutAvailable)
+                            <p class="text-center text-sm text-amber-800">Subscription checkout is currently unavailable. Contact the platform administrator.</p>
+                        @else
+                            <p class="text-center text-sm text-amber-800">No configured plan is currently available for checkout. Contact the platform administrator.</p>
+                        @endif
                     </footer>
                 </section>
             </div>

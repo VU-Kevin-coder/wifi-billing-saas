@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Auth\TenantAwareEloquentUserProvider;
+use App\Channels\SmsMfaChannel;
 use App\Models\AuditLog;
 use App\Models\Package;
 use App\Models\PlatformSetting;
@@ -15,10 +16,11 @@ use App\Observers\ActivityNotificationObserver;
 use App\Services\PlatformMailService;
 use App\Services\Policy\Policy;
 use App\Services\RouterMikrotikManager;
+use App\Services\Subscriptions\ActiveVoucherSubscriptionGateway;
 use App\Services\Subscriptions\SubscriptionGateway;
-use App\Services\Subscriptions\UnavailableGateway;
 use App\Services\SystemHealthService;
 use App\Services\Tenancy\TenantContext;
+use CodingLibs\MFA\Facades\MFA;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
@@ -44,8 +46,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // No production subscription gateway is implemented; fail closed even if enabled.
-        $this->app->bind(SubscriptionGateway::class, UnavailableGateway::class);
+        $this->app->bind(SubscriptionGateway::class, ActiveVoucherSubscriptionGateway::class);
         $this->app->singleton(TenantContext::class, function ($app) {
             return new TenantContext;
         });
@@ -53,6 +54,10 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        if (config('mfa.sms.enabled', true)) {
+            MFA::registerChannel(new SmsMfaChannel);
+        }
+
         $trustedProxies = config('app.trusted_proxies');
         TrustProxies::at($trustedProxies ?: []);
 
@@ -134,6 +139,14 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(3)->by('email-code:'.$request->ip()),
             Limit::perHour(8)->by('email-code-hour:'.$request->ip()),
             Limit::perHour(3)->by('email-code-address:'.hash('sha256', strtolower(trim((string) $request->input('email'))))),
+        ]);
+        RateLimiter::for('auth-mfa-code-send', fn (Request $request) => [
+            Limit::perMinute(3)->by('mfa-send-user:'.($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip()),
+            Limit::perHour(8)->by('mfa-send-ip:'.$request->ip()),
+        ]);
+        RateLimiter::for('auth-mfa-code-verify', fn (Request $request) => [
+            Limit::perMinute(6)->by('mfa-verify-user-ip:'.($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip()),
+            Limit::perHour(20)->by('mfa-verify-user:'.($request->user()?->getAuthIdentifier() ?? 'guest')),
         ]);
         RateLimiter::for('auth-password-email', fn (Request $request) => Limit::perMinute(5)->by('pwd-email:'.$request->ip()));
         RateLimiter::for('auth-password-reset', fn (Request $request) => Limit::perMinute(10)->by('pwd-reset:'.$request->ip()));

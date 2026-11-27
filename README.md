@@ -173,7 +173,7 @@ The first milestone prioritizes a **complete, testable customer journey** over a
 |---|---|
 | **Authentication** | Secure access for authorized users |
 | **Tenant management** | Create and isolate operator accounts |
-| **Operator subscriptions** | Store plans, status, and billing records; manual administration initially |
+| **Operator subscriptions** | Tenant-scoped monthly renewal, provider verification, and printable invoices |
 | **Packages** | Configure internet access packages |
 | **Vouchers** | Generate and manage vouchers |
 | **MikroTik** | Connect to and manage a supported test router |

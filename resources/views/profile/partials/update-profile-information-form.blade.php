@@ -47,6 +47,13 @@
             @endif
         </div>
 
+        <div>
+            <x-input-label for="phone" :value="__('Phone number')" />
+            <x-text-input id="phone" name="phone" type="tel" class="mt-1 block w-full" :value="old('phone', $user->phone)" autocomplete="tel" placeholder="+256700000000" />
+            <x-input-error class="mt-2" :messages="$errors->get('phone')" />
+            <p class="mt-1 text-sm text-gray-500">A verification code will be sent before this number can be used for SMS two-factor authentication.</p>
+        </div>
+
         <div class="flex items-center gap-4">
             <x-primary-button>{{ __('Save') }}</x-primary-button>
 

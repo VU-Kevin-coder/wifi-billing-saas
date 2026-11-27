@@ -24,6 +24,7 @@ use App\Http\Controllers\Platform\BillingController;
 use App\Http\Controllers\Platform\ConfigurationController;
 use App\Http\Controllers\Platform\ControlSettingsController;
 use App\Http\Controllers\Platform\DashboardController as PlatformDashboard;
+use App\Http\Controllers\Platform\MfaRecoveryController;
 use App\Http\Controllers\Platform\PolicyController;
 use App\Http\Controllers\Platform\RefundController;
 use App\Http\Controllers\Platform\RevenueController;
@@ -48,7 +49,7 @@ Route::get('/health/ready', [HealthController::class, 'ready'])
 // ─── Public / Landing Page ──────────────────────────────────
 Route::get('/', function () {
     return view('landing');
-});
+})->name('landing');
 
 // ─── Public Captive Portal (Direct / IP / Ngrok / Path Access) ─
 Route::prefix('portal')
@@ -84,6 +85,12 @@ Route::middleware(['auth', 'role:platform_admin', EnsurePlatformAdminIpAllowed::
     ->name('platform.')
     ->group(function () {
         Route::get('/dashboard', PlatformDashboard::class)->name('dashboard');
+        Route::get('/mfa-recovery', [MfaRecoveryController::class, 'index'])
+            ->name('mfa-recovery.index');
+        Route::post('/mfa-recovery/{target}/reset', [MfaRecoveryController::class, 'reset'])
+            ->whereNumber('target')
+            ->middleware(['mfa.recent', 'throttle:6,1'])
+            ->name('mfa-recovery.reset');
         Route::get('/vpn-peers', [VpnPeerController::class, 'index'])->name('vpn-peers.index');
         Route::post('/vpn-peers', [VpnPeerController::class, 'store'])->name('vpn-peers.store');
         Route::get('/vpn-peers/{peer}/router-config', [VpnPeerController::class, 'download'])
@@ -283,6 +290,10 @@ $tenantRouteGroup->group(function () {
             Route::get('/billing', [App\Http\Controllers\Operator\BillingController::class, 'index'])
                 ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing'])
                 ->name('billing.index');
+            Route::get('/billing/invoices/{invoice}', [App\Http\Controllers\Operator\BillingController::class, 'invoice'])
+                ->whereNumber('invoice')
+                ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing'])
+                ->name('billing.invoices.show');
             Route::post('/billing/renew', [App\Http\Controllers\Operator\BillingController::class, 'start'])
                 ->middleware(['role:operator_admin|operator_finance', 'tenant.active:view_billing', 'mfa.recent', 'throttle:5,1'])
                 ->name('billing.renew');
@@ -353,9 +364,19 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/security/enable', [SecurityController::class, 'enable'])
         ->middleware('throttle:6,1')
         ->name('profile.security.enable');
-    Route::post('/profile/security/confirm', [SecurityController::class, 'confirm'])
-        ->middleware('throttle:6,1')
+    Route::post('/profile/security/confirm', [SecurityController::class, 'confirmTotp'])
+        ->middleware('throttle:auth-mfa-code-verify')
         ->name('profile.security.confirm');
+    Route::post('/profile/security/channels/challenge', [SecurityController::class, 'sendChannelChallenge'])
+        ->middleware('throttle:auth-mfa-code-send')
+        ->name('profile.security.channels.challenge');
+    Route::post('/profile/security/channels/confirm', [SecurityController::class, 'confirmChannelChallenge'])
+        ->middleware('throttle:auth-mfa-code-verify')
+        ->name('profile.security.channels.confirm');
+    Route::delete('/profile/security/methods/{method}', [SecurityController::class, 'removeMethod'])
+        ->whereIn('method', ['totp', 'email', 'sms'])
+        ->middleware('mfa.recent')
+        ->name('profile.security.methods.remove');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
