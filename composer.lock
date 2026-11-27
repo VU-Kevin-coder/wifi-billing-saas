@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4df394b1df131787920a9b526da4f9df",
+    "content-hash": "c4bcb71910af04ab911feddf9d9101d1",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -197,30 +197,30 @@
         },
         {
             "name": "coding-libs/laravel-mfa",
-            "version": "v1.1.6",
+            "version": "v2.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/coding-libs/laravel-mfa.git",
-                "reference": "a1bbf90ca4903b843d5b152b5e6faf1f47c4b5d9"
+                "reference": "8b4664e76bd1ac18edf64dcde700184695dc6eea"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/coding-libs/laravel-mfa/zipball/a1bbf90ca4903b843d5b152b5e6faf1f47c4b5d9",
-                "reference": "a1bbf90ca4903b843d5b152b5e6faf1f47c4b5d9",
+                "url": "https://api.github.com/repos/coding-libs/laravel-mfa/zipball/8b4664e76bd1ac18edf64dcde700184695dc6eea",
+                "reference": "8b4664e76bd1ac18edf64dcde700184695dc6eea",
                 "shasum": ""
             },
             "require": {
-                "bacon/bacon-qr-code": "^2.0|^3.0",
-                "illuminate/config": "^11.0|^12.0",
-                "illuminate/console": "^11.0|^12.0",
-                "illuminate/database": "^11.0|^12.0",
-                "illuminate/mail": "^11.0|^12.0",
-                "illuminate/support": "^11.0|^12.0",
-                "php": ">=8.2"
+                "bacon/bacon-qr-code": "^2.0 || ^3.0",
+                "illuminate/config": "^11.0 || ^12.0 || ^13.0",
+                "illuminate/console": "^11.0 || ^12.0 || ^13.0",
+                "illuminate/database": "^11.0 || ^12.0 || ^13.0",
+                "illuminate/mail": "^11.0 || ^12.0 || ^13.0",
+                "illuminate/support": "^11.0 || ^12.0 || ^13.0",
+                "php": "^8.3"
             },
             "require-dev": {
-                "orchestra/testbench": "^9.0",
-                "pestphp/pest": "^3.5"
+                "orchestra/testbench": "^11.0",
+                "pestphp/pest": "^4.0"
             },
             "type": "library",
             "extra": {
@@ -245,15 +245,15 @@
             "authors": [
                 {
                     "name": "CodingLibs",
-                    "email": "support@codinglibs.example"
+                    "email": "codinglibs4u@gmail.com"
                 }
             ],
             "description": "Laravel Multi-Factor Authentication package (Email, SMS, Google Authenticator TOTP)",
             "support": {
                 "issues": "https://github.com/coding-libs/laravel-mfa/issues",
-                "source": "https://github.com/coding-libs/laravel-mfa/tree/v1.1.6"
+                "source": "https://github.com/coding-libs/laravel-mfa/tree/v2.0.0"
             },
-            "time": "2025-10-01T07:52:02+00:00"
+            "time": "2026-10-21T05:24:52+00:00"
         },
         {
             "name": "dasprid/enum",
