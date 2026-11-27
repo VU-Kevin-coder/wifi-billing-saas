@@ -145,11 +145,13 @@ class MfaEnforcementTest extends TestCase
         $this->actingAs($this->platformAdmin)
             ->get(route('two-factor.challenge'))
             ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
             ->assertSee('Authenticator code')
             ->assertSee('Use a recovery code');
 
         $this->get(route('two-factor.challenge', ['mode' => 'recovery']))
             ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
             ->assertSee('Recovery code')
             ->assertSee('Use an authenticator code');
     }
@@ -248,7 +250,10 @@ class MfaEnforcementTest extends TestCase
             ->post(route('platform.revenue.withdrawals.reject', $tx->id))
             ->assertRedirect(route('mfa.step-up'));
 
-        $this->get(route('mfa.step-up'))->assertOk()->assertSee('Confirm');
+        $this->get(route('mfa.step-up'))
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertSee('Confirm');
 
         $this->post(route('mfa.step-up.verify'), ['code' => $this->totp()])
             ->assertRedirect($revenue)
@@ -261,6 +266,21 @@ class MfaEnforcementTest extends TestCase
         ])
             ->assertSessionHasNoErrors();
         $this->assertSame('rejected', Transaction::withoutTenancy()->find($tx->id)->status);
+    }
+
+    public function test_step_up_supports_asynchronous_code_verification(): void
+    {
+        $this->enableMfa($this->platformAdmin);
+        $redirect = route('platform.revenue.index');
+
+        $this->actingAs($this->platformAdmin)
+            ->withSession($this->verifiedSession(minutesAgo: 30) + ['mfa.step_up_return' => $redirect])
+            ->postJson(route('mfa.step-up.verify'), ['code' => $this->totp()])
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('redirect', $redirect);
+
+        $this->assertSame(1, AuditLog::where('action', 'mfa.step_up.verified')->count());
     }
 
     public function test_wrong_step_up_code_is_rejected_and_audited(): void

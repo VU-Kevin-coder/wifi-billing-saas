@@ -6,4 +6,7 @@
     'formAction' => route('two-factor.verify'),
     'totpUrl' => route('two-factor.challenge'),
     'recoveryUrl' => route('two-factor.challenge', ['mode' => 'recovery']),
+    'availableMethods' => $availableMethods,
+    'recoveryAvailable' => $recoveryAvailable,
+    'sendChallengeUrl' => route('two-factor.challenge.send'),
 ])

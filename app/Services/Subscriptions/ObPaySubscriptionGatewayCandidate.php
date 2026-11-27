@@ -25,14 +25,31 @@ final class ObPaySubscriptionGatewayCandidate implements SubscriptionGateway
         return false;
     }
 
-    public function start(string $reference, int $amount, string $currency, string $phone): void
+    public function context(): ?SubscriptionGatewayContext
+    {
+        return null;
+    }
+
+    public function canVerify(SubscriptionGatewayContext $context): bool
+    {
+        return false;
+    }
+
+    public function start(
+        string $reference,
+        int $amount,
+        string $currency,
+        string $phone,
+        SubscriptionGatewayContext $context,
+        ?string $returnUrl = null,
+    ): ?string
     {
         // Even an apparently successful submission must not create a false
         // pending state while the contract and account binding are unproven.
         throw new RuntimeException('OBPay subscription gateway is not ready.');
     }
 
-    public function verify(string $reference): ?array
+    public function verify(string $reference, ?SubscriptionGatewayContext $context): ?array
     {
         // In particular, do not query a possibly wrong shared merchant account.
         return null;

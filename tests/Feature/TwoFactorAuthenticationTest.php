@@ -35,7 +35,7 @@ class TwoFactorAuthenticationTest extends TestCase
         $this->actingAs($user)
             ->get('http://acme.localhost/profile/security')
             ->assertOk()
-            ->assertSee('Enable 2FA');
+            ->assertSee('Set up authenticator');
     }
 
     public function test_two_factor_setup_stays_pending_until_a_code_is_confirmed(): void
@@ -116,7 +116,8 @@ class TwoFactorAuthenticationTest extends TestCase
             ->withSession(['mfa' => ['verified' => true]])
             ->get('http://acme.localhost/profile/security')
             ->assertOk()
-            ->assertSee('Two-Factor Authentication is enabled.');
+            ->assertSee('Authenticator app')
+            ->assertSee('Enabled');
 
         $this->actingAs($user)
             ->withSession(['mfa' => ['verified' => true]])
@@ -157,6 +158,28 @@ class TwoFactorAuthenticationTest extends TestCase
             ->assertRedirect('http://acme.localhost/operator/dashboard');
 
         $this->get('http://acme.localhost/operator/dashboard')->assertOk();
+    }
+
+    public function test_mfa_challenge_supports_asynchronous_code_verification(): void
+    {
+        Role::create(['name' => 'operator_admin', 'guard_name' => 'web']);
+
+        $tenant = Tenant::create(['name' => 'Acme Wi-Fi', 'slug' => 'acme']);
+        $user = User::factory()->create(['tenant_id' => $tenant->id]);
+        $user->assignRole('operator_admin');
+        MFA::enableMethod($user, 'totp', ['secret' => 'JBSWY3DPEHPK3PXP']);
+
+        $this->actingAs($user)
+            ->postJson('http://acme.localhost/two-factor-challenge', ['code' => '000000'])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.code.0', 'The verification or recovery code is invalid.');
+
+        $this->postJson('http://acme.localhost/two-factor-challenge', [
+            'code' => $this->currentTotpCode('JBSWY3DPEHPK3PXP'),
+        ])
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('redirect', 'http://acme.localhost/operator/dashboard');
     }
 
     public function test_mfa_is_preserved_through_signed_tenant_sso_transfer(): void

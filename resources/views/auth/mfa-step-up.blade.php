@@ -6,4 +6,7 @@
     'formAction' => route('mfa.step-up.verify'),
     'totpUrl' => route('mfa.step-up'),
     'recoveryUrl' => route('mfa.step-up', ['mode' => 'recovery']),
+    'availableMethods' => $availableMethods,
+    'recoveryAvailable' => $recoveryAvailable,
+    'sendChallengeUrl' => route('mfa.step-up.send'),
 ])

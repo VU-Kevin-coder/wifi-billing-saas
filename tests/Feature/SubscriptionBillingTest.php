@@ -8,6 +8,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Subscriptions\SubscriptionBilling;
 use App\Services\Subscriptions\SubscriptionGateway;
+use App\Services\Subscriptions\SubscriptionGatewayContext;
 use App\Services\Subscriptions\UnavailableGateway;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -30,6 +31,8 @@ final class FakeSubscriptionGateway implements SubscriptionGateway
     public array $charges = [];
 
     public bool $throwOnStart = false;
+
+    public ?string $redirectUrl = null;
 
     public bool $isReady = true;
 
@@ -57,8 +60,28 @@ final class FakeSubscriptionGateway implements SubscriptionGateway
         return $this->isReady;
     }
 
-    public function start(string $reference, int $amount, string $currency, string $phone): void
+    public function context(): ?SubscriptionGatewayContext
     {
+        return new SubscriptionGatewayContext('testing', str_repeat('a', 64), 'sandbox');
+    }
+
+    public function canVerify(SubscriptionGatewayContext $context): bool
+    {
+        if ($this->throwOnReady) {
+            throw new \RuntimeException('SECRET_READY');
+        }
+
+        return $this->isReady;
+    }
+
+    public function start(
+        string $reference,
+        int $amount,
+        string $currency,
+        string $phone,
+        SubscriptionGatewayContext $context,
+        ?string $returnUrl = null,
+    ): ?string {
         $this->starts++;
         $this->charges[] = compact('reference', 'amount', 'currency', 'phone');
         if ($this->onStart) {
@@ -67,9 +90,11 @@ final class FakeSubscriptionGateway implements SubscriptionGateway
         if ($this->throwOnStart) {
             throw new \RuntimeException('SECRET_START +256700123456 provider-token');
         }
+
+        return $this->redirectUrl;
     }
 
-    public function verify(string $reference): ?array
+    public function verify(string $reference, ?SubscriptionGatewayContext $context): ?array
     {
         $this->verifications[] = $reference;
         if ($this->onVerify) {
@@ -395,10 +420,36 @@ class SubscriptionBillingTest extends TestCase
         $this->assertSame(1, $this->gateway->starts);
         $this->assertDatabaseHas('subscription_invoices', ['tenant_id' => $this->tenant->id, 'amount' => 120000, 'currency' => 'UGX', 'plan_name' => 'Test plan']);
         $this->assertDatabaseCount('subscription_attempts', 1);
+        $attempt = DB::table('subscription_attempts')->where('idempotency_key', $key)->first();
+        $this->assertSame('testing', $attempt->gateway_provider);
+        $this->assertSame(str_repeat('a', 64), $attempt->gateway_account_fingerprint);
+        $this->assertSame('sandbox', $attempt->gateway_environment);
+        $this->assertDatabaseCount('transactions', 0);
         $this->actingAs($this->finance)->post(route('operator.billing.renew'), array_replace($form, ['phone' => '+256700999999']))->assertSessionHasErrors();
         $this->actingAs($this->finance)->get(route('operator.billing.index'))->assertOk()->assertSee('Test plan')->assertSee('120,000')->assertSee('Recorded events')->assertSee('Unknown');
+        $this->actingAs($this->finance)->get(route('operator.billing.invoices.show', ['invoice' => $attempt->subscription_invoice_id]))
+            ->assertOk()->assertSee('Invoice #'.$attempt->subscription_invoice_id)
+            ->assertSee('Print / Save PDF')->assertSee('Monthly renewal of Test plan')->assertSee($attempt->reference);
         $this->plan->update(['name' => 'Edited plan', 'price' => 500]);
         $this->assertDatabaseHas('subscription_invoices', ['plan_name' => 'Test plan', 'amount' => 120000]);
+    }
+
+    public function test_hosted_checkout_url_is_encrypted_and_only_available_for_open_attempts(): void
+    {
+        $this->gateway->redirectUrl = 'https://checkout.obpay.online/pay/order-123';
+        $key = (string) Str::uuid();
+        $this->actingAs($this->finance)
+            ->post(route('operator.billing.renew'), $this->form($key))
+            ->assertRedirect($this->gateway->redirectUrl);
+        $attempt = DB::table('subscription_attempts')->where('idempotency_key', $key)->first();
+        $stored = DB::table('subscription_attempts')->where('id', $attempt->id)->value('checkout_url');
+
+        $this->assertNotSame($this->gateway->redirectUrl, $stored);
+        $this->assertSame($this->gateway->redirectUrl, $this->service()->checkoutUrl($attempt));
+
+        DB::table('subscription_attempts')->where('id', $attempt->id)->update(['status' => 'paid']);
+        $attempt = DB::table('subscription_attempts')->where('id', $attempt->id)->first();
+        $this->assertNull($this->service()->checkoutUrl($attempt));
     }
 
     public function test_unknown_timeout_is_not_retried_and_never_assumed_failed(): void
@@ -526,6 +577,60 @@ class SubscriptionBillingTest extends TestCase
         $this->post(route('operator.billing.renew'), $form)->assertSessionHasErrors('quote');
         $this->assertSame(0, $this->gateway->starts);
         $this->assertDatabaseCount('subscription_invoices', 0);
+    }
+
+    public function test_unassigned_tenant_can_select_a_plan_and_receives_it_only_after_verified_payment(): void
+    {
+        $this->withoutMiddleware(ThrottleRequests::class);
+        $this->tenant->update([
+            'platform_plan_id' => null,
+            'plan' => 'Starter',
+            'plan_fee' => 0,
+            'subscription_status' => 'trial',
+            'subscription_ends_at' => null,
+        ]);
+        $this->actingAs($this->finance)->get(route('operator.billing.index'))
+            ->assertOk()
+            ->assertSee('Choose a plan and complete checkout')
+            ->assertSee('Continue to secure checkout')
+            ->assertSee('Test plan')
+            ->assertDontSee('Self-serve plan changes coming soon');
+
+        $key = (string) Str::uuid();
+        $quote = $this->service()->quote($this->tenant->fresh(), $key, (int) $this->plan->id);
+        $this->assertNotNull($quote);
+        $this->actingAs($this->finance)->post(route('operator.billing.renew'), [
+            'idempotency_key' => $key,
+            'quote' => $quote['token'],
+            'phone' => '+256700123456',
+            'confirm_quote' => '1',
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $attempt = DB::table('subscription_attempts')->where('idempotency_key', $key)->first();
+        $this->assertNotNull($attempt);
+        $this->assertDatabaseHas('subscription_invoices', [
+            'id' => $attempt->subscription_invoice_id,
+            'plan_id' => $this->plan->id,
+            'plan_name' => $this->plan->name,
+            'amount' => 120000,
+            'status' => 'open',
+        ]);
+        $this->assertNull($this->tenant->fresh()->platform_plan_id);
+
+        $this->gateway->result = $this->verified($attempt);
+        $this->service()->reconcile($this->tenant, $attempt->id);
+        $this->assertDatabaseHas('tenants', [
+            'id' => $this->tenant->id,
+            'platform_plan_id' => $this->plan->id,
+            'plan' => $this->plan->name,
+            'subscription_status' => 'active',
+            'plan_fee' => 120000,
+        ]);
+        $this->assertDatabaseHas('subscription_invoices', [
+            'id' => $attempt->subscription_invoice_id,
+            'status' => 'paid',
+        ]);
+        $this->assertNotNull(DB::table('subscription_invoices')->where('id', $attempt->subscription_invoice_id)->value('entitlement_applied_at'));
     }
 
     public function test_quote_binds_plan_and_amount_to_actual_charge_and_expired_retry_does_not_recharge(): void

@@ -12,6 +12,7 @@ use App\Models\Session;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Subscriptions\SubscriptionBilling;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -135,18 +136,18 @@ class TenantController extends Controller
 
         $plan = PlatformPlan::findOrFail($validated['platform_plan_id']);
 
-        $tenant->update([
+        $updatedTenant = app(SubscriptionBilling::class)->applyAdministratorPlanChange($tenant, [
             'platform_plan_id' => $plan->id,
             'plan' => $plan->name,
             'plan_fee' => $plan->price,
             'subscription_status' => $validated['subscription_status'],
             'subscription_ends_at' => $validated['subscription_ends_at'] ?? null,
-        ]);
+        ], (int) $request->user()->id);
 
-        AuditLog::record('tenant.plan_changed', $tenant, [
+        AuditLog::record('tenant.plan_changed', $updatedTenant, [
             'new_plan' => $plan->name,
             'new_status' => $validated['subscription_status'],
-        ], null, $tenant);
+        ], null, $updatedTenant);
 
         return back()->with('status', "Plan changed to {$plan->name}.");
     }
