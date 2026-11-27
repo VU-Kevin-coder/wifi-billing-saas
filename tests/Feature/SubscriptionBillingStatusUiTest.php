@@ -6,6 +6,7 @@ use App\Models\PlatformPlan;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Subscriptions\SubscriptionGateway;
+use App\Services\Subscriptions\SubscriptionGatewayContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
@@ -32,12 +33,12 @@ final class StatusUiGateway implements SubscriptionGateway
         return $this->isReady;
     }
 
-    public function context(): ?\App\Services\Subscriptions\SubscriptionGatewayContext
+    public function context(): ?SubscriptionGatewayContext
     {
-        return new \App\Services\Subscriptions\SubscriptionGatewayContext('testing', str_repeat('b', 64), 'sandbox');
+        return new SubscriptionGatewayContext('testing', str_repeat('b', 64), 'sandbox');
     }
 
-    public function canVerify(\App\Services\Subscriptions\SubscriptionGatewayContext $context): bool
+    public function canVerify(SubscriptionGatewayContext $context): bool
     {
         if ($this->throwOnReady) {
             throw new \RuntimeException('secret provider response');
@@ -51,16 +52,15 @@ final class StatusUiGateway implements SubscriptionGateway
         int $amount,
         string $currency,
         string $phone,
-        \App\Services\Subscriptions\SubscriptionGatewayContext $context,
+        SubscriptionGatewayContext $context,
         ?string $returnUrl = null,
-    ): ?string
-    {
+    ): ?string {
         $this->starts++;
 
         return null;
     }
 
-    public function verify(string $reference, ?\App\Services\Subscriptions\SubscriptionGatewayContext $context): ?array
+    public function verify(string $reference, ?SubscriptionGatewayContext $context): ?array
     {
         $this->verifies++;
 

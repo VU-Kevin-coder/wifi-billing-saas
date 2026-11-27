@@ -1,0 +1,169 @@
+metadata:
+  generated: "2026-11-27"
+  source_spec: "Requirements derived from docs/PRODUCTION-READINESS-AUDIT-2026-11-27.md; no formal production-readiness feature spec exists"
+  target_plan: "docs/PRODUCTION-IMPLEMENTATION-PLAN.md"
+
+summary:
+  total_requirements: 12
+  covered_requirements: 12
+  missing_requirements: 0
+  coverage_percentage: 100.0
+
+requirements:
+  - req_id: "REQ-PROD-001"
+    req_description: "Reviewed release candidate passes complete validation"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-1"
+      phase_name: "Release candidate"
+      items:
+        - item_id: "1.1"
+          description: "Inventory and preserve the current worktree"
+        - item_id: "1.2"
+          description: "Validate the integrated candidate"
+        - item_id: "4.1"
+          description: "Validate PostgreSQL migration and concurrency behavior"
+        - item_id: "7.1"
+          description: "Run complete pre-production acceptance"
+    notes: ""
+  - req_id: "REQ-PROD-002"
+    req_description: "Tenant subscription lifecycle and expiry are consistently enforced"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-2"
+      phase_name: "Commercial contract and tenant lifecycle"
+      items:
+        - item_id: "2.1"
+          description: "Approve subscription and launch policy"
+        - item_id: "2.2"
+          description: "Enforce plan/trial expiry consistently"
+    notes: ""
+  - req_id: "REQ-PROD-003"
+    req_description: "Ambiguous and failed payments have safe audited resolution"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-2"
+      phase_name: "Commercial contract and tenant lifecycle"
+      items:
+        - item_id: "2.3"
+          description: "Add platform invoice review and recovery"
+        - item_id: "2.4"
+          description: "Make subscription history tamper-evident operationally"
+    notes: "Also covered by payment testing and fulfillment recovery phases."
+  - req_id: "REQ-PROD-004"
+    req_description: "Subscription commercial behavior and payment account are approved"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-2"
+      phase_name: "Commercial contract and tenant lifecycle"
+      items:
+        - item_id: "2.1"
+          description: "Approve subscription and launch policy"
+    related_plan_items: ["3.1"]
+    notes: ""
+  - req_id: "REQ-PROD-005"
+    req_description: "Provider contract and settlement are verified with authorized evidence"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-3"
+      phase_name: "Safe payment collection and financial operations"
+      items:
+        - item_id: "3.1"
+          description: "Document and verify selected provider contract"
+        - item_id: "3.2"
+          description: "Exercise adversarial payment flows"
+    notes: ""
+  - req_id: "REQ-PROD-006"
+    req_description: "Payments, settlements, refunds, reversals, and access fulfillment are reconciled"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-3"
+      phase_name: "Safe payment collection and financial operations"
+      items:
+        - item_id: "3.3"
+          description: "Reconcile settlements, refunds, and reversals"
+        - item_id: "3.4"
+          description: "Close paid-but-not-provisioned and refund policy gaps"
+    related_plan_items: ["2.3", "2.4", "5.5"]
+    notes: ""
+  - req_id: "REQ-PROD-007"
+    req_description: "PostgreSQL migrations, concurrency, and financial idempotency are proven"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-4"
+      phase_name: "Production database correctness and recoverability"
+      items:
+        - item_id: "4.1"
+          description: "Validate PostgreSQL migration and concurrency behavior"
+    notes: ""
+  - req_id: "REQ-PROD-008"
+    req_description: "Database backups can be restored and release recovery is rehearsed"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-4"
+      phase_name: "Production database correctness and recoverability"
+      items:
+        - item_id: "4.2"
+          description: "Prove backups and restoration"
+    related_plan_items: ["5.5"]
+    notes: ""
+  - req_id: "REQ-PROD-009"
+    req_description: "Runtime configuration, email, readiness, scheduling, and alerts are verified"
+    priority: "P1"
+    plan_mapping:
+      phase: "Phase-5"
+      phase_name: "Deployment security and operations"
+      items:
+        - item_id: "5.1"
+          description: "Validate runtime configuration and deployment image"
+        - item_id: "5.2"
+          description: "Prove tenant-domain and email delivery"
+        - item_id: "5.3"
+          description: "Exercise monitoring and operational alerts"
+        - item_id: "5.5"
+          description: "Define support and operational runbooks"
+    notes: ""
+  - req_id: "REQ-PROD-010"
+    req_description: "Security, privacy, access, secret, and incident controls are operational"
+    priority: "P1"
+    plan_mapping:
+      phase: "Phase-5"
+      phase_name: "Deployment security and operations"
+      items:
+        - item_id: "5.1"
+          description: "Validate runtime configuration and deployment image"
+        - item_id: "5.4"
+          description: "Complete access, secrets, privacy, and incident controls"
+    related_plan_items: ["1.1", "1.2", "2.3", "2.4"]
+    notes: ""
+  - req_id: "REQ-PROD-011"
+    req_description: "Router/RADIUS capability is enabled only for accepted scope and hardware"
+    priority: "P0 if RADIUS is in scope"
+    plan_mapping:
+      phase: "Phase-6"
+      phase_name: "Router and RADIUS capability"
+      items:
+        - item_id: "6.1"
+          description: "Reconcile access contract and close known races"
+        - item_id: "6.2"
+          description: "Complete isolated network and hardware acceptance"
+    notes: "May be excluded from a limited initial launch only if disabled and not claimed."
+  - req_id: "REQ-PROD-012"
+    req_description: "Launch is approved, limited, monitored, and reversible"
+    priority: "P0"
+    plan_mapping:
+      phase: "Phase-2"
+      phase_name: "Commercial contract and tenant lifecycle"
+      items:
+        - item_id: "2.1"
+          description: "Approve subscription and launch policy"
+    related_plan_items: ["5.1", "5.2", "5.3", "5.5", "7.1", "7.2"]
+    notes: ""
+
+missing_requirements: []
+orphan_plan_items: []
+validation:
+  passed: true
+  errors: []
+  warnings:
+    - "Requirements were derived from the production audit because no formal production-readiness feature specification exists."

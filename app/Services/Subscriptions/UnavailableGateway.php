@@ -28,8 +28,7 @@ final class UnavailableGateway implements SubscriptionGateway
         string $phone,
         SubscriptionGatewayContext $context,
         ?string $returnUrl = null,
-    ): ?string
-    {
+    ): ?string {
         throw new RuntimeException('Subscription gateway unavailable.');
     }
 

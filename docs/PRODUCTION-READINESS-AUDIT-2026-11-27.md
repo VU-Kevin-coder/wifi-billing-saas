@@ -5,6 +5,7 @@
 tenant subscriptions, tenant lifecycle, production operations, and the router
 access path. This is a repository-evidence audit, not a certification or a
 claim that the system is ready to accept production payments.
+**Implementation plan:** [Production Readiness Implementation Plan](./PRODUCTION-IMPLEMENTATION-PLAN.md)
 
 ## Executive decision
 
@@ -25,6 +26,11 @@ own billing notes identify the missing human resolution, refund/reversal, and
 recovery operations. Provider sandbox/settlement evidence, production database
 recovery, live email/proxy/monitoring configuration, and physical router
 acceptance are not established by the repository evidence reviewed here.
+GitHub Actions confirms current CI failures in Pint, SQLite, MySQL, PostgreSQL,
+and dependency auditing; see PR-14. The diagnosed formatting, stale test
+assertions, dependency advisories, and local verification status are recorded
+in the [implementation plan](./PRODUCTION-IMPLEMENTATION-PLAN.md). Keep CI as
+the first release blocker until the full workflow passes on one candidate SHA.
 
 The dated Phase 1 gate in
 [t21-teamlead.md](../.github/modernize/rearchitecture/artifacts/t21-teamlead.md)
@@ -65,6 +71,7 @@ assessment of the current working tree or clear the remaining gates below.
 | PR-11 | **P1 — required before public launch** | The release-control boundary and actual production configuration are unverified. | A Render blueprint and production preflight exist, but this audit cannot verify GitHub branch protection, required CI checks, human approval, production secret provisioning, custom wildcard DNS/TLS, or a rollback drill. Confirm these externally and make production preflight reject missing critical settings (including email and any required tenant-domain mode) rather than merely warn. |
 | PR-12 | **P1 — required before broad router rollout** | Physical device compatibility and customer-facing router behavior are untested. | [HARDWARE-MATRIX.md](./HARDWARE-MATRIX.md) lists intended models/versions but says physical tests are not recorded. Mocked tests do not establish captive portal behavior, RouterOS API effects, RADIUS attributes, accounting, revocation, recovery, or rollback on hardware. Restrict initial claims and rollout to exact versions/models that pass isolated acceptance. |
 | PR-13 | **P2 — product/scale gate** | No current evidence establishes agreed availability, load, privacy/retention, or disaster-recovery targets. | Existing docs explicitly defer SLOs until measured baselines exist and state production backup/restore remains unverified. Measure before committing targets; define data retention, incident response, key rotation, support escalation, and recovery objectives with the product owner. |
+| PR-14 | **P0 — current release blocker** | CI has not yet been rerun after remediation; no production release until all required checks pass together on one candidate SHA. | Current [GitHub Actions run 45982911074](https://github.com/VU-Kevin-coder/wifi-billing-saas/actions/runs/45982911074) was for PR #76, head `580ec5a17bac1148122c69120a7a2e52db37c8b4` and merge SHA `100c81074bfe69fb6bcbd1ec142aaf92f605d67a`. Pint reported seven style violations, which were formatted and pass local `vendor/bin/pint --test`. SQLite/MySQL/PostgreSQL jobs failed on stale test expectations: an unassigned tenant expected the self-serve change-plan CTA; the SweetAlert test treated the nested MFA partial as a standalone layout; and the public-assets test expected a portal stylesheet on the standalone landing page. Those expectations are corrected; the local SQLite suite passes (766 tests, 6,150 assertions, 2 skipped). Composer reported five Symfony advisories (CVE-2026-133743, CVE-2026-133746, CVE-2026-133751, CVE-2026-133754, CVE-2026-133755); patched Symfony 7.4.24 packages are locked and Composer audit passes. The npm audit now runs even if Composer audit fails and reports zero vulnerabilities locally. Local MySQL execution remains unverified because Docker Desktop became unavailable during disposable service startup. Require a full green CI rerun on the candidate SHA; prior [run 45774107231](https://github.com/VU-Kevin-coder/wifi-billing-saas/actions/runs/45774107231) is older and does not clear this blocker. |
 
 ## Prioritized implementation plan
 

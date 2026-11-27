@@ -128,12 +128,12 @@ final class ActiveVoucherSubscriptionGatewayTest extends TestCase
             if ($request->method() === 'POST') {
                 return Http::response([
                     'success' => true,
-                        'data' => [
-                            'reference' => $reference,
-                            'status' => 'pending',
-                            'prompt_sent' => false,
-                            'checkout_url' => 'https://checkout.obpay.online/pay/order-123',
-                        ],
+                    'data' => [
+                        'reference' => $reference,
+                        'status' => 'pending',
+                        'prompt_sent' => false,
+                        'checkout_url' => 'https://checkout.obpay.online/pay/order-123',
+                    ],
                 ]);
             }
 

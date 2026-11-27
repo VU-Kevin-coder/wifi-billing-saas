@@ -1,0 +1,306 @@
+metadata:
+  generated: "2026-11-27"
+  source_plan: "docs/PRODUCTION-IMPLEMENTATION-PLAN.md"
+  target_tasks: "Task Breakdown section in docs/PRODUCTION-IMPLEMENTATION-PLAN.md"
+
+summary:
+  total_plan_items: 21
+  covered_plan_items: 21
+  missing_plan_items: 0
+  coverage_percentage: 100.0
+  total_tasks_generated: 44
+  orphan_tasks: 0
+
+phases:
+  - phase_id: "Phase-1"
+    phase_name: "Release candidate"
+    items:
+      - item_id: "1.1"
+        description: "Inventory and preserve the current worktree"
+        tasks:
+          - task_id: "T001"
+            description: "Inventory modified worktree and release candidate"
+          - task_id: "T002"
+            description: "Review integrated changes and scope"
+        notes: ""
+      - item_id: "1.2"
+        description: "Validate the integrated candidate"
+        tasks:
+          - task_id: "T003"
+            description: "Capture exact current CI failure run and logs"
+          - task_id: "T004"
+            description: "Fix Pint failures"
+          - task_id: "T005"
+            description: "Fix SQLite and MySQL test failures"
+          - task_id: "T006"
+            description: "Remediate Composer audit, run npm audit independently, rerun full CI, and verify branch protection"
+        notes: ""
+  - phase_id: "Phase-2"
+    phase_name: "Commercial contract and tenant lifecycle"
+    items:
+      - item_id: "2.1"
+        description: "Approve subscription and launch policy"
+        tasks:
+          - task_id: "T007"
+            description: "Record commercial and launch decisions"
+          - task_id: "T008"
+            description: "Update customer/operator billing information"
+        notes: ""
+      - item_id: "2.2"
+        description: "Enforce plan/trial expiry consistently"
+        tasks:
+          - task_id: "T009"
+            description: "Implement canonical entitlement/expiry policy"
+          - task_id: "T010"
+            description: "Add scheduled lifecycle command"
+          - task_id: "T011"
+            description: "Test expiry, grace, renewal, and concurrency"
+        notes: ""
+      - item_id: "2.3"
+        description: "Add platform invoice review and recovery"
+        tasks:
+          - task_id: "T012"
+            description: "Add protected platform review queue"
+          - task_id: "T013"
+            description: "Implement audited resolution transitions"
+          - task_id: "T014"
+            description: "Implement ambiguous submission recovery"
+          - task_id: "T015"
+            description: "Test authorization, races, and audit"
+        notes: ""
+      - item_id: "2.4"
+        description: "Make subscription history tamper-evident operationally"
+        tasks:
+          - task_id: "T013"
+            description: "Implement audited resolution transitions"
+          - task_id: "T015"
+            description: "Test authorization, races, and audit"
+        notes: ""
+  - phase_id: "Phase-3"
+    phase_name: "Safe payment collection and financial operations"
+    items:
+      - item_id: "3.1"
+        description: "Document and verify selected provider contract"
+        tasks:
+          - task_id: "T016"
+            description: "Record selected gateway sandbox contract"
+        notes: ""
+      - item_id: "3.2"
+        description: "Exercise adversarial payment flows"
+        tasks:
+          - task_id: "T017"
+            description: "Test provider adapter contract handling"
+          - task_id: "T018"
+            description: "Test webhook and checkout adversarial cases"
+          - task_id: "T019"
+            description: "Run authorized provider sandbox matrix"
+        notes: ""
+      - item_id: "3.3"
+        description: "Reconcile settlements, refunds, and reversals"
+        tasks:
+          - task_id: "T020"
+            description: "Implement settlement reconciliation reporting"
+          - task_id: "T021"
+            description: "Test financial discrepancies and access controls"
+        notes: ""
+      - item_id: "3.4"
+        description: "Close paid-but-not-provisioned and refund policy gaps"
+        tasks:
+          - task_id: "T022"
+            description: "Add fulfillment escalation and safe recovery"
+          - task_id: "T023"
+            description: "Document/test fulfillment and reversal procedures"
+        notes: ""
+  - phase_id: "Phase-4"
+    phase_name: "Production database correctness and recoverability"
+    items:
+      - item_id: "4.1"
+        description: "Validate PostgreSQL migration and concurrency behavior"
+        tasks:
+          - task_id: "T024"
+            description: "Run clean and upgrade migrations on disposable PostgreSQL"
+          - task_id: "T025"
+            description: "Test PostgreSQL locking, idempotency, and constraints"
+          - task_id: "T026"
+            description: "Resolve engine differences and pass PostgreSQL CI"
+        notes: ""
+      - item_id: "4.2"
+        description: "Prove backups and restoration"
+        tasks:
+          - task_id: "T027"
+            description: "Confirm backup policy and dependencies"
+          - task_id: "T028"
+            description: "Restore and validate isolated backup"
+          - task_id: "T029"
+            description: "Rehearse release migration recovery"
+        notes: ""
+  - phase_id: "Phase-5"
+    phase_name: "Deployment security and operations"
+    items:
+      - item_id: "5.1"
+        description: "Validate runtime configuration and deployment image"
+        tasks:
+          - task_id: "T030"
+            description: "Validate image, readiness and scheduler topology"
+          - task_id: "T031"
+            description: "Strengthen production preflight"
+        notes: ""
+      - item_id: "5.2"
+        description: "Prove tenant-domain and email delivery"
+        tasks:
+          - task_id: "T032"
+            description: "Verify tenant domain, TLS and proxy behavior"
+          - task_id: "T033"
+            description: "Verify SMTP journeys and preflight"
+        notes: ""
+      - item_id: "5.3"
+        description: "Exercise monitoring and operational alerts"
+        tasks:
+          - task_id: "T034"
+            description: "Configure and test independent probes/alerts"
+        notes: ""
+      - item_id: "5.4"
+        description: "Complete access, secrets, privacy, and incident controls"
+        tasks:
+          - task_id: "T035"
+            description: "Review security and operational controls"
+        notes: ""
+      - item_id: "5.5"
+        description: "Define support and operational runbooks"
+        tasks:
+          - task_id: "T036"
+            description: "Write and tabletop operational runbooks"
+        notes: ""
+  - phase_id: "Phase-6"
+    phase_name: "Router and RADIUS capability"
+    items:
+      - item_id: "6.1"
+        description: "Reconcile access contract and close known races"
+        tasks:
+          - task_id: "T037"
+            description: "Resolve access selector contract"
+          - task_id: "T038"
+            description: "Implement/test capacity reservations and revocation"
+        notes: "Only required if RADIUS is in launch scope."
+      - item_id: "6.2"
+        description: "Complete isolated network and hardware acceptance"
+        tasks:
+          - task_id: "T039"
+            description: "Validate isolated private network/service boundary"
+          - task_id: "T040"
+            description: "Run CHR and hardware acceptance"
+        notes: "Only required if RADIUS is in launch scope."
+  - phase_id: "Phase-7"
+    phase_name: "Final acceptance and staged launch"
+    items:
+      - item_id: "7.1"
+        description: "Run complete pre-production acceptance"
+        tasks:
+          - task_id: "T041"
+            description: "Assemble exact-commit release evidence"
+          - task_id: "T042"
+            description: "Confirm blockers and owner sign-off"
+        notes: ""
+      - item_id: "7.2"
+        description: "Approve, canary, monitor, and expand"
+        tasks:
+          - task_id: "T043"
+            description: "Obtain explicit launch approval"
+          - task_id: "T044"
+            description: "Execute approved limited cohort rollout"
+        notes: ""
+
+missing_plan_items: []
+orphan_tasks: []
+upstream_trace:
+  - plan_item: "1.1"
+    source_requirements: ["REQ-PROD-001", "REQ-PROD-010"]
+    tasks: ["T001", "T002"]
+    full_trace: "REQ-PROD-001,REQ-PROD-010 -> Phase-1.1 -> T001,T002"
+  - plan_item: "1.2"
+    source_requirements: ["REQ-PROD-001", "REQ-PROD-005", "REQ-PROD-007", "REQ-PROD-010"]
+    tasks: ["T003", "T004", "T005", "T006"]
+    full_trace: "REQ-PROD-001,REQ-PROD-005,REQ-PROD-007,REQ-PROD-010 -> Phase-1.2 -> T003-T006"
+  - plan_item: "2.1"
+    source_requirements: ["REQ-PROD-002", "REQ-PROD-004", "REQ-PROD-012"]
+    tasks: ["T007", "T008"]
+    full_trace: "REQ-PROD-002,REQ-PROD-004,REQ-PROD-012 -> Phase-2.1 -> T007,T008"
+  - plan_item: "2.2"
+    source_requirements: ["REQ-PROD-002"]
+    tasks: ["T009", "T010", "T011"]
+    full_trace: "REQ-PROD-002 -> Phase-2.2 -> T009-T011"
+  - plan_item: "2.3"
+    source_requirements: ["REQ-PROD-003", "REQ-PROD-006", "REQ-PROD-010"]
+    tasks: ["T012", "T013", "T014", "T015"]
+    full_trace: "REQ-PROD-003,REQ-PROD-006,REQ-PROD-010 -> Phase-2.3 -> T012-T015"
+  - plan_item: "2.4"
+    source_requirements: ["REQ-PROD-003", "REQ-PROD-006", "REQ-PROD-010"]
+    tasks: ["T013", "T015"]
+    full_trace: "REQ-PROD-003,REQ-PROD-006,REQ-PROD-010 -> Phase-2.4 -> T013,T015"
+  - plan_item: "3.1"
+    source_requirements: ["REQ-PROD-004", "REQ-PROD-005"]
+    tasks: ["T016"]
+    full_trace: "REQ-PROD-004,REQ-PROD-005 -> Phase-3.1 -> T016"
+  - plan_item: "3.2"
+    source_requirements: ["REQ-PROD-003", "REQ-PROD-005"]
+    tasks: ["T017", "T018", "T019"]
+    full_trace: "REQ-PROD-003,REQ-PROD-005 -> Phase-3.2 -> T017-T019"
+  - plan_item: "3.3"
+    source_requirements: ["REQ-PROD-006"]
+    tasks: ["T020", "T021"]
+    full_trace: "REQ-PROD-006 -> Phase-3.3 -> T020,T021"
+  - plan_item: "3.4"
+    source_requirements: ["REQ-PROD-003", "REQ-PROD-006"]
+    tasks: ["T022", "T023"]
+    full_trace: "REQ-PROD-003,REQ-PROD-006 -> Phase-3.4 -> T022,T023"
+  - plan_item: "4.1"
+    source_requirements: ["REQ-PROD-001", "REQ-PROD-007"]
+    tasks: ["T024", "T025", "T026"]
+    full_trace: "REQ-PROD-001,REQ-PROD-007 -> Phase-4.1 -> T024-T026"
+  - plan_item: "4.2"
+    source_requirements: ["REQ-PROD-008"]
+    tasks: ["T027", "T028", "T029"]
+    full_trace: "REQ-PROD-008 -> Phase-4.2 -> T027-T029"
+  - plan_item: "5.1"
+    source_requirements: ["REQ-PROD-009", "REQ-PROD-010", "REQ-PROD-012"]
+    tasks: ["T030", "T031"]
+    full_trace: "REQ-PROD-009,REQ-PROD-010,REQ-PROD-012 -> Phase-5.1 -> T030,T031"
+  - plan_item: "5.2"
+    source_requirements: ["REQ-PROD-009", "REQ-PROD-012"]
+    tasks: ["T032", "T033"]
+    full_trace: "REQ-PROD-009,REQ-PROD-012 -> Phase-5.2 -> T032,T033"
+  - plan_item: "5.3"
+    source_requirements: ["REQ-PROD-009", "REQ-PROD-012"]
+    tasks: ["T034"]
+    full_trace: "REQ-PROD-009,REQ-PROD-012 -> Phase-5.3 -> T034"
+  - plan_item: "5.4"
+    source_requirements: ["REQ-PROD-010"]
+    tasks: ["T035"]
+    full_trace: "REQ-PROD-010 -> Phase-5.4 -> T035"
+  - plan_item: "5.5"
+    source_requirements: ["REQ-PROD-006", "REQ-PROD-008", "REQ-PROD-009", "REQ-PROD-012"]
+    tasks: ["T036"]
+    full_trace: "REQ-PROD-006,REQ-PROD-008,REQ-PROD-009,REQ-PROD-012 -> Phase-5.5 -> T036"
+  - plan_item: "6.1"
+    source_requirements: ["REQ-PROD-011"]
+    tasks: ["T037", "T038"]
+    full_trace: "REQ-PROD-011 -> Phase-6.1 -> T037,T038"
+  - plan_item: "6.2"
+    source_requirements: ["REQ-PROD-011"]
+    tasks: ["T039", "T040"]
+    full_trace: "REQ-PROD-011 -> Phase-6.2 -> T039,T040"
+  - plan_item: "7.1"
+    source_requirements: ["REQ-PROD-001", "REQ-PROD-002", "REQ-PROD-003", "REQ-PROD-004", "REQ-PROD-005", "REQ-PROD-006", "REQ-PROD-007", "REQ-PROD-008", "REQ-PROD-009", "REQ-PROD-010", "REQ-PROD-011", "REQ-PROD-012"]
+    tasks: ["T041", "T042"]
+    full_trace: "REQ-PROD-001..012 -> Phase-7.1 -> T041,T042"
+  - plan_item: "7.2"
+    source_requirements: ["REQ-PROD-012"]
+    tasks: ["T043", "T044"]
+    full_trace: "REQ-PROD-012 -> Phase-7.2 -> T043,T044"
+
+validation:
+  passed: true
+  errors: []
+  warnings:
+    - "Router/RADIUS plan items are conditional on launch scope."
+    - "Task list is a planning artifact; no implementation or runtime validation was performed."

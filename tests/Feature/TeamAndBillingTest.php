@@ -68,7 +68,9 @@ class TeamAndBillingTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Subscription checkout is not connected yet.')
-            ->assertSee('Self-serve plan changes coming soon');
+            ->assertSee('No plan assigned')
+            ->assertSee('Subscription checkout is currently unavailable. Contact the platform administrator.')
+            ->assertDontSee('Self-serve plan changes coming soon');
     }
 
     public function test_billing_shows_recorded_status_and_dates_without_claiming_payment_or_renewal(): void

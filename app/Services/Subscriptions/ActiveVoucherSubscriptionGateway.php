@@ -52,9 +52,11 @@ final class ActiveVoucherSubscriptionGateway implements SubscriptionGateway
                 return $this->startObPay($reference, $amount, $phone, $returnUrl);
             case 'pawapay':
                 $this->startPawaPay($reference, $amount, $phone);
+
                 return null;
             case 'iotec':
                 $this->startIotec($reference, $amount, $phone);
+
                 return null;
             default:
                 throw new RuntimeException('Subscription payment provider is unsupported.');

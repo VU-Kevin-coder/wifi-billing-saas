@@ -42,8 +42,7 @@ final class ObPaySubscriptionGatewayCandidate implements SubscriptionGateway
         string $phone,
         SubscriptionGatewayContext $context,
         ?string $returnUrl = null,
-    ): ?string
-    {
+    ): ?string {
         // Even an apparently successful submission must not create a false
         // pending state while the contract and account binding are unproven.
         throw new RuntimeException('OBPay subscription gateway is not ready.');
